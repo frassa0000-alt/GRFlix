@@ -1,0 +1,206 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- GLOBAL HARDENED HELPERS ---
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn()
+        && request.auth.token.email == 'frassa.wwindows@gmail.com'
+        && request.auth.token.email_verified == true;
+    }
+
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['email', 'displayName'])
+        && data.keys().hasOnly([
+          'uid',
+          'id',
+          'name',
+          'displayName',
+          'email',
+          'emailVerified',
+          'picture',
+          'photoURL',
+          'joinedAt',
+          'role',
+          'favoriteGenre',
+          'bio',
+          'watchTimeMinutes',
+          'updatedAt'
+        ])
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 254
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 120
+        && (!('uid' in data) || (data.uid is string && data.uid.size() <= 128 && data.uid == request.auth.uid))
+        && (!('id' in data) || (data.id is string && data.id.size() <= 128 && data.id == request.auth.uid))
+        && (!('name' in data) || (data.name is string && data.name.size() <= 120))
+        && (!('bio' in data) || (data.bio is string && data.bio.size() <= 500))
+        && (!('favoriteGenre' in data) || (data.favoriteGenre is string && data.favoriteGenre.size() <= 80))
+        && (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 1000))
+        && (!('picture' in data) || (data.picture is string && data.picture.size() <= 1000))
+        && (!('emailVerified' in data) || data.emailVerified is bool)
+        && (!('role' in data) || (data.role is string && data.role.size() <= 40))
+        && (!('joinedAt' in data) || data.joinedAt is int || data.joinedAt is float)
+        && (!('updatedAt' in data) || data.updatedAt is int || data.updatedAt is float)
+        && (!('watchTimeMinutes' in data) || data.watchTimeMinutes is int || data.watchTimeMinutes is float);
+    }
+
+    function isValidMovie(data) {
+      return data.keys().hasAll(['titleAr'])
+        && data.keys().hasOnly([
+          'id',
+          'title',
+          'titleAr',
+          'originalTitle',
+          'type',
+          'description',
+          'posterUrl',
+          'bannerUrl',
+          'videoUrl',
+          'videoQuality',
+          'ageRating',
+          'duration',
+          'year',
+          'rating',
+          'genres',
+          'isPublished',
+          'fileSizeBytes',
+          'storagePath',
+          'storageType',
+          'isLatest',
+          'isFeatured',
+          'isMostWatched',
+          'displayOrder',
+          'viewsCount',
+          'director',
+          'cast',
+          'seasons',
+          'sources',
+          'introStart',
+          'introEnd',
+          'subtitleUrl',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.titleAr is string && data.titleAr.size() >= 1 && data.titleAr.size() <= 200
+        && (!('videoUrl' in data) || (data.videoUrl is string && data.videoUrl.size() <= 2000))
+        && (!('id' in data) || (data.id is string && data.id.size() <= 128))
+        && (!('title' in data) || (data.title is string && data.title.size() <= 200))
+        && (!('originalTitle' in data) || (data.originalTitle is string && data.originalTitle.size() <= 200))
+        && (!('type' in data) || (data.type is string && data.type.size() <= 40))
+        && (!('description' in data) || (data.description is string && data.description.size() <= 5000))
+        && (!('posterUrl' in data) || (data.posterUrl is string && data.posterUrl.size() <= 2000))
+        && (!('bannerUrl' in data) || (data.bannerUrl is string && data.bannerUrl.size() <= 2000))
+        && (!('videoQuality' in data) || (data.videoQuality is string && data.videoQuality.size() <= 60))
+        && (!('ageRating' in data) || (data.ageRating is string && data.ageRating.size() <= 20))
+        && (!('duration' in data) || (data.duration is string && data.duration.size() <= 60))
+        && (!('storagePath' in data) || (data.storagePath is string && data.storagePath.size() <= 500))
+        && (!('storageType' in data) || (data.storageType is string && data.storageType.size() <= 40))
+        && (!('director' in data) || (data.director is string && data.director.size() <= 200))
+        && (!('subtitleUrl' in data) || (data.subtitleUrl is string && data.subtitleUrl.size() <= 2000))
+        && (!('year' in data) || data.year is int || data.year is float)
+        && (!('rating' in data) || data.rating is int || data.rating is float)
+        && (!('displayOrder' in data) || data.displayOrder is int || data.displayOrder is float)
+        && (!('viewsCount' in data) || data.viewsCount is int || data.viewsCount is float)
+        && (!('introStart' in data) || data.introStart is int || data.introStart is float)
+        && (!('introEnd' in data) || data.introEnd is int || data.introEnd is float)
+        && (!('fileSizeBytes' in data) || data.fileSizeBytes is int || data.fileSizeBytes is float)
+        && (!('createdAt' in data) || data.createdAt is int || data.createdAt is float)
+        && (!('updatedAt' in data) || data.updatedAt is int || data.updatedAt is float)
+        && (!('genres' in data) || (data.genres is list && data.genres.size() <= 20 && (data.genres.size() == 0 || data.genres[0] is string)))
+        && (!('cast' in data) || (data.cast is list && data.cast.size() <= 40 && (data.cast.size() == 0 || data.cast[0] is string)))
+        && (!('seasons' in data) || (data.seasons is list && data.seasons.size() <= 50))
+        && (!('sources' in data) || (data.sources is list && data.sources.size() <= 15))
+        && (!('isPublished' in data) || data.isPublished is bool)
+        && (!('isLatest' in data) || data.isLatest is bool)
+        && (!('isFeatured' in data) || data.isFeatured is bool)
+        && (!('isMostWatched' in data) || data.isMostWatched is bool);
+    }
+
+    // Test connection document for initial validation
+    match /test/{docId} {
+      allow get: if isValidId(docId);
+      allow list: if false;
+      allow write: if false;
+    }
+
+    // Private User Accounts: strictly isolated per authenticated owner (and admin)
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isValidId(userId)
+        && isOwner(userId)
+        && isValidUserProfile(incoming())
+        && (!('role' in incoming()) || incoming().role == 'عضو مسجل' || isAdmin());
+      allow update: if isValidId(userId)
+        && isValidUserProfile(incoming())
+        && (
+          isAdmin() ||
+          (
+            isOwner(userId)
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'displayName',
+              'name',
+              'bio',
+              'favoriteGenre',
+              'photoURL',
+              'picture',
+              'emailVerified',
+              'updatedAt'
+            ])
+            && (!('role' in incoming()) || incoming().role == existing().role)
+          )
+        );
+      allow delete: if isValidId(userId) && (isOwner(userId) || isAdmin());
+
+      // User private subcollections (favorites, watch history)
+      match /favorites/{favoriteId} {
+        allow get, create, update, delete: if isValidId(userId) && isValidId(favoriteId) && isOwner(userId);
+        allow list: if isValidId(userId) && isOwner(userId);
+      }
+
+      match /history/{historyId} {
+        allow get, create, update, delete: if isValidId(userId) && isValidId(historyId) && isOwner(userId);
+        allow list: if isValidId(userId) && isOwner(userId);
+      }
+    }
+
+    // Movies & Series Collection: Public read for streaming, strictly developer-admin write
+    match /movies/{movieId} {
+      allow get: if isValidId(movieId);
+      allow list: if true;
+      allow create, update: if isAdmin() && isValidId(movieId) && isValidMovie(incoming());
+      allow delete: if isAdmin() && isValidId(movieId);
+    }
+
+    // Public Site Settings & Categories: Public read, strictly developer-admin write
+    match /siteSettings/{settingId} {
+      allow get: if isValidId(settingId);
+      allow list: if false;
+      allow create, update, delete: if isAdmin() && isValidId(settingId);
+    }
+  }
+}

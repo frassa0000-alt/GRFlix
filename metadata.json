@@ -1,0 +1,6 @@
+{
+  "name": "GoldenFlix - جولدن فليكس",
+  "description": "منصة جولدن فليكس الفاخرة لمشاهدة الأفلام والمسلسلات مع مشغل فيديو ذكي متطور يدعم جودات متعددة وHLS وMP4",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

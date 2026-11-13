@@ -1,0 +1,32 @@
+[
+  {
+    "id": "user-1794418374176-478340",
+    "name": "فراس الويندوز",
+    "displayName": "فراس الويندوز",
+    "email": "frassa.wwindows@gmail.com",
+    "passwordHash": "$2b$10$nzvwi3ZgNn226ENXhr.VCO5tgrBF.n4VXXiqxlIdolD.mdYflinjm",
+    "emailVerified": true,
+    "picture": "https://ui-avatars.com/api/?name=%D9%81%D8%B1%D8%A7%D8%B3%20%D8%A7%D9%84%D9%88%D9%8A%D9%86%D8%AF%D9%88%D8%B2&background=facc15&color=000&size=128&bold=true",
+    "photoURL": "https://ui-avatars.com/api/?name=%D9%81%D8%B1%D8%A7%D8%B3%20%D8%A7%D9%84%D9%88%D9%8A%D9%86%D8%AF%D9%88%D8%B2&background=facc15&color=000&size=128&bold=true",
+    "joinedAt": 1794418374176,
+    "role": "مشرف المنصة",
+    "favoriteGenre": "أفلام سينمائية",
+    "bio": "مستمتع بمشاهدة أحدث الأعمال السينمائية على GoldenFlix Cinema.",
+    "watchTimeMinutes": 0
+  },
+  {
+    "id": "user-1794418725917-203792",
+    "name": "أحمد الفاسي",
+    "displayName": "أحمد الفاسي",
+    "email": "test_user_789@example.com",
+    "passwordHash": "$2b$10$4zT3JeI6iDVdXxTQ8APbxuCqC.69P4U1867gn5pAZKtF5e9MmplTG",
+    "emailVerified": true,
+    "picture": "https://ui-avatars.com/api/?name=%D8%A3%D8%AD%D9%85%D8%AF%20%D8%A7%D9%84%D9%81%D8%A7%D8%B3%D9%8A&background=facc15&color=000&size=128&bold=true",
+    "photoURL": "https://ui-avatars.com/api/?name=%D8%A3%D8%AD%D9%85%D8%AF%20%D8%A7%D9%84%D9%81%D8%A7%D8%B3%D9%8A&background=facc15&color=000&size=128&bold=true",
+    "joinedAt": 1794418725917,
+    "role": "عضو مسجل",
+    "favoriteGenre": "أفلام سينمائية",
+    "bio": "مستمتع بمشاهدة أحدث الأعمال السينمائية على GoldenFlix Cinema.",
+    "watchTimeMinutes": 0
+  }
+]

@@ -1,0 +1,82 @@
+[
+  {
+    "id": "log-1794582570206-26620",
+    "action": "تسجيل دخول لوحة التحكم",
+    "category": "auth",
+    "details": "دخول المشرف frassa.wwindows@gmail.com",
+    "adminEmail": "frassa.wwindows@gmail.com",
+    "createdAt": 1794582570206
+  },
+  {
+    "id": "log-1794582275449-60658",
+    "action": "حذف عمل نهائياً",
+    "category": "media",
+    "details": "تم حذف \"فيلم اختبار الحذف\" وملفاته",
+    "adminEmail": "frassa.wwindows@gmail.com",
+    "createdAt": 1794582275449
+  },
+  {
+    "id": "log-1794582275433-38463",
+    "action": "إضافة فيلم جديد",
+    "category": "media",
+    "details": "تمت إضافة \"فيلم اختبار الحذف\" (1080p Full HD)",
+    "adminEmail": "frassa.wwindows@gmail.com",
+    "createdAt": 1794582275433
+  },
+  {
+    "id": "log-1794582275419-18932",
+    "action": "تسجيل دخول لوحة التحكم",
+    "category": "auth",
+    "details": "دخول المشرف frassa.wwindows@gmail.com",
+    "adminEmail": "frassa.wwindows@gmail.com",
+    "createdAt": 1794582275419
+  },
+  {
+    "id": "log-1794582272778-72231",
+    "action": "تحديث حساب مستخدم",
+    "category": "users",
+    "details": "تحديث الحساب test_user_789@example.com (الحالة: معطل / الدور: مشاهد)",
+    "adminEmail": "frassa.wwindows@gmail.com",
+    "createdAt": 1794582272778
+  },
+  {
+    "id": "log-1794582270130-21193",
+    "action": "تحديث حساب مستخدم",
+    "category": "users",
+    "details": "تحديث الحساب test_user_789@example.com (الحالة: نشط / الدور: مشاهد)",
+    "adminEmail": "frassa.wwindows@gmail.com",
+    "createdAt": 1794582270130
+  },
+  {
+    "id": "log-1794582266041-8999",
+    "action": "تحديث حساب مستخدم",
+    "category": "users",
+    "details": "تحديث الحساب test_user_789@example.com (الحالة: نشط / الدور: محرر)",
+    "adminEmail": "frassa.wwindows@gmail.com",
+    "createdAt": 1794582266041
+  },
+  {
+    "id": "log-1794582216202-98818",
+    "action": "حذف ملف فيديو من الخادم",
+    "category": "files",
+    "details": "تم حذف الملف الفعلي video-1794257043966-227866341.mp4",
+    "adminEmail": "frassa.wwindows@gmail.com",
+    "createdAt": 1794582216202
+  },
+  {
+    "id": "log-1794582213789-37286",
+    "action": "حذف ملف فيديو من الخادم",
+    "category": "files",
+    "details": "تم حذف الملف الفعلي video-1794171521764-242599220.mp4",
+    "adminEmail": "frassa.wwindows@gmail.com",
+    "createdAt": 1794582213789
+  },
+  {
+    "id": "log-1794582066580-76060",
+    "action": "تسجيل دخول لوحة التحكم",
+    "category": "auth",
+    "details": "دخول المشرف frassa.wwindows@gmail.com",
+    "adminEmail": "frassa.wwindows@gmail.com",
+    "createdAt": 1794582066580
+  }
+]

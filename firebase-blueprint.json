@@ -1,0 +1,160 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User account profile document stored in Firestore",
+      "type": "object",
+      "properties": {
+        "displayName": {
+          "type": "string",
+          "description": "User display name"
+        },
+        "email": {
+          "type": "string",
+          "description": "User email address"
+        },
+        "emailVerified": {
+          "type": "boolean",
+          "description": "Whether email is verified"
+        },
+        "photoURL": {
+          "type": "string",
+          "description": "Avatar image URL"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["member", "admin"],
+          "description": "User account role"
+        },
+        "bio": {
+          "type": "string",
+          "description": "Short user bio"
+        },
+        "favoriteGenre": {
+          "type": "string",
+          "description": "Favorite film genre"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Account creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Last profile update timestamp"
+        }
+      },
+      "required": ["email", "displayName"]
+    },
+    "UserFavorite": {
+      "title": "UserFavorite",
+      "description": "Private favorite media item for a user",
+      "type": "object",
+      "properties": {
+        "mediaId": {
+          "type": "string",
+          "description": "ID of the favorited media"
+        },
+        "title": {
+          "type": "string",
+          "description": "Title of the media"
+        },
+        "posterUrl": {
+          "type": "string",
+          "description": "Poster URL"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Timestamp when added"
+        }
+      },
+      "required": ["mediaId"]
+    },
+    "UserHistory": {
+      "title": "UserHistory",
+      "description": "Private watch history item for a user",
+      "type": "object",
+      "properties": {
+        "mediaId": {
+          "type": "string",
+          "description": "ID of the played media"
+        },
+        "currentTime": {
+          "type": "number",
+          "description": "Current playback position in seconds"
+        },
+        "duration": {
+          "type": "number",
+          "description": "Total duration in seconds"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Timestamp when last watched"
+        }
+      },
+      "required": ["mediaId", "currentTime"]
+    },
+    "MovieItem": {
+      "title": "MovieItem",
+      "description": "Cinema movie record in GoldenFlix catalog",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "English or original title" },
+        "titleAr": { "type": "string", "description": "Arabic display title" },
+        "description": { "type": "string", "description": "Movie synopsis" },
+        "posterUrl": { "type": "string", "description": "Poster image URL" },
+        "bannerUrl": { "type": "string", "description": "Banner background image URL" },
+        "videoUrl": { "type": "string", "description": "Streaming video URL" },
+        "videoQuality": { "type": "string", "description": "Quality badge like 4K or 1080p" },
+        "ageRating": { "type": "string", "description": "Age rating like +16" },
+        "duration": { "type": "string", "description": "Formatted duration" },
+        "year": { "type": "number", "description": "Release year" },
+        "rating": { "type": "number", "description": "Rating score out of 10" },
+        "genres": { "type": "string", "description": "List of genre keys" },
+        "isPublished": { "type": "boolean", "description": "Whether visible to public visitors" },
+        "isFeatured": { "type": "boolean", "description": "Featured on hero banner" },
+        "isLatest": { "type": "boolean", "description": "Included in latest releases" },
+        "isMostWatched": { "type": "boolean", "description": "Highlighted as most watched" },
+        "displayOrder": { "type": "number", "description": "Custom sort order in catalog" },
+        "viewsCount": { "type": "number", "description": "Recorded total playback views" },
+        "director": { "type": "string", "description": "Director name" },
+        "fileSizeBytes": { "type": "number", "description": "Video file size in bytes" },
+        "createdAt": { "type": "number", "description": "Creation timestamp" },
+        "updatedAt": { "type": "number", "description": "Last update timestamp" }
+      },
+      "required": ["titleAr"]
+    },
+    "SiteSettingDoc": {
+      "title": "SiteSettingDoc",
+      "description": "Platform global appearance and player preferences",
+      "type": "object",
+      "properties": {
+        "siteName": { "type": "string", "description": "Platform brand name" },
+        "accentColor": { "type": "string", "description": "Primary hex accent color" },
+        "updatedAt": { "type": "number", "description": "Last update timestamp" }
+      },
+      "required": ["siteName"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Private user account profile document"
+    },
+    "/users/{userId}/favorites/{favoriteId}": {
+      "schema": "UserFavorite",
+      "description": "User private bookmarked favorite movies"
+    },
+    "/users/{userId}/history/{historyId}": {
+      "schema": "UserHistory",
+      "description": "User private watch history"
+    },
+    "/movies/{movieId}": {
+      "schema": "MovieItem",
+      "description": "Movies & Series catalog collection for public streaming and admin management"
+    },
+    "/siteSettings/{settingId}": {
+      "schema": "SiteSettingDoc",
+      "description": "Global site configuration and homepage layout flags"
+    }
+  }
+}
