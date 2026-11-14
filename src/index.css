@@ -52,6 +52,15 @@ input[type="range"] {
   }
 }
 
+@keyframes slideRight {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -89,8 +98,8 @@ input[type="range"] {
     transform: scale(1);
   }
   50% {
-    opacity: 0.8;
-    transform: scale(1.05);
+    opacity: 0.85;
+    transform: scale(1.06);
   }
 }
 
@@ -99,7 +108,7 @@ input[type="range"] {
     transform: translateY(0px);
   }
   50% {
-    transform: translateY(-5px);
+    transform: translateY(-4px);
   }
 }
 
@@ -112,8 +121,46 @@ input[type="range"] {
   }
 }
 
+@keyframes goldSheenSweep {
+  0% {
+    transform: translateX(-140%) skewX(-18deg);
+    opacity: 0;
+  }
+  30% {
+    opacity: 0.55;
+  }
+  100% {
+    transform: translateX(220%) skewX(-18deg);
+    opacity: 0;
+  }
+}
+
+@keyframes auroraLineFlow {
+  0%, 100% {
+    opacity: 0.35;
+    transform: scaleX(0.85);
+  }
+  50% {
+    opacity: 0.85;
+    transform: scaleX(1);
+  }
+}
+
+@keyframes kenBurnsSlow {
+  0% {
+    transform: scale(1) translate3d(0, 0, 0);
+  }
+  100% {
+    transform: scale(1.07) translate3d(-1%, -0.5%, 0);
+  }
+}
+
 .animate-slide-left {
-  animation: slideLeft 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: slideLeft 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-slide-right {
+  animation: slideRight 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .animate-fade-in {
@@ -121,7 +168,7 @@ input[type="range"] {
 }
 
 .animate-slide-up {
-  animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: slideUp 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .animate-scale-up {
@@ -136,22 +183,48 @@ input[type="range"] {
   animation: floatGentle 4s infinite ease-in-out;
 }
 
+.animate-ken-burns {
+  animation: kenBurnsSlow 14s ease-out forwards;
+}
+
+.cinema-header-aurora {
+  animation: auroraLineFlow 4.5s ease-in-out infinite;
+}
+
+.group:hover .cinema-card-sheen {
+  animation: goldSheenSweep 0.85s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
 .shimmer-badge {
-  background: linear-gradient(90deg, rgba(250,204,21,0.1) 0%, rgba(250,204,21,0.25) 50%, rgba(250,204,21,0.1) 100%);
+  background: linear-gradient(90deg, rgba(250,204,21,0.1) 0%, rgba(250,204,21,0.28) 50%, rgba(250,204,21,0.1) 100%);
   background-size: 200% 100%;
   animation: shimmerEffect 2.5s infinite linear;
 }
 
 .gold-neon-glow {
-  box-shadow: 0 0 15px rgba(250, 204, 21, 0.35), inset 0 0 8px rgba(250, 204, 21, 0.1);
+  box-shadow: 0 0 18px rgba(250, 204, 21, 0.35), inset 0 0 8px rgba(250, 204, 21, 0.12);
 }
 
 .gold-border-glow {
   border: 1px solid rgba(250, 204, 21, 0.55);
-  box-shadow: 0 0 12px rgba(250, 204, 21, 0.25);
+  box-shadow: 0 0 14px rgba(250, 204, 21, 0.25);
 }
 
 .gold-text-glow {
   text-shadow: 0 0 12px rgba(250, 204, 21, 0.6), 0 2px 4px rgba(0, 0, 0, 0.9);
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .animate-slide-left,
+  .animate-slide-right,
+  .animate-fade-in,
+  .animate-slide-up,
+  .animate-scale-up,
+  .animate-pulse-glow,
+  .animate-float,
+  .animate-ken-burns,
+  .cinema-header-aurora,
+  .shimmer-badge {
+    animation: none !important;
+  }
+}

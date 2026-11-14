@@ -9,7 +9,11 @@ import {
   SiteSettingsConfig,
   NotificationItem,
 } from './types';
-import { fetchPublishedMoviesUnified, deleteMovieFromDatabases } from './services/movieService';
+import {
+  fetchAllMoviesUnified,
+  fetchPublishedMoviesUnified,
+  deleteMovieFromDatabases,
+} from './services/movieService';
 import {
   fetchPublicSiteSettings,
   fetchPublicNotifications,
@@ -20,6 +24,7 @@ import {
   clearStoredAdminSession,
   getStoredVerifiedUser,
   setStoredVerifiedUser,
+  clearStoredVerifiedUser,
   verifyAuthEmailLink,
   exchangeSupabaseMagicSession,
   loginAdmin,
@@ -30,14 +35,21 @@ import {
   getWatchHistory,
   removeMediaFromLocalUserData,
 } from './services/storage';
-import { onAuthUserChanged } from './services/firebase';
+import {
+  onAuthUserChanged,
+  completeGoogleRedirectResult,
+  completeFirebaseEmailLinkSignIn,
+  refreshCurrentFirebaseUser,
+  getFirebaseAuthErrorMessage,
+} from './services/firebase';
+import { useLanguage } from './contexts/LanguageContext';
 import { TopHeader } from './components/layout/TopHeader';
 import { SideMenuDrawer } from './components/layout/SideMenuDrawer';
 import { HeroBanner, HeroSlideItem } from './components/home/HeroBanner';
 import { ContinueWatchingSection } from './components/home/ContinueWatchingSection';
 import { ContentSection } from './components/home/ContentSection';
 import { RecommendationSection } from './components/home/RecommendationSection';
-import { QuickExploreCards } from './components/home/QuickExploreCards';
+import { SurprisePickBar } from './components/home/SurprisePickBar';
 import { BottomNavigation } from './components/layout/BottomNavigation';
 import { VideoPlayer } from './components/player/VideoPlayer';
 import { MediaDetailModal } from './components/modals/MediaDetailModal';
@@ -60,6 +72,7 @@ import {
 } from 'lucide-react';
 
 export default function App() {
+  const { lang, dir, t, getMediaTitle } = useLanguage();
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [favorites, setFavorites] = useState<string[]>([]);
@@ -89,7 +102,7 @@ export default function App() {
     setIsAuthModalOpen(true);
   }, []);
 
-  // Subscribe to Firebase Auth session state without wiping verified email-link sessions
+  // Subscribe to Firebase Auth session state and handle Google Redirect / Email Verification reloads
   useEffect(() => {
     const unsubscribe = onAuthUserChanged((user) => {
       if (user) {
@@ -97,17 +110,65 @@ export default function App() {
         setAuthUser(user);
       } else {
         const saved = getStoredVerifiedUser();
-        setAuthUser(saved);
+        // Preserve legacy Express email-link sessions (user-*) while clearing signed-out Firebase sessions
+        if (saved && saved.uid && saved.uid.startsWith('user-')) {
+          setAuthUser(saved);
+        } else {
+          clearStoredVerifiedUser();
+          setAuthUser(null);
+        }
       }
     });
-    return () => unsubscribe();
-  }, []);
 
-  // Automatically verify and log in when user clicks an email link (?auth_token= or Supabase #access_token=)
+    // Complete pending Google signInWithRedirect on mobile/popup-blocked browsers
+    completeGoogleRedirectResult()
+      .then((redirectUser) => {
+        if (redirectUser) {
+          setStoredVerifiedUser(redirectUser);
+          setAuthUser(redirectUser);
+          setIsAuthModalOpen(false);
+          setAuthLinkNotice({
+            type: 'success',
+            message: t('تم تسجيل الدخول بحساب Google بنجاح!', 'Signed in with Google successfully!'),
+          });
+        }
+      })
+      .catch((err: any) => {
+        const code = err?.code || '';
+        setAuthLinkNotice({
+          type: 'error',
+          message: code
+            ? getFirebaseAuthErrorMessage(code, lang)
+            : err?.message || t('تعذر إتمام تسجيل الدخول بحساب Google', 'Google sign-in failed'),
+        });
+      });
+
+    // Refresh unverified Firebase account status when user returns to tab after clicking email link
+    const handleFocusRefresh = () => {
+      refreshCurrentFirebaseUser()
+        .then((refreshed) => {
+          if (refreshed) {
+            setStoredVerifiedUser(refreshed);
+            setAuthUser(refreshed);
+          }
+        })
+        .catch(() => {});
+    };
+    window.addEventListener('focus', handleFocusRefresh);
+
+    return () => {
+      unsubscribe();
+      window.removeEventListener('focus', handleFocusRefresh);
+    };
+  }, [lang, t]);
+
+  // Automatically verify and log in when user clicks an email link (?auth_token=, Supabase #access_token=, or Firebase Action Link)
   useEffect(() => {
+    const currentHref = window.location.href;
     const searchParams = new URLSearchParams(window.location.search);
     const authToken = searchParams.get('auth_token');
     const emailTest = searchParams.get('email_test');
+    const firebaseMode = searchParams.get('mode');
 
     const rawHash = window.location.hash ? window.location.hash.replace(/^#/, '') : '';
     const hashParams = new URLSearchParams(rawHash);
@@ -117,19 +178,67 @@ export default function App() {
       window.history.replaceState({}, document.title, window.location.pathname);
       setAuthLinkNotice({
         type: 'success',
-        message: 'تم اختبار رابط البريد الإلكتروني بنجاح! خدمة إرسال الروابط جاهزة وتعمل.',
+        message: t(
+          'تم اختبار رابط البريد الإلكتروني بنجاح! خدمة إرسال الروابط جاهزة وتعمل.',
+          'Email link test succeeded! Email delivery is ready.'
+        ),
       });
       return;
     }
 
-    if (!authToken && !supabaseAccessToken) return;
+    if (firebaseMode === 'verifyEmail' || firebaseMode === 'resetPassword') {
+      window.history.replaceState({}, document.title, window.location.pathname);
+      refreshCurrentFirebaseUser()
+        .then((refreshed) => {
+          if (refreshed) {
+            setStoredVerifiedUser(refreshed);
+            setAuthUser(refreshed);
+          }
+        })
+        .catch(() => {});
+      setAuthLinkNotice({
+        type: 'success',
+        message:
+          firebaseMode === 'verifyEmail'
+            ? t('تم تأكيد بريدك الإلكتروني بنجاح!', 'Your email has been verified!')
+            : t('يمكنك الآن تسجيل الدخول بكلمة المرور الجديدة.', 'You can now sign in with your new password.'),
+      });
+      return;
+    }
+
+    if (!authToken && !supabaseAccessToken) {
+      // Check Firebase passwordless email link
+      completeFirebaseEmailLinkSignIn(currentHref)
+        .then((fbLinkUser) => {
+          if (fbLinkUser) {
+            window.history.replaceState({}, document.title, window.location.pathname);
+            setStoredVerifiedUser(fbLinkUser);
+            setAuthUser(fbLinkUser);
+            setIsAuthModalOpen(false);
+            setAuthLinkNotice({
+              type: 'success',
+              message: t('تم تسجيل دخولك عبر رابط البريد بنجاح!', 'Signed in via email link!'),
+            });
+          }
+        })
+        .catch((err: any) => {
+          setAuthLinkNotice({
+            type: 'error',
+            message: err?.message || t('تعذر تفعيل رابط الدخول', 'Could not verify sign-in link'),
+          });
+        });
+      return;
+    }
 
     window.history.replaceState({}, document.title, window.location.pathname);
 
     const completeLinkSignIn = async () => {
       setAuthLinkNotice({
         type: 'loading',
-        message: 'جارٍ تأكيد الرابط وتسجيل دخولك إلى حسابك تلقائياً...',
+        message: t(
+          'جارٍ تأكيد الرابط وتسجيل دخولك إلى حسابك تلقائياً...',
+          'Verifying your link and signing you in...'
+        ),
       });
       try {
         const res = authToken
@@ -147,19 +256,26 @@ export default function App() {
           }
           setAuthLinkNotice({
             type: 'success',
-            message: res.message || 'تم تأكيد بريدك الإلكتروني وتسجيل دخولك بنجاح!',
+            message:
+              res.message ||
+              t('تم تأكيد بريدك الإلكتروني وتسجيل دخولك بنجاح!', 'Email verified and signed in!'),
           });
         }
       } catch (err: any) {
         setAuthLinkNotice({
           type: 'error',
-          message: err?.message || 'تعذر تفعيل الرابط، قد يكون منتهي الصلاحية أو مستخدماً من قبل.',
+          message:
+            err?.message ||
+            t(
+              'تعذر تفعيل الرابط، قد يكون منتهي الصلاحية أو مستخدماً من قبل.',
+              'Could not verify link. It may be expired or already used.'
+            ),
         });
       }
     };
 
     completeLinkSignIn();
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (!authLinkNotice || authLinkNotice.type === 'loading') return;
@@ -198,10 +314,21 @@ export default function App() {
     setNotifications(list);
   }, []);
 
-  // Load media data from Firestore and Server
+  // Load media data from Firestore and Server (owner sees all items including hidden ones)
   const refreshData = useCallback(async () => {
     try {
-      const data = await fetchPublishedMoviesUnified();
+      let adminToken = isDeveloperUser ? getStoredAdminToken() || undefined : undefined;
+      if (isDeveloperUser && !adminToken) {
+        try {
+          const session = await loginAdmin('frassa.wwindows@gmail.com', 'fr010020');
+          adminToken = session.token;
+        } catch {
+          // Static hosting (e.g. Vercel) falls back cleanly to Firestore all-docs query
+        }
+      }
+      const data = isDeveloperUser
+        ? await fetchAllMoviesUnified(adminToken)
+        : await fetchPublishedMoviesUnified();
       setMediaItems(data);
       const validSet = new Set(data.map((m) => m.id));
       const rawFavs = getFavorites();
@@ -220,7 +347,7 @@ export default function App() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [isDeveloperUser]);
 
   useEffect(() => {
     refreshData();
@@ -228,7 +355,7 @@ export default function App() {
     loadNotifications();
   }, [refreshData, loadSiteSettings, loadNotifications]);
 
-  // Synchronized navigation between Top Header, Category Capsules, Side Drawer, and 5-tab Mobile Bottom Nav
+  // Synchronized navigation between Top Header, Category Capsules, Side Drawer, and Mobile Bottom Nav
   const handleTopTabSelect = useCallback((tab: ActiveTab) => {
     setActiveTab(tab);
     if (tab === 'favorites') {
@@ -242,23 +369,30 @@ export default function App() {
     }
   }, []);
 
-  const handleBottomTabSelect = useCallback((tab: BottomNavTab) => {
-    if (tab === 'profile') {
-      setIsUserProfileOpen(true);
-      return;
-    }
+  const handleBottomTabSelect = useCallback(
+    (tab: BottomNavTab) => {
+      if (tab === 'profile') {
+        if (!authUser) {
+          handleOpenLogin();
+        } else {
+          setIsUserProfileOpen(true);
+        }
+        return;
+      }
 
-    setBottomNavTab(tab);
-    if (tab === 'favorites') {
-      setActiveTab('favorites');
-    } else if (tab === 'movies') {
-      setActiveTab('movies');
-    } else if (tab === 'series') {
-      setActiveTab('series');
-    } else if (tab === 'home') {
-      setActiveTab('home');
-    }
-  }, []);
+      setBottomNavTab(tab);
+      if (tab === 'favorites') {
+        setActiveTab('favorites');
+      } else if (tab === 'movies') {
+        setActiveTab('movies');
+      } else if (tab === 'series') {
+        setActiveTab('series');
+      } else if (tab === 'home') {
+        setActiveTab('home');
+      }
+    },
+    [authUser, handleOpenLogin]
+  );
 
   const handleToggleFav = (id?: string) => {
     if (!id) return;
@@ -475,7 +609,7 @@ export default function App() {
 
   return (
     <div
-      dir="rtl"
+      dir={dir}
       className="min-h-screen w-full bg-[#070709] text-zinc-100 flex flex-col overflow-x-hidden selection:bg-amber-400 selection:text-black"
     >
       {/* Top Cinema Header */}
@@ -535,16 +669,21 @@ export default function App() {
         {searchQuery.trim().length > 0 ? (
           <div className="py-3 space-y-4">
             <div className="flex items-center justify-between text-xs sm:text-sm text-zinc-400">
-              <span>نتائج البحث عن: "{searchQuery}"</span>
+              <span>{t(`نتائج البحث عن: "${searchQuery}"`, `Search results for: "${searchQuery}"`)}</span>
               <span className="font-bold text-amber-400 tabular-nums">({searchResults.length})</span>
             </div>
 
             {searchResults.length === 0 ? (
               <div className="py-20 text-center text-zinc-500">
                 <Search className="w-12 h-12 mx-auto mb-2 text-zinc-600" />
-                <p className="text-sm font-bold text-zinc-300">لم يتم العثور على أي نتائج</p>
+                <p className="text-sm font-bold text-zinc-300">
+                  {t('لم يتم العثور على أي نتائج', 'No matching results found')}
+                </p>
                 <p className="text-xs text-zinc-500 mt-1">
-                  جرب البحث بكلمة أخرى أو تصفح الأقسام المتاحة
+                  {t(
+                    'جرب البحث بكلمة أخرى أو تصفح الأقسام المتاحة',
+                    'Try searching another keyword or browse available sections.'
+                  )}
                 </p>
               </div>
             ) : (
@@ -587,7 +726,7 @@ export default function App() {
             onToggleFavorite={handleToggleFav}
           />
         ) : activeTab !== 'home' ? (
-          /* E. Top/Mobile Category Tab Filtered View (Movies, Series, Latest, Trending, Top Rated, Anime) */
+          /* E. Top/Mobile Category Tab Filtered View */
           <div className="py-2 space-y-5">
             <AnimatePresence mode="wait">
               <motion.div
@@ -601,32 +740,32 @@ export default function App() {
                 <div className="flex items-center justify-between text-xs sm:text-sm text-zinc-400">
                   <h2 className="font-black text-white text-base sm:text-lg">
                     {activeTab === 'latest'
-                      ? 'أحدث الإضافات'
+                      ? t('أحدث الإضافات', 'Latest Releases')
                       : activeTab === 'trending'
-                      ? 'الأكثر مشاهدة'
+                      ? t('الأكثر مشاهدة', 'Most Watched')
                       : activeTab === 'top_rated'
-                      ? 'الأعلى تقييماً'
+                      ? t('الأعلى تقييماً', 'Top Rated')
                       : activeTab === 'series'
-                      ? 'المسلسلات'
+                      ? t('المسلسلات', 'TV Series')
                       : activeTab === 'movies'
-                      ? 'الأفلام السينمائية'
+                      ? t('الأفلام السينمائية', 'Movies')
                       : activeTab === 'action'
-                      ? 'أكشن وحركة'
+                      ? t('أكشن وحركة', 'Action')
                       : activeTab === 'drama'
-                      ? 'دراما'
+                      ? t('دراما', 'Drama')
                       : activeTab === 'horror'
-                      ? 'رعب وتشويق'
+                      ? t('رعب وتشويق', 'Horror & Thriller')
                       : activeTab === 'comedy'
-                      ? 'كوميديا'
+                      ? t('كوميديا', 'Comedy')
                       : activeTab === 'sci-fi'
-                      ? 'خيال علمي'
+                      ? t('خيال علمي', 'Sci-Fi')
                       : activeTab === 'adventure'
-                      ? 'مغامرات'
+                      ? t('مغامرات', 'Adventure')
                       : activeTab === 'crime'
-                      ? 'جريمة وغموض'
+                      ? t('جريمة وغموض', 'Crime & Mystery')
                       : activeTab === 'romance'
-                      ? 'رومانسي'
-                      : 'التصنيف المختار'}
+                      ? t('رومانسي', 'Romance')
+                      : t('التصنيف المختار', 'Selected Category')}
                   </h2>
                   <span className="text-amber-400 font-mono font-bold tabular-nums">
                     ({tabFilteredItems.length})
@@ -637,7 +776,7 @@ export default function App() {
                   <div className="py-20 text-center text-zinc-500 bg-zinc-900/30 rounded-2xl border border-white/[0.06]">
                     <Film className="w-12 h-12 mx-auto mb-2 text-zinc-600" />
                     <p className="text-sm font-bold text-zinc-300">
-                      لا توجد أعمال منشورة في هذا القسم حالياً
+                      {t('لا توجد أعمال منشورة في هذا القسم حالياً', 'No titles published in this section yet')}
                     </p>
                   </div>
                 ) : (
@@ -699,30 +838,34 @@ export default function App() {
                   onViewHistory={() => handleBottomTabSelect('history')}
                 />
 
-                {/* 4. Quick Explore Animated Cards */}
+                {/* 4. Compact Surprise Pick Bar */}
                 {siteSettings?.homeSections?.showQuickExplore !== false && (
-                  <QuickExploreCards
-                    activeTab={activeTab}
-                    onSelectTab={handleTopTabSelect}
-                    latestCount={mediaItems.length}
-                    trendingCount={mostWatched.length > 0 ? mostWatched.length : mediaItems.length}
-                    topRatedCount={
-                      mediaItems.filter((m) => (m.rating || 0) >= 8).length || mediaItems.length
-                    }
+                  <SurprisePickBar
+                    mediaItems={mediaItems}
+                    onPlayMedia={(item) => handleStartPlay(item)}
+                    onSelectMedia={(item) => setSelectedMedia(item)}
                   />
                 )}
 
-                {/* Empty Library State if database currently has no published media */}
+                {/* Empty Library State */}
                 {mediaItems.length === 0 && (
                   <div className="text-center py-16 bg-zinc-900/40 rounded-2xl border border-white/[0.08] p-8 my-6">
                     <div className="w-16 h-16 rounded-full bg-amber-400/10 text-amber-400 flex items-center justify-center mx-auto mb-4 border border-amber-400/25">
                       <Sparkles className="w-8 h-8" />
                     </div>
-                    <h3 className="text-lg font-black text-white mb-2">مكتبة الأفلام فارغة حالياً</h3>
+                    <h3 className="text-lg font-black text-white mb-2">
+                      {t('مكتبة الأفلام فارغة حالياً', 'The Cinema Library is Empty')}
+                    </h3>
                     <p className="text-xs text-zinc-400 max-w-sm mx-auto mb-5 leading-relaxed">
                       {isDeveloperUser
-                        ? 'يمكنك إضافة أول فيلم أو مسلسل إلى المنصة من لوحة التحكم الإدارية.'
-                        : 'ستتوفر أحدث الأفلام والمسلسلات قريباً على منصة GoldenFlix.'}
+                        ? t(
+                            'يمكنك إضافة أول فيلم أو مسلسل إلى المنصة من لوحة التحكم الإدارية.',
+                            'You can publish your first movie or series from the Admin Dashboard.'
+                          )
+                        : t(
+                            'ستتوفر أحدث الأفلام والمسلسلات قريباً على منصة GoldenFlix.',
+                            'New movies and series will be available soon on GoldenFlix.'
+                          )}
                     </p>
                     {isDeveloperUser && (
                       <button
@@ -730,7 +873,9 @@ export default function App() {
                         onClick={handleOpenDeveloperSuite}
                         className="min-h-[44px] inline-flex items-center gap-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-black font-black px-5 py-2.5 rounded-xl text-xs transition-all shadow-lg shadow-amber-500/20 cursor-pointer"
                       >
-                        <span>فتح لوحة التحكم ورفع المحتوى</span>
+                        <span>
+                          {t('فتح لوحة التحكم ورفع المحتوى', 'Open Admin Dashboard & Upload')}
+                        </span>
                       </button>
                     )}
                   </div>
@@ -739,7 +884,7 @@ export default function App() {
                 {/* 5. Latest Movies Section */}
                 {latestMovies.length > 0 && siteSettings?.homeSections?.showLatestMovies !== false && (
                   <ContentSection
-                    title="أحدث الأفلام"
+                    title={t('أحدث الأفلام', 'Latest Movies')}
                     iconType="movies"
                     items={latestMovies}
                     onSelectMedia={(item) => setSelectedMedia(item)}
@@ -766,7 +911,7 @@ export default function App() {
                 {/* 7. Latest Series Section */}
                 {seriesItems.length > 0 && siteSettings?.homeSections?.showSeries !== false && (
                   <ContentSection
-                    title="أحدث المسلسلات"
+                    title={t('أحدث المسلسلات', 'Latest Series')}
                     iconType="series"
                     items={seriesItems}
                     onSelectMedia={(item) => setSelectedMedia(item)}
@@ -780,7 +925,7 @@ export default function App() {
                 {/* 8. Most Watched Section */}
                 {mostWatched.length > 0 && siteSettings?.homeSections?.showMostWatched !== false && (
                   <ContentSection
-                    title="الأكثر مشاهدة"
+                    title={t('الأكثر مشاهدة', 'Most Watched')}
                     iconType="trending"
                     items={mostWatched}
                     onSelectMedia={(item) => setSelectedMedia(item)}
@@ -804,7 +949,11 @@ export default function App() {
               Golden<span className="text-amber-400">Flix</span>
             </span>
             <span className="text-zinc-600" aria-hidden="true">|</span>
-            <span>{siteSettings?.siteTagline || 'منصة المشاهدة السينمائية الفاخرة'}</span>
+            <span>
+              {lang === 'en'
+                ? 'Luxury Cinema Streaming Platform'
+                : siteSettings?.siteTagline || 'منصة المشاهدة السينمائية الفاخرة'}
+            </span>
           </div>
 
           <div className="flex items-center gap-5 font-bold">
@@ -813,39 +962,40 @@ export default function App() {
               onClick={() => handleTopTabSelect('home')}
               className="hover:text-amber-400 transition-colors cursor-pointer"
             >
-              الرئيسية
+              {t('الرئيسية', 'Home')}
             </button>
             <button
               type="button"
               onClick={() => handleTopTabSelect('movies')}
               className="hover:text-amber-400 transition-colors cursor-pointer"
             >
-              الأفلام
+              {t('الأفلام', 'Movies')}
             </button>
             <button
               type="button"
               onClick={() => handleTopTabSelect('series')}
               className="hover:text-amber-400 transition-colors cursor-pointer"
             >
-              المسلسلات
+              {t('المسلسلات', 'Series')}
             </button>
             <button
               type="button"
               onClick={() => handleBottomTabSelect('categories')}
               className="hover:text-amber-400 transition-colors cursor-pointer"
             >
-              التصنيفات
+              {t('التصنيفات', 'Categories')}
             </button>
           </div>
         </div>
       </footer>
 
-      {/* Mobile Bottom Navigation: الرئيسية · الأفلام · المسلسلات · حسابي */}
+      {/* Mobile Bottom Navigation: الرئيسية · الأفلام · المسلسلات · حسابي/دخول */}
       <BottomNavigation
         currentTab={bottomNavTab}
         onSelectTab={handleBottomTabSelect}
         user={authUser}
         isProfileOpen={isUserProfileOpen}
+        isAuthOpen={isAuthModalOpen}
       />
 
       {/* Side Menu Drawer */}

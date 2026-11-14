@@ -8,6 +8,7 @@ import {
   NotificationItem,
   PersonItem,
   PhysicalVideoFile,
+  SiteFileEntry,
   SiteSettingsConfig,
   ViewEvent,
   AppUserProfile,
@@ -126,6 +127,13 @@ export const fetchPhysicalVideosLibrary = async (
     headers: authHeaders(token),
   });
   return parseJsonSafe(res, 'تعذر جلب مكتبة ملفات الفيديو');
+};
+
+export const fetchAllSiteFiles = async (token: string): Promise<SiteFileEntry[]> => {
+  const res = await fetch('/api/admin/all-files', {
+    headers: authHeaders(token),
+  });
+  return parseJsonSafe(res, 'تعذر جلب جميع ملفات الموقع');
 };
 
 export interface PhysicalVideoDeleteResult {

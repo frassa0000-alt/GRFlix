@@ -4,15 +4,21 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   GoogleAuthProvider,
   signOut,
   sendPasswordResetEmail,
   sendEmailVerification,
+  sendSignInLinkToEmail,
+  isSignInWithEmailLink,
+  signInWithEmailLink,
   updateProfile,
   onAuthStateChanged,
   User,
   setPersistence,
   browserLocalPersistence,
+  ActionCodeSettings,
 } from 'firebase/auth';
 import {
   getFirestore,
@@ -20,16 +26,13 @@ import {
   getDoc,
   setDoc,
   updateDoc,
-  deleteDoc,
-  collection,
-  getDocs,
   getDocFromServer,
-  query,
-  orderBy,
 } from 'firebase/firestore';
-import { getStorage } from 'firebase/storage';
+import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { AppUserProfile } from '../types';
+
+const EMAIL_LINK_STORAGE_KEY = 'goldenflix_firebase_email_for_signin';
 
 // Initialize Firebase App singleton
 export const firebaseApp = !getApps().length
@@ -44,6 +47,7 @@ export const firebaseApp = !getApps().length
   : getApp();
 
 export const auth = getAuth(firebaseApp);
+auth.useDeviceLanguage();
 
 // Initialize Firestore with specific database ID if provided
 export const db = firebaseConfig.firestoreDatabaseId
@@ -57,6 +61,23 @@ export const storage = getStorage(firebaseApp);
 setPersistence(auth, browserLocalPersistence).catch((err) => {
   console.warn('Could not set Firebase persistence:', err);
 });
+
+/**
+ * Dynamic return / redirect URL matching the current deployment origin (Vercel / AI Studio / localhost)
+ */
+export function getAuthContinueUrl(): string {
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return `${window.location.origin}/`;
+  }
+  return 'https://gr-flix.vercel.app/';
+}
+
+export function getAuthActionCodeSettings(handleCodeInApp = false): ActionCodeSettings {
+  return {
+    url: getAuthContinueUrl(),
+    handleCodeInApp,
+  };
+}
 
 // Validate Connection to Firestore on startup as required by Firebase integration guidelines
 async function testFirestoreConnection() {
@@ -185,7 +206,11 @@ export async function getUserProfile(uid: string): Promise<Partial<AppUserProfil
     return null;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes('permission') || msg.includes('PERMISSION_DENIED') || msg.includes('insufficient permissions')) {
+    if (
+      msg.includes('permission') ||
+      msg.includes('PERMISSION_DENIED') ||
+      msg.includes('insufficient permissions')
+    ) {
       console.warn('Firestore profile read restricted (continuing with Firebase Auth profile):', msg);
       return null;
     }
@@ -194,7 +219,74 @@ export async function getUserProfile(uid: string): Promise<Partial<AppUserProfil
 }
 
 /**
- * Register a new user with Email, Password, and Display Name
+ * Sync authenticated Firebase User to Firestore users/{uid} cleanly matching security rules
+ */
+async function ensureFirestoreUserDocument(
+  user: User,
+  preferredName?: string,
+  preferredPhoto?: string
+): Promise<Partial<AppUserProfile> | null> {
+  const cleanEmail = (user.email || '').trim().toLowerCase();
+  const displayName =
+    preferredName?.trim() ||
+    user.displayName?.trim() ||
+    cleanEmail.split('@')[0] ||
+    'GoldenFlix Member';
+  const photoURL =
+    preferredPhoto ||
+    user.photoURL ||
+    `https://ui-avatars.com/api/?name=${encodeURIComponent(
+      displayName
+    )}&background=facc15&color=000&size=128&bold=true`;
+
+  try {
+    await user.getIdToken();
+  } catch {
+    // Non-fatal
+  }
+
+  let existingProfile = await getUserProfile(user.uid);
+  const isVerifiedAdmin = cleanEmail === DEVELOPER_ADMIN_EMAIL && user.emailVerified;
+
+  if (!existingProfile) {
+    const newProfile: Partial<AppUserProfile> = {
+      uid: user.uid,
+      id: user.uid,
+      name: displayName,
+      displayName,
+      email: cleanEmail,
+      emailVerified: Boolean(user.emailVerified),
+      picture: photoURL,
+      photoURL,
+      joinedAt: Date.now(),
+      role: isVerifiedAdmin ? 'مشرف المنصة' : 'عضو مسجل',
+      favoriteGenre: 'أفلام سينمائية',
+      bio: 'مستمتع بمشاهدة أحدث الأعمال السينمائية على GoldenFlix Cinema.',
+      watchTimeMinutes: 0,
+    };
+    try {
+      await setDoc(doc(db, 'users', user.uid), newProfile);
+      existingProfile = newProfile;
+    } catch (err) {
+      console.warn('Could not create Firestore user doc (continuing with Auth session):', err);
+    }
+  } else if (user.emailVerified && existingProfile.emailVerified === false) {
+    try {
+      await updateDoc(doc(db, 'users', user.uid), {
+        emailVerified: true,
+        updatedAt: Date.now(),
+      });
+      existingProfile = { ...existingProfile, emailVerified: true };
+    } catch {
+      // Non-fatal
+    }
+  }
+
+  return existingProfile;
+}
+
+/**
+ * Register a new user with Email, Password, and Display Name via Firebase Auth
  */
 export async function registerWithEmail(
   email: string,
@@ -204,11 +296,9 @@ export async function registerWithEmail(
   const cleanEmail = email.trim().toLowerCase();
   const cleanName = displayName.trim() || cleanEmail.split('@')[0];
 
-  // 1. Create Firebase Auth user
   const userCredential = await createUserWithEmailAndPassword(auth, cleanEmail, password);
   const user = userCredential.user;
 
-  // 2. Set display name in Auth profile
   const photoURL = `https://ui-avatars.com/api/?name=${encodeURIComponent(
     cleanName
   )}&background=facc15&color=000&size=128&bold=true`;
@@ -219,42 +309,12 @@ export async function registerWithEmail(
     console.warn('Could not update Auth profile displayName:', e);
   }
 
-  // 3. Send email verification link
-  try {
-    await sendEmailVerification(user);
-  } catch (e) {
-    console.warn('Could not send verification email on registration:', e);
-  }
-
-  // 4. Save User Document to Firestore
-  const isDefaultAdmin = cleanEmail === DEVELOPER_ADMIN_EMAIL;
-  const profileData: Partial<AppUserProfile> = {
-    uid: user.uid,
-    id: user.uid,
-    name: cleanName,
-    displayName: cleanName,
-    email: cleanEmail,
-    emailVerified: false,
-    picture: photoURL,
-    photoURL,
-    joinedAt: Date.now(),
-    role: isDefaultAdmin ? 'مشرف المنصة' : 'عضو مسجل',
-    favoriteGenre: 'أفلام ومسلسلات',
-    bio: 'مستمتع بمشاهدة أحدث الأعمال السينمائية على GoldenFlix Cinema.',
-    watchTimeMinutes: 0,
-  };
-
-  try {
-    await setDoc(doc(db, 'users', user.uid), profileData);
-  } catch (err) {
-    console.error('Could not save user profile to Firestore:', err);
-  }
-
-  return formatUserProfile(user, profileData);
+  const profileData = await ensureFirestoreUserDocument(user, cleanName, photoURL);
+  return formatUserProfile(user, profileData || undefined);
 }
 
 /**
- * Sign in existing user with Email and Password
+ * Sign in existing user with Email and Password via Firebase Auth
  */
 export async function loginWithEmail(
   email: string,
@@ -264,70 +324,95 @@ export async function loginWithEmail(
   const userCredential = await signInWithEmailAndPassword(auth, cleanEmail, password);
   const user = userCredential.user;
 
-  // Fetch Firestore metadata
-  const firestoreProfile = await getUserProfile(user.uid);
+  const firestoreProfile = await ensureFirestoreUserDocument(user);
   return formatUserProfile(user, firestoreProfile || undefined);
 }
 
 /**
- * Instant 1-Click Sign-In with Google (Provisioned in Firebase Auth)
+ * 1-Click Sign-In with Google (Popup first, seamless Redirect fallback if blocked)
  */
-export async function signInWithGoogle(): Promise<AppUserProfile> {
+export async function signInWithGoogle(): Promise<AppUserProfile | null> {
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
-  const result = await signInWithPopup(auth, provider);
-  const user = result.user;
 
-  // Ensure auth token is ready before initial Firestore document read/write
   try {
-    await user.getIdToken();
-  } catch {
-    // Non-fatal
-  }
-
-  const cleanEmail = (user.email || '').trim().toLowerCase();
-  const displayName = user.displayName || cleanEmail.split('@')[0] || 'عضو GoldenFlix';
-  const photoURL =
-    user.photoURL ||
-    `https://ui-avatars.com/api/?name=${encodeURIComponent(
-      displayName
-    )}&background=facc15&color=000&size=128&bold=true`;
-
-  let existingProfile = await getUserProfile(user.uid);
-  if (!existingProfile) {
-    const isDefaultAdmin = cleanEmail === DEVELOPER_ADMIN_EMAIL;
-    const newProfile: Partial<AppUserProfile> = {
-      uid: user.uid,
-      id: user.uid,
-      name: displayName,
-      displayName,
-      email: cleanEmail,
-      emailVerified: true,
-      picture: photoURL,
-      photoURL,
-      joinedAt: Date.now(),
-      role: isDefaultAdmin ? 'مشرف المنصة' : 'عضو مسجل',
-      favoriteGenre: 'أفلام سينمائية',
-      bio: 'مستمتع بمشاهدة أحدث الأعمال السينمائية على GoldenFlix Cinema.',
-      watchTimeMinutes: 0,
-    };
-    try {
-      await setDoc(doc(db, 'users', user.uid), newProfile, { merge: true });
-      existingProfile = newProfile;
-    } catch (err) {
-      console.warn('Could not sync Google profile to Firestore (continuing with auth session):', err);
+    const result = await signInWithPopup(auth, provider);
+    const user = result.user;
+    const firestoreProfile = await ensureFirestoreUserDocument(user);
+    return formatUserProfile(user, firestoreProfile || undefined);
+  } catch (err: any) {
+    const code = err?.code || '';
+    // Automatic redirect fallback when browser/in-app webview blocks popups
+    if (
+      code === 'auth/popup-blocked' ||
+      code === 'auth/operation-not-supported-in-this-environment'
+    ) {
+      await signInWithRedirect(auth, provider);
+      return null;
     }
+    throw err;
   }
-
-  return formatUserProfile(user, existingProfile || undefined);
 }
 
 /**
- * Send real Password Reset Email to user's inbox
+ * Complete pending Google redirect sign-in on page load (for mobile / popup-blocked environments)
+ */
+export async function completeGoogleRedirectResult(): Promise<AppUserProfile | null> {
+  try {
+    const result = await getRedirectResult(auth);
+    if (!result?.user) return null;
+    const firestoreProfile = await ensureFirestoreUserDocument(result.user);
+    return formatUserProfile(result.user, firestoreProfile || undefined);
+  } catch (err: any) {
+    console.warn('Google redirect completion notice:', err?.code || err?.message || err);
+    throw err;
+  }
+}
+
+/**
+ * Passwordless Email Sign-In Link via Firebase Auth (fallback when server SMTP isn't deployed)
+ */
+export async function sendFirebaseSignInEmailLink(email: string): Promise<void> {
+  const cleanEmail = email.trim().toLowerCase();
+  await sendSignInLinkToEmail(auth, cleanEmail, getAuthActionCodeSettings(true));
+  try {
+    localStorage.setItem(EMAIL_LINK_STORAGE_KEY, cleanEmail);
+  } catch {
+    // ignore storage errors
+  }
+}
+
+export async function completeFirebaseEmailLinkSignIn(
+  currentUrl: string
+): Promise<AppUserProfile | null> {
+  if (!isSignInWithEmailLink(auth, currentUrl)) {
+    return null;
+  }
+  let email = '';
+  try {
+    email = localStorage.getItem(EMAIL_LINK_STORAGE_KEY) || '';
+  } catch {
+    // ignore
+  }
+  if (!email) {
+    throw new Error('يرجى فتح رابط الدخول من نفس المتصفح الذي طلبت منه الرابط.');
+  }
+  const result = await signInWithEmailLink(auth, email, currentUrl);
+  try {
+    localStorage.removeItem(EMAIL_LINK_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+  const firestoreProfile = await ensureFirestoreUserDocument(result.user);
+  return formatUserProfile(result.user, firestoreProfile || undefined);
+}
+
+/**
+ * Send real Password Reset Email to user's inbox with dynamic Vercel/origin redirect URL
  */
 export async function resetPassword(email: string): Promise<void> {
   const cleanEmail = email.trim().toLowerCase();
-  await sendPasswordResetEmail(auth, cleanEmail);
+  await sendPasswordResetEmail(auth, cleanEmail, getAuthActionCodeSettings(false));
 }
 
 /**
@@ -338,11 +423,51 @@ export async function resendVerificationEmail(): Promise<void> {
   if (!currentUser) {
     throw new Error('لا يوجد حساب مسجل حالياً لإرسال رابط التحقق إليه');
   }
-  await sendEmailVerification(currentUser);
+  await sendEmailVerification(currentUser, getAuthActionCodeSettings(false));
 }
 
 /**
- * Update user profile in Firebase Auth and Firestore
+ * Reload current Firebase user to detect newly confirmed email verification status
+ */
+export async function refreshCurrentFirebaseUser(): Promise<AppUserProfile | null> {
+  const currentUser = auth.currentUser;
+  if (!currentUser) return null;
+  await currentUser.reload();
+  const firestoreProfile = await ensureFirestoreUserDocument(currentUser);
+  return formatUserProfile(currentUser, firestoreProfile || undefined);
+}
+
+/**
+ * Upload user profile avatar to Server / Firebase Storage and return short valid URL
+ */
+export async function uploadUserAvatar(uid: string, file: File): Promise<string> {
+  // 1. Try local Express image upload first if server is active
+  try {
+    const formData = new FormData();
+    formData.append('poster', file);
+    const res = await fetch('/api/upload/poster', {
+      method: 'POST',
+      body: formData,
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.url && typeof data.url === 'string') {
+        return data.url;
+      }
+    }
+  } catch {
+    // Fallback to Firebase Storage on Vercel/static hosting
+  }
+
+  // 2. Firebase Storage upload (compatible with Vercel static hosting)
+  const ext = (file.name.split('.').pop() || 'jpg').replace(/[^a-zA-Z0-9]/g, '').slice(0, 6) || 'jpg';
+  const avatarRef = ref(storage, `avatars/${uid}/avatar_${Date.now()}.${ext}`);
+  await uploadBytes(avatarRef, file, { contentType: file.type || 'image/jpeg' });
+  return await getDownloadURL(avatarRef);
+}
+
+/**
+ * Update user profile in Firebase Auth and Firestore (name, picture/photoURL, bio, favoriteGenre)
  */
 export async function updateUserProfile(
   uid: string,
@@ -354,37 +479,77 @@ export async function updateUserProfile(
   }
 ): Promise<AppUserProfile> {
   const currentUser = auth.currentUser;
-  if (currentUser && updates.displayName) {
-    await updateProfile(currentUser, {
-      displayName: updates.displayName,
-      photoURL: updates.photoURL || currentUser.photoURL,
-    });
+  const safePhotoForCloud =
+    updates.photoURL && updates.photoURL.length <= 950 ? updates.photoURL : undefined;
+
+  if (currentUser && (updates.displayName || safePhotoForCloud)) {
+    try {
+      await updateProfile(currentUser, {
+        displayName: updates.displayName || currentUser.displayName || undefined,
+        photoURL: safePhotoForCloud || currentUser.photoURL || undefined,
+      });
+    } catch (e) {
+      console.warn('Auth updateProfile notice:', e);
+    }
   }
 
   // Only write to Firestore when authenticated via Firebase Auth as this owner UID
   if (currentUser && currentUser.uid === uid) {
     const path = `users/${uid}`;
+    const nextDisplayName =
+      updates.displayName ||
+      currentUser.displayName ||
+      currentUser.email?.split('@')[0] ||
+      'عضو GoldenFlix';
+
     try {
       const userDocRef = doc(db, 'users', uid);
-      await setDoc(
-        userDocRef,
-        {
-          ...updates,
-          email: currentUser.email || '',
-          displayName: updates.displayName || currentUser.displayName || currentUser.email?.split('@')[0] || 'عضو GoldenFlix',
+      const existingSnap = await getDoc(userDocRef);
+
+      if (existingSnap.exists()) {
+        const updatePayload: Record<string, any> = {
+          displayName: nextDisplayName,
+          name: nextDisplayName,
           updatedAt: Date.now(),
-        },
-        { merge: true }
-      );
+        };
+        if (updates.bio !== undefined) updatePayload.bio = updates.bio;
+        if (updates.favoriteGenre !== undefined) updatePayload.favoriteGenre = updates.favoriteGenre;
+        if (safePhotoForCloud) {
+          updatePayload.photoURL = safePhotoForCloud;
+          updatePayload.picture = safePhotoForCloud;
+        }
+        await updateDoc(userDocRef, updatePayload);
+      } else {
+        await setDoc(userDocRef, {
+          uid,
+          id: uid,
+          email: currentUser.email || '',
+          displayName: nextDisplayName,
+          name: nextDisplayName,
+          bio: updates.bio || '',
+          favoriteGenre: updates.favoriteGenre || 'أفلام سينمائية',
+          photoURL: safePhotoForCloud || currentUser.photoURL || '',
+          picture: safePhotoForCloud || currentUser.photoURL || '',
+          emailVerified: Boolean(currentUser.emailVerified),
+          role: 'عضو مسجل',
+          joinedAt: Date.now(),
+          updatedAt: Date.now(),
+        });
+      }
     } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, path);
+      console.warn('Firestore profile update warning:', err);
     }
 
     const updatedSnap = await getUserProfile(uid);
-    return formatUserProfile(currentUser, updatedSnap || undefined);
+    const formatted = formatUserProfile(currentUser, updatedSnap || undefined);
+    if (updates.photoURL) {
+      formatted.picture = updates.photoURL;
+      formatted.photoURL = updates.photoURL;
+    }
+    return formatted;
   }
 
-  // Server-link session fallback without Firebase Auth uid match
+  // Non-Firebase session fallback
   return {
     uid,
     id: uid,
@@ -430,9 +595,54 @@ export function onAuthUserChanged(callback: (user: AppUserProfile | null) => voi
 }
 
 /**
- * Translate Firebase Auth error codes to user-friendly Arabic explanations
+ * Translate Firebase Auth error codes to user-friendly Arabic / English messages
  */
-export function getFirebaseAuthErrorMessage(errorCode: string): string {
+export function getFirebaseAuthErrorMessage(
+  errorCode: string,
+  lang: 'ar' | 'en' = 'ar'
+): string {
+  const currentHost =
+    typeof window !== 'undefined' && window.location?.hostname
+      ? window.location.hostname
+      : 'gr-flix.vercel.app';
+
+  if (lang === 'en') {
+    switch (errorCode) {
+      case 'auth/invalid-email':
+        return 'Invalid email address format. Please enter a valid email.';
+      case 'auth/user-disabled':
+        return 'This account has been disabled by the administrator.';
+      case 'auth/user-not-found':
+        return 'No account found with this email address.';
+      case 'auth/wrong-password':
+      case 'auth/invalid-credential':
+        return 'Incorrect email or password. Please verify your credentials.';
+      case 'auth/email-already-in-use':
+        return 'This email is already registered. Please sign in instead.';
+      case 'auth/weak-password':
+        return 'Password is too weak. It must be at least 6 characters.';
+      case 'auth/too-many-requests':
+        return 'Too many failed attempts. Please wait a minute and try again.';
+      case 'auth/network-request-failed':
+        return 'Network error while connecting to Firebase Auth. Check your internet connection.';
+      case 'auth/operation-not-allowed':
+        return 'Email/Password sign-in is not enabled yet in Firebase Console (Authentication -> Sign-in method).';
+      case 'auth/popup-closed-by-user':
+      case 'auth/cancelled-popup-request':
+        return 'The Google sign-in window was closed before completing.';
+      case 'auth/popup-blocked':
+        return 'The browser blocked the sign-in popup. Please allow popups and try again.';
+      case 'auth/unauthorized-domain':
+        return `Domain "${currentHost}" is not in Firebase Auth Authorized Domains. Add it in Firebase Console -> Authentication -> Settings -> Authorized domains.`;
+      case 'auth/account-exists-with-different-credential':
+        return 'An account already exists with this email using another sign-in method.';
+      case 'auth/requires-recent-login':
+        return 'Please sign in again to complete this security action.';
+      default:
+        return 'Authentication failed. Please try again.';
+    }
+  }
+
   switch (errorCode) {
     case 'auth/invalid-email':
       return 'صيغة البريد الإلكتروني غير صالحة. يرجى إدخال بريد صحيح.';
@@ -450,15 +660,18 @@ export function getFirebaseAuthErrorMessage(errorCode: string): string {
     case 'auth/too-many-requests':
       return 'تم حظر محاولات الدخول مؤقتاً لكثرة المحاولات الخاطئة. يرجى الانتظار دقيقة والمحاولة مجدداً.';
     case 'auth/network-request-failed':
-      return 'تعذر الاتصال بالخادم، تأكد من اتصالك بالإنترنت.';
+      return 'تعذر الاتصال بخادم المصادقة، تأكد من اتصالك بالإنترنت.';
     case 'auth/operation-not-allowed':
-      return 'تسجيل الدخول بالبريد الإلكتروني غير مفعل في إعدادات Firebase.';
+      return 'تسجيل الدخول بالبريد الإلكتروني غير مفعل في Firebase Console. يرجى تفعيل Email/Password من Authentication -> Sign-in method.';
     case 'auth/popup-closed-by-user':
+    case 'auth/cancelled-popup-request':
       return 'تم إغلاق نافذة تسجيل الدخول بحساب Google قبل إتمام العملية.';
     case 'auth/popup-blocked':
       return 'المتصفح منع فتح نافذة تسجيل الدخول. يرجى السماح بالنوافذ المنبثقة والمحاولة مجدداً.';
     case 'auth/unauthorized-domain':
-      return 'النطاق الحالي غير مضاف في قائمة النطاقات المصرح بها في Firebase Auth.';
+      return `النطاق الحالي (${currentHost}) غير مضاف في قائمة النطاقات المصرح بها في Firebase Auth. أضفه من Firebase Console -> Authentication -> Settings -> Authorized domains.`;
+    case 'auth/account-exists-with-different-credential':
+      return 'هذا البريد مسجل بالفعل بطريقة دخول أخرى. جرب تسجيل الدخول بالطريقة المرتبطة بحسابك.';
     case 'auth/requires-recent-login':
       return 'يرجى إعادة تسجيل الدخول لتنفيذ هذا الإجراء الأمني.';
     default:

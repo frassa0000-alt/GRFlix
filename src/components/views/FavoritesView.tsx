@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { MediaItem, MediaType } from '../../types';
 import { MediaCard } from '../cards/MediaCard';
 import { Heart, Film, Sparkles, Tv } from 'lucide-react';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 interface FavoritesViewProps {
   favorites: string[];
@@ -16,6 +17,7 @@ export const FavoritesView: React.FC<FavoritesViewProps> = ({
   onSelectMedia,
   onToggleFavorite,
 }) => {
+  const { t } = useLanguage();
   const [selectedType, setSelectedType] = useState<MediaType | 'all'>('all');
 
   const favoriteMedia = useMemo(() => {
@@ -36,62 +38,59 @@ export const FavoritesView: React.FC<FavoritesViewProps> = ({
             <Heart className="w-5 h-5 fill-amber-400/20" />
           </div>
           <div>
-            <h2 className="text-base font-black text-white">قائمتي المفضلة</h2>
+            <h2 className="text-base font-black text-white">
+              {t('قائمتي المفضلة', 'My Favorites')}
+            </h2>
             <p className="text-[11px] text-zinc-400">
-              الأعمال السينمائية التي قمت بإضافتها للمفضلة
+              {t(
+                'الأعمال السينمائية التي قمت بإضافتها للمفضلة',
+                'Movies and series you bookmarked'
+              )}
             </p>
           </div>
         </div>
         <span className="text-xs font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-full border border-amber-500/20">
-          {favoriteMedia.length} في المفضلة
+          {favoriteMedia.length} {t('في المفضلة', 'saved')}
         </span>
       </div>
 
-      {/* Filter Tabs if user has favorites */}
+      {/* Filter Tabs */}
       {favoriteMedia.length > 0 && (
-        <div className="grid grid-cols-4 gap-1.5 p-1 bg-zinc-900/90 rounded-2xl border border-zinc-800">
+        <div className="grid grid-cols-3 gap-1.5 p-1 bg-zinc-900/90 rounded-2xl border border-zinc-800">
           <button
             onClick={() => setSelectedType('all')}
-            className={`py-2 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+            className={`py-2 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
               selectedType === 'all'
                 ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-black shadow-md shadow-amber-500/20 font-black'
                 : 'text-zinc-400 hover:text-white'
             }`}
           >
             <Sparkles className="w-3.5 h-3.5" />
-            <span>الكل ({favoriteMedia.length})</span>
+            <span>
+              {t('الكل', 'All')} ({favoriteMedia.length})
+            </span>
           </button>
           <button
             onClick={() => setSelectedType('movie')}
-            className={`py-2 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+            className={`py-2 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
               selectedType === 'movie'
                 ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-black shadow-md shadow-amber-500/20 font-black'
                 : 'text-zinc-400 hover:text-white'
             }`}
           >
             <Film className="w-3.5 h-3.5" />
-            <span>أفلام</span>
+            <span>{t('أفلام', 'Movies')}</span>
           </button>
           <button
             onClick={() => setSelectedType('series')}
-            className={`py-2 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+            className={`py-2 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
               selectedType === 'series'
                 ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-black shadow-md shadow-amber-500/20 font-black'
                 : 'text-zinc-400 hover:text-white'
             }`}
           >
             <Tv className="w-3.5 h-3.5" />
-            <span>مسلسلات</span>
-          </button>
-          <button
-            onClick={() => setSelectedType('anime')}
-            className={`py-2 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-              selectedType === 'anime'
-                ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-black shadow-md shadow-amber-500/20 font-black'
-                : 'text-zinc-400 hover:text-white'
-            }`}
-          >
-            <span>أنمي</span>
+            <span>{t('مسلسلات', 'Series')}</span>
           </button>
         </div>
       )}
@@ -102,15 +101,24 @@ export const FavoritesView: React.FC<FavoritesViewProps> = ({
           <div className="w-16 h-16 rounded-full bg-zinc-800/80 border border-zinc-700/60 flex items-center justify-center mx-auto text-zinc-500">
             <Heart className="w-8 h-8" />
           </div>
-          <p className="text-sm font-bold text-white">قائمة المفضلة فارغة حالياً</p>
+          <p className="text-sm font-bold text-white">
+            {t('قائمة المفضلة فارغة حالياً', 'Your favorites list is empty')}
+          </p>
           <p className="text-xs text-zinc-400 max-w-xs mx-auto">
-            اضغط على أيقونة القلب على أي بوستر فيلم أو مسلسل لإضافته إلى قائمتك والوصول إليه بسرعة
+            {t(
+              'اضغط على أيقونة القلب على أي بوستر فيلم أو مسلسل لإضافته إلى قائمتك والوصول إليه بسرعة',
+              'Tap the heart icon on any poster to bookmark it for quick access.'
+            )}
           </p>
         </div>
       ) : filteredFavorites.length === 0 ? (
         <div className="py-16 text-center rounded-3xl bg-zinc-900/40 border border-zinc-800/60 p-6 space-y-2">
-          <p className="text-sm font-bold text-white">لا توجد أعمال في هذا القسم ضمن المفضلة</p>
-          <p className="text-xs text-zinc-400">اختر تصنيفاً آخر أو تصفح الكل</p>
+          <p className="text-sm font-bold text-white">
+            {t('لا توجد أعمال في هذا القسم ضمن المفضلة', 'No favorites in this filter')}
+          </p>
+          <p className="text-xs text-zinc-400">
+            {t('اختر تصنيفاً آخر أو تصفح الكل', 'Choose another filter or view all.')}
+          </p>
         </div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4">

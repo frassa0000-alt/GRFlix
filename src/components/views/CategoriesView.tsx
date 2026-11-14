@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { MediaItem, MediaType } from '../../types';
 import { MediaCard } from '../cards/MediaCard';
+import { useLanguage } from '../../contexts/LanguageContext';
 import {
   Layers,
   Film,
@@ -31,8 +32,10 @@ interface CategoriesViewProps {
 
 interface GenreConfig {
   id: string;
-  label: string;
-  subtitle: string;
+  labelAr: string;
+  labelEn: string;
+  subtitleAr: string;
+  subtitleEn: string;
   icon: React.ElementType;
 }
 
@@ -42,26 +45,25 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({
   favorites,
   onToggleFavorite,
 }) => {
+  const { lang, dir, t } = useLanguage();
   const [selectedType, setSelectedType] = useState<MediaType | 'all'>('all');
   const [selectedGenre, setSelectedGenre] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'latest' | 'rating'>('latest');
 
-  // Curated genres with unified SVG icons - NO EMOJIS
   const genresList: GenreConfig[] = [
-    { id: 'all', label: 'جميع التصنيفات', subtitle: 'استكشف كافة الأعمال', icon: Layers },
-    { id: 'action', label: 'أكشن وحركة', subtitle: 'إثارة ومطاردات سينمائية', icon: Zap },
-    { id: 'sci-fi', label: 'خيال علمي', subtitle: 'عوالم مستقبلية وفضاء', icon: Rocket },
-    { id: 'drama', label: 'دراما وسينما', subtitle: 'قصص إنسانية ومشاعر عميقة', icon: Clapperboard },
-    { id: 'horror', label: 'رعب وتشويق', subtitle: 'غموض ولحظات حبس أنفاس', icon: Ghost },
-    { id: 'comedy', label: 'كوميديا ومرح', subtitle: 'ضحك وأوقات عائلية ممتعة', icon: Laugh },
-    { id: 'adventure', label: 'مغامرات', subtitle: 'رحلات واستكشافات ملحمية', icon: Compass },
-    { id: 'crime', label: 'جريمة وغموض', subtitle: 'تحقيقات وألغاز مثيرة', icon: ShieldAlert },
-    { id: 'history', label: 'تاريخ وحضارة', subtitle: 'أحداث وشخصيات ملهمة', icon: Hourglass },
-    { id: 'romance', label: 'رومانسي', subtitle: 'عواطف وعلاقات مؤثرة', icon: Heart },
-    { id: 'anime', label: 'أنمي وفانتازيا', subtitle: 'رسوم يابانية وأساطير', icon: Flame },
+    { id: 'all', labelAr: 'جميع التصنيفات', labelEn: 'All Genres', subtitleAr: 'استكشف كافة الأعمال', subtitleEn: 'Explore every title', icon: Layers },
+    { id: 'action', labelAr: 'أكشن وحركة', labelEn: 'Action', subtitleAr: 'إثارة ومطاردات سينمائية', subtitleEn: 'High-octane thrills', icon: Zap },
+    { id: 'sci-fi', labelAr: 'خيال علمي', labelEn: 'Sci-Fi', subtitleAr: 'عوالم مستقبلية وفضاء', subtitleEn: 'Futuristic worlds & space', icon: Rocket },
+    { id: 'drama', labelAr: 'دراما وسينما', labelEn: 'Drama', subtitleAr: 'قصص إنسانية ومشاعر عميقة', subtitleEn: 'Compelling stories', icon: Clapperboard },
+    { id: 'horror', labelAr: 'رعب وتشويق', labelEn: 'Horror & Thriller', subtitleAr: 'غموض ولحظات حبس أنفاس', subtitleEn: 'Chilling suspense', icon: Ghost },
+    { id: 'comedy', labelAr: 'كوميديا ومرح', labelEn: 'Comedy', subtitleAr: 'ضحك وأوقات عائلية ممتعة', subtitleEn: 'Laughs & good times', icon: Laugh },
+    { id: 'adventure', labelAr: 'مغامرات', labelEn: 'Adventure', subtitleAr: 'رحلات واستكشافات ملحمية', subtitleEn: 'Epic journeys', icon: Compass },
+    { id: 'crime', labelAr: 'جريمة وغموض', labelEn: 'Crime & Mystery', subtitleAr: 'تحقيقات وألغاز مثيرة', subtitleEn: 'Detectives & intrigue', icon: ShieldAlert },
+    { id: 'history', labelAr: 'تاريخ وحضارة', labelEn: 'History', subtitleAr: 'أحداث وشخصيات ملهمة', subtitleEn: 'True events & eras', icon: Hourglass },
+    { id: 'romance', labelAr: 'رومانسي', labelEn: 'Romance', subtitleAr: 'عواطف وعلاقات مؤثرة', subtitleEn: 'Heartfelt stories', icon: Heart },
+    { id: 'anime', labelAr: 'أنمي وفانتازيا', labelEn: 'Fantasy', subtitleAr: 'رسوم يابانية وأساطير', subtitleEn: 'Myth & fantasy worlds', icon: Flame },
   ];
 
-  // Calculate dynamic counts per genre matching current type filter
   const genreCounts = useMemo(() => {
     const counts: Record<string, number> = { all: 0 };
     genresList.forEach((g) => {
@@ -87,7 +89,6 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({
     return counts;
   }, [mediaItems, selectedType]);
 
-  // Filtered and sorted items
   const filteredItems = useMemo(() => {
     return mediaItems
       .filter((item) => {
@@ -133,14 +134,17 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-base sm:text-lg font-black text-white tracking-wide">
-                  تصفح الأقسام والتصنيفات
+                  {t('تصفح الأقسام والتصنيفات', 'Browse Categories & Genres')}
                 </h1>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/25">
-                  سينما حصرية
+                  {t('سينما حصرية', 'Exclusive Cinema')}
                 </span>
               </div>
               <p className="text-xs text-zinc-400 mt-0.5">
-                استكشف أحدث الأفلام والمسلسلات وفق التصنيف والنوع المفضل لديك
+                {t(
+                  'استكشف أحدث الأفلام والمسلسلات وفق التصنيف والنوع المفضل لديك',
+                  'Explore movies and series filtered by your favorite genre'
+                )}
               </p>
             </div>
           </div>
@@ -150,106 +154,95 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({
               <button
                 type="button"
                 onClick={resetFilters}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-zinc-900/90 text-zinc-300 hover:text-amber-400 border border-zinc-800 hover:border-amber-500/40 transition-all active:scale-95"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-zinc-900/90 text-zinc-300 hover:text-amber-400 border border-zinc-800 hover:border-amber-500/40 transition-all active:scale-95 cursor-pointer"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
-                <span>إعادة ضبط</span>
+                <span>{t('إعادة ضبط', 'Reset')}</span>
               </button>
             )}
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-400 text-xs font-extrabold shadow-sm">
               <Sparkles className="w-3.5 h-3.5" />
-              <span>{filteredItems.length} عمل متاح</span>
+              <span>
+                {filteredItems.length} {t('عمل متاح', 'titles')}
+              </span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Main Content Type Tabs (Segmented Control) */}
+      {/* Main Content Type Tabs */}
       <div className="space-y-2">
         <div className="flex items-center justify-between px-1">
           <span className="text-xs font-bold text-zinc-400 flex items-center gap-1.5">
             <SlidersHorizontal className="w-3.5 h-3.5 text-amber-400" />
-            <span>نوع المحتوى:</span>
+            <span>{t('نوع المحتوى:', 'Content Type:')}</span>
           </span>
           <span className="text-[11px] text-zinc-400 font-medium">
             {selectedType === 'all'
-              ? 'كافة الأنواع'
+              ? t('كافة الأنواع', 'All Formats')
               : selectedType === 'movie'
-              ? 'الأفلام السينمائية'
+              ? t('الأفلام السينمائية', 'Feature Movies')
               : selectedType === 'series'
-              ? 'المسلسلات التلفزيونية'
-              : 'الأنمي والرسوم'}
+              ? t('المسلسلات التلفزيونية', 'TV Series')
+              : t('الأنمي والرسوم', 'Animation')}
           </span>
         </div>
 
-        <div className="grid grid-cols-4 gap-1.5 sm:gap-2 p-1.5 bg-zinc-950/90 rounded-2xl border border-zinc-800/80 backdrop-blur-md">
+        <div className="grid grid-cols-3 gap-1.5 sm:gap-2 p-1.5 bg-zinc-950/90 rounded-2xl border border-zinc-800/80 backdrop-blur-md">
           <button
             type="button"
             onClick={() => setSelectedType('all')}
-            className={`flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl text-xs font-bold transition-all duration-200 active:scale-95 ${
+            className={`flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl text-xs font-bold transition-all duration-200 active:scale-95 cursor-pointer ${
               selectedType === 'all'
                 ? 'bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 text-black font-black shadow-md shadow-amber-500/25'
                 : 'text-zinc-400 hover:text-white hover:bg-zinc-900/80'
             }`}
           >
             <Layers className="w-4 h-4 shrink-0" />
-            <span className="truncate">الكل</span>
+            <span className="truncate">{t('الكل', 'All')}</span>
           </button>
 
           <button
             type="button"
             onClick={() => setSelectedType('movie')}
-            className={`flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl text-xs font-bold transition-all duration-200 active:scale-95 ${
+            className={`flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl text-xs font-bold transition-all duration-200 active:scale-95 cursor-pointer ${
               selectedType === 'movie'
                 ? 'bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 text-black font-black shadow-md shadow-amber-500/25'
                 : 'text-zinc-400 hover:text-white hover:bg-zinc-900/80'
             }`}
           >
             <Film className="w-4 h-4 shrink-0" />
-            <span className="truncate">أفلام</span>
+            <span className="truncate">{t('أفلام', 'Movies')}</span>
           </button>
 
           <button
             type="button"
             onClick={() => setSelectedType('series')}
-            className={`flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl text-xs font-bold transition-all duration-200 active:scale-95 ${
+            className={`flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl text-xs font-bold transition-all duration-200 active:scale-95 cursor-pointer ${
               selectedType === 'series'
                 ? 'bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 text-black font-black shadow-md shadow-amber-500/25'
                 : 'text-zinc-400 hover:text-white hover:bg-zinc-900/80'
             }`}
           >
             <Tv className="w-4 h-4 shrink-0" />
-            <span className="truncate">مسلسلات</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setSelectedType('anime')}
-            className={`flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl text-xs font-bold transition-all duration-200 active:scale-95 ${
-              selectedType === 'anime'
-                ? 'bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 text-black font-black shadow-md shadow-amber-500/25'
-                : 'text-zinc-400 hover:text-white hover:bg-zinc-900/80'
-            }`}
-          >
-            <Flame className="w-4 h-4 shrink-0" />
-            <span className="truncate">أنمي</span>
+            <span className="truncate">{t('مسلسلات', 'Series')}</span>
           </button>
         </div>
       </div>
 
-      {/* Modern Genre Cards Grid */}
+      {/* Genre Cards Grid */}
       <div className="space-y-3">
         <div className="flex items-center justify-between px-1">
           <span className="text-xs font-bold text-zinc-300 flex items-center gap-1.5">
             <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-            <span>اختر التصنيف الفني:</span>
+            <span>{t('اختر التصنيف الفني:', 'Select a Genre:')}</span>
           </span>
           <span className="text-[11px] text-amber-400/90 font-medium">
-            {activeGenreObj.label} ({genreCounts[selectedGenre] ?? 0})
+            {lang === 'en' ? activeGenreObj.labelEn : activeGenreObj.labelAr} (
+            {genreCounts[selectedGenre] ?? 0})
           </span>
         </div>
 
-        {/* Responsive Grid of Category Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5 sm:gap-3">
           {genresList.map((genre) => {
             const isSelected = selectedGenre === genre.id;
@@ -261,13 +254,14 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({
                 key={genre.id}
                 type="button"
                 onClick={() => setSelectedGenre(genre.id)}
-                className={`group relative text-right p-3 rounded-2xl border transition-all duration-200 active:scale-[0.97] flex flex-col justify-between overflow-hidden cursor-pointer ${
+                className={`group relative ${
+                  dir === 'ltr' ? 'text-left' : 'text-right'
+                } p-3 rounded-2xl border transition-all duration-200 active:scale-[0.97] flex flex-col justify-between overflow-hidden cursor-pointer ${
                   isSelected
                     ? 'bg-gradient-to-b from-amber-500/15 via-zinc-900 to-zinc-950 border-amber-400/80 shadow-md shadow-amber-500/10'
                     : 'bg-zinc-900/70 hover:bg-zinc-800/80 border-zinc-800 hover:border-zinc-700'
                 }`}
               >
-                {/* Subtle active glow accent line */}
                 {isSelected && (
                   <div className="absolute top-0 right-0 left-0 h-1 bg-gradient-to-r from-amber-400 to-amber-500" />
                 )}
@@ -300,10 +294,10 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({
                       isSelected ? 'text-amber-400' : 'text-white group-hover:text-amber-300'
                     }`}
                   >
-                    {genre.label}
+                    {lang === 'en' ? genre.labelEn : genre.labelAr}
                   </h3>
                   <p className="text-[10px] text-zinc-400 line-clamp-1 mt-0.5 font-normal">
-                    {genre.subtitle}
+                    {lang === 'en' ? genre.subtitleEn : genre.subtitleAr}
                   </p>
                 </div>
               </button>
@@ -316,39 +310,41 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 pb-1 border-t border-zinc-800/80">
         <div className="flex items-center gap-2">
           <span className="text-xs font-bold text-white flex items-center gap-1.5">
-            <span>النتائج المعروضة</span>
+            <span>{t('النتائج المعروضة', 'Results')}</span>
             <span className="text-zinc-400 text-[11px] font-normal">
-              ({activeGenreObj.label} • {filteredItems.length} عمل)
+              ({lang === 'en' ? activeGenreObj.labelEn : activeGenreObj.labelAr} •{' '}
+              {filteredItems.length} {t('عمل', 'titles')})
             </span>
           </span>
         </div>
 
-        {/* Sort Pills */}
         <div className="flex items-center gap-1.5 self-end sm:self-auto bg-zinc-950 p-1 rounded-xl border border-zinc-800/80">
-          <span className="text-[10px] text-zinc-400 px-2 font-medium">الترتيب:</span>
+          <span className="text-[10px] text-zinc-400 px-2 font-medium">
+            {t('الترتيب:', 'Sort:')}
+          </span>
           <button
             type="button"
             onClick={() => setSortBy('latest')}
-            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all active:scale-95 ${
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all active:scale-95 cursor-pointer ${
               sortBy === 'latest'
                 ? 'bg-amber-400 text-black font-black shadow-sm'
                 : 'text-zinc-400 hover:text-white'
             }`}
           >
             <Clock className="w-3 h-3" />
-            <span>الأحدث</span>
+            <span>{t('الأحدث', 'Latest')}</span>
           </button>
           <button
             type="button"
             onClick={() => setSortBy('rating')}
-            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all active:scale-95 ${
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all active:scale-95 cursor-pointer ${
               sortBy === 'rating'
                 ? 'bg-amber-400 text-black font-black shadow-sm'
                 : 'text-zinc-400 hover:text-white'
             }`}
           >
             <Star className="w-3 h-3" />
-            <span>الأعلى تقييماً</span>
+            <span>{t('الأعلى تقييماً', 'Top Rated')}</span>
           </button>
         </div>
       </div>
@@ -360,19 +356,23 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({
             <Film className="w-7 h-7" />
           </div>
           <div className="space-y-1">
-            <h4 className="text-sm font-black text-white">لا توجد أعمال في هذا التصنيف حالياً</h4>
+            <h4 className="text-sm font-black text-white">
+              {t('لا توجد أعمال في هذا التصنيف حالياً', 'No titles found in this category')}
+            </h4>
             <p className="text-xs text-zinc-400 leading-relaxed">
-              لم يتم إضافة أعمال تطابق خيارات التصفية المختارة. يمكنك تصفح باقي الأقسام أو إعادة ضبط
-              الفلاتر.
+              {t(
+                'لم يتم إضافة أعمال تطابق خيارات التصفية المختارة. يمكنك تصفح باقي الأقسام أو إعادة ضبط الفلاتر.',
+                'No releases match the selected filters yet. Try resetting your filters.'
+              )}
             </p>
           </div>
           <button
             type="button"
             onClick={resetFilters}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-amber-400 to-amber-500 text-black shadow-md shadow-amber-500/20 transition-all active:scale-95 hover:brightness-110"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-amber-400 to-amber-500 text-black shadow-md shadow-amber-500/20 transition-all active:scale-95 hover:brightness-110 cursor-pointer"
           >
             <RotateCcw className="w-3.5 h-3.5" />
-            <span>عرض كافة الأفلام والمسلسلات</span>
+            <span>{t('عرض كافة الأفلام والمسلسلات', 'Show All Movies & Series')}</span>
           </button>
         </div>
       ) : (

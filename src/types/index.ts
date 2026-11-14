@@ -311,3 +311,15 @@ export interface PhysicalVideoFile {
   linkedMediaIds: string[];
   linkedMediaTitles: string[];
 }
+
+export interface SiteFileEntry {
+  fileName: string;
+  relativePath: string;
+  folder: string;
+  url: string;
+  sizeBytes: number;
+  createdAt: number;
+  modifiedAt: number;
+  isHiddenFile: boolean;
+  linkedMediaTitles: string[];
+}

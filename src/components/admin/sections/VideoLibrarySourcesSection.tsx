@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   AlertCircle,
   CheckCircle2,
+  EyeOff,
   FolderOpen,
   HardDrive,
   Link2,
@@ -16,6 +17,7 @@ import {
 import {
   bulkDeletePhysicalVideoFiles,
   deletePhysicalVideoFile,
+  fetchAllSiteFiles,
   fetchPhysicalVideosLibrary,
   StreamTestResult,
   testStreamUrl,
@@ -25,7 +27,12 @@ import {
   formatFileSize,
   updateMovieInDatabases,
 } from '../../../services/movieService';
-import { MediaItem, PhysicalVideoFile, VideoSourceOption } from '../../../types';
+import {
+  MediaItem,
+  PhysicalVideoFile,
+  SiteFileEntry,
+  VideoSourceOption,
+} from '../../../types';
 
 interface VideoLibrarySourcesSectionProps {
   mode: 'video_library' | 'playback_links';
@@ -40,8 +47,10 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
   mediaItems,
   onRefreshMedia,
 }) => {
-  // --- PHYSICAL VIDEO LIBRARY STATE ---
+  // --- PHYSICAL VIDEO & ALL SITE FILES LIBRARY STATE ---
+  const [libraryScope, setLibraryScope] = useState<'videos' | 'all_files'>('videos');
   const [files, setFiles] = useState<PhysicalVideoFile[]>([]);
+  const [allSiteFiles, setAllSiteFiles] = useState<SiteFileEntry[]>([]);
   const [isLoadingFiles, setIsLoadingFiles] = useState<boolean>(false);
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
   const [deletingFileNames, setDeletingFileNames] = useState<string[]>([]);
@@ -63,10 +72,14 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
   const loadFiles = async () => {
     setIsLoadingFiles(true);
     try {
-      const list = await fetchPhysicalVideosLibrary(token);
-      setFiles(list);
+      const [videoList, fullFiles] = await Promise.all([
+        fetchPhysicalVideosLibrary(token),
+        fetchAllSiteFiles(token).catch(() => [] as SiteFileEntry[]),
+      ]);
+      setFiles(videoList);
+      setAllSiteFiles(fullFiles);
     } catch (err: any) {
-      setFeedback({ type: 'error', msg: err?.message || 'فشل تحميل مكتبة الفيديوهات' });
+      setFeedback({ type: 'error', msg: err?.message || 'فشل تحميل مكتبة الملفات' });
     } finally {
       setIsLoadingFiles(false);
     }
@@ -261,27 +274,61 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
   };
 
   if (mode === 'video_library') {
-    const totalBytes = files.reduce((s, f) => s + f.sizeBytes, 0);
+    const activeFilesCount = libraryScope === 'all_files' ? allSiteFiles.length : files.length;
+    const totalBytes =
+      libraryScope === 'all_files'
+        ? allSiteFiles.reduce((s, f) => s + f.sizeBytes, 0)
+        : files.reduce((s, f) => s + f.sizeBytes, 0);
     return (
       <div className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
               <FolderOpen className="w-5 h-5 text-amber-400" />
-              <span>مكتبة ملفات الفيديو على الخادم ({files.length})</span>
+              <span>
+                {libraryScope === 'all_files'
+                  ? `جميع ملفات الموقع والمخفية (${activeFilesCount})`
+                  : `مكتبة ملفات الفيديو على الخادم (${activeFilesCount})`}
+              </span>
             </h2>
             <p className="text-xs text-zinc-400 mt-0.5 font-mono">
               إجمالي المساحة المستهلكة: {formatFileSize(totalBytes)}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={loadFiles}
-            className="px-3 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-xs font-bold text-zinc-200 border border-white/10 flex items-center gap-1.5 cursor-pointer"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isLoadingFiles ? 'animate-spin' : ''}`} />
-            <span>تحديث</span>
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="inline-flex items-center p-1 rounded-xl bg-zinc-950 border border-white/10 text-xs font-bold">
+              <button
+                type="button"
+                onClick={() => setLibraryScope('videos')}
+                className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
+                  libraryScope === 'videos'
+                    ? 'bg-amber-400 text-black font-black'
+                    : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                الفيديوهات ({files.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setLibraryScope('all_files')}
+                className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
+                  libraryScope === 'all_files'
+                    ? 'bg-amber-400 text-black font-black'
+                    : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                كل الملفات والمخفية ({allSiteFiles.length})
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={loadFiles}
+              className="px-3 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-xs font-bold text-zinc-200 border border-white/10 flex items-center gap-1.5 cursor-pointer"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isLoadingFiles ? 'animate-spin' : ''}`} />
+              <span>تحديث</span>
+            </button>
+          </div>
         </div>
 
         {feedback && (
@@ -329,7 +376,78 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
           </div>
         )}
 
-        {isLoadingFiles ? (
+        {libraryScope === 'all_files' ? (
+          isLoadingFiles ? (
+            <div className="py-16 text-center text-zinc-400">
+              <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-amber-400" />
+              <p className="text-xs">جارٍ فحص جميع ملفات الموقع والمخفية...</p>
+            </div>
+          ) : allSiteFiles.length === 0 ? (
+            <div className="py-14 text-center rounded-2xl bg-[#111116] border border-white/[0.08] text-zinc-500">
+              <HardDrive className="w-9 h-9 mx-auto mb-2 text-zinc-600" />
+              <p className="text-sm font-bold text-zinc-300">لا توجد ملفات مخزنة على الخادم حالياً</p>
+            </div>
+          ) : (
+            <div className="rounded-2xl bg-[#111116] border border-white/[0.08] overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-right border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-white/[0.08] bg-zinc-950/60 text-[11px] font-black text-zinc-400">
+                      <th className="py-3 px-3">المسار / اسم الملف</th>
+                      <th className="py-3 px-3">المجلد</th>
+                      <th className="py-3 px-3">الحالة</th>
+                      <th className="py-3 px-3">الحجم</th>
+                      <th className="py-3 px-3">الأعمال المرتبطة</th>
+                      <th className="py-3 px-3">معاينة</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/[0.05]">
+                    {allSiteFiles.map((sf) => (
+                      <tr key={sf.relativePath} className="hover:bg-white/[0.02]">
+                        <td className="py-3 px-3 font-mono text-zinc-200 max-w-xs truncate">
+                          {sf.relativePath}
+                        </td>
+                        <td className="py-3 px-3 font-mono text-zinc-400">{sf.folder}</td>
+                        <td className="py-3 px-3">
+                          {sf.isHiddenFile ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-400/15 border border-amber-400/40 text-amber-300 text-[10px] font-black">
+                              <EyeOff className="w-3 h-3" />
+                              <span>ملف مخفي / غير مرتبط</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 text-[10px] font-bold">
+                              ظاهر ومنشور
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3 px-3 font-mono tabular-nums text-amber-400 font-bold whitespace-nowrap">
+                          {formatFileSize(sf.sizeBytes)}
+                        </td>
+                        <td className="py-3 px-3">
+                          {sf.linkedMediaTitles.length > 0 ? (
+                            <span className="text-zinc-300">{sf.linkedMediaTitles.join('، ')}</span>
+                          ) : (
+                            <span className="text-zinc-500">غير مرتبط</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-3">
+                          <button
+                            type="button"
+                            onClick={() => setPreviewSrc(sf.url)}
+                            className="px-2.5 py-1.5 rounded-lg bg-amber-400/15 hover:bg-amber-400 text-amber-300 hover:text-black font-bold text-[11px] flex items-center gap-1 cursor-pointer transition-colors"
+                          >
+                            <Play className="w-3 h-3 fill-current" />
+                            <span>فتح</span>
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )
+        ) : isLoadingFiles ? (
           <div className="py-16 text-center text-zinc-400">
             <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-amber-400" />
             <p className="text-xs">جارٍ فحص مساحة التخزين...</p>
@@ -474,8 +592,12 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
                   <X className="w-4 h-4" />
                 </button>
               </div>
-              <div className="bg-black aspect-video">
-                <video src={previewSrc} controls autoPlay className="w-full h-full object-contain" />
+              <div className="bg-black aspect-video flex items-center justify-center">
+                {/\.(png|jpe?g|webp|gif|svg)$/i.test(previewSrc) ? (
+                  <img src={previewSrc} alt="Preview" className="max-w-full max-h-full object-contain" />
+                ) : (
+                  <video src={previewSrc} controls autoPlay className="w-full h-full object-contain" />
+                )}
               </div>
             </div>
           </div>

@@ -2937,6 +2937,62 @@ app.get('/api/admin/videos-library', requireAdmin, (_req: Request, res: Response
   }
 });
 
+// Admin: Scan all uploaded/hidden files across /uploads subdirectories
+app.get('/api/admin/all-files', requireAdmin, (_req: Request, res: Response) => {
+  try {
+    const movies = readMovies();
+    const collected: any[] = [];
+
+    const walk = (dirPath: string, relBase: string) => {
+      if (!fs.existsSync(dirPath)) return;
+      const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+      for (const entry of entries) {
+        const fullPath = path.join(dirPath, entry.name);
+        const relPath = relBase ? `${relBase}/${entry.name}` : entry.name;
+        if (entry.isDirectory()) {
+          walk(fullPath, relPath);
+        } else if (entry.isFile()) {
+          const stat = fs.statSync(fullPath);
+          const url = `/uploads/${relPath}`;
+          const linked = movies.filter((m) => {
+            if (m.videoUrl === url || m.posterUrl === url || m.bannerUrl === url || m.subtitleUrl === url) {
+              return true;
+            }
+            if (Array.isArray(m.sources) && m.sources.some((s: any) => s.url === url)) return true;
+            if (Array.isArray(m.seasons)) {
+              return m.seasons.some((sn: any) =>
+                (sn.episodes || []).some((ep: any) => ep.videoUrl === url || ep.subtitleUrl === url)
+              );
+            }
+            return false;
+          });
+          const topFolder = relPath.includes('/') ? relPath.split('/')[0] : 'root';
+          const isDotHidden = relPath.split('/').some((seg) => seg.startsWith('.'));
+          const linkedHiddenMedia = linked.some((m) => m.isPublished === false);
+
+          collected.push({
+            fileName: entry.name,
+            relativePath: relPath,
+            folder: topFolder,
+            url,
+            sizeBytes: stat.size,
+            createdAt: Math.floor(stat.birthtimeMs || stat.ctimeMs),
+            modifiedAt: Math.floor(stat.mtimeMs),
+            isHiddenFile: isDotHidden || linkedHiddenMedia || linked.length === 0,
+            linkedMediaTitles: linked.map((m) => m.titleAr || m.title),
+          });
+        }
+      }
+    };
+
+    walk(UPLOADS_DIR, '');
+    collected.sort((a, b) => (b.modifiedAt || 0) - (a.modifiedAt || 0));
+    return res.json(collected);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'تعذر قراءة ملفات الموقع' });
+  }
+});
+
 const deletePhysicalVideosAndSyncSite = (fileNames: string[]) => {
   const deletedMovieIds: string[] = [];
   const updatedMoviesMap = new Map<string, any>();

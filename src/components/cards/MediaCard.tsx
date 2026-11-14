@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { Play, Star, Heart } from 'lucide-react';
+import { motion } from 'motion/react';
+import { Play, Star, Heart, EyeOff } from 'lucide-react';
 import { MediaItem } from '../../types';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 export interface MediaCardProps {
   media?: MediaItem;
@@ -11,6 +13,7 @@ export interface MediaCardProps {
   onToggleFavorite: (id?: string) => void;
   variant?: 'poster' | 'landscape';
   inGrid?: boolean;
+  index?: number;
 }
 
 export const MediaCard: React.FC<MediaCardProps> = ({
@@ -22,7 +25,9 @@ export const MediaCard: React.FC<MediaCardProps> = ({
   onToggleFavorite,
   variant = 'poster',
   inGrid = false,
+  index = 0,
 }) => {
+  const { dir, t, getMediaTitle, translateGenre } = useLanguage();
   const currentItem = media || item;
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
@@ -44,19 +49,31 @@ export const MediaCard: React.FC<MediaCardProps> = ({
     ? currentItem.bannerUrl || currentItem.posterUrl
     : currentItem.posterUrl || currentItem.bannerUrl;
 
+  const displayTitle = getMediaTitle(currentItem);
+  const isHiddenItem = currentItem.isPublished === false;
+
   const categoryName =
     currentItem.genres && currentItem.genres.length > 0 && typeof currentItem.genres[0] === 'string'
-      ? currentItem.genres[0]
+      ? translateGenre(currentItem.genres[0])
       : currentItem.type === 'movie'
-      ? 'فيلم'
+      ? t('فيلم', 'Movie')
       : currentItem.type === 'series'
-      ? 'مسلسل'
-      : 'أنمي';
+      ? t('مسلسل', 'Series')
+      : t('أنمي', 'Anime');
 
   return (
-    <article
+    <motion.article
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.28, delay: Math.min(index * 0.03, 0.18), ease: [0.16, 1, 0.3, 1] }}
+      whileHover={{ y: -5 }}
+      whileTap={{ scale: 0.985 }}
       onClick={handleClick}
-      className={`group relative flex-shrink-0 cursor-pointer rounded-2xl overflow-hidden bg-[#101015] border border-white/[0.07] hover:border-amber-400/55 transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_18px_38px_rgba(0,0,0,0.75)] ${
+      className={`group relative flex-shrink-0 cursor-pointer rounded-2xl overflow-hidden bg-[#101016] border transition-colors duration-300 shadow-[0_12px_30px_rgba(0,0,0,0.65)] hover:shadow-[0_22px_45px_rgba(0,0,0,0.85),0_0_0_1px_rgba(251,191,36,0.45)] ${
+        isHiddenItem
+          ? 'border-amber-500/45 opacity-95'
+          : 'border-white/[0.08] hover:border-amber-400/60'
+      } ${
         inGrid
           ? 'w-full'
           : isLandscape
@@ -80,70 +97,88 @@ export const MediaCard: React.FC<MediaCardProps> = ({
           <div className="absolute inset-0 bg-gradient-to-br from-zinc-900 via-[#121218] to-amber-950/30 flex flex-col items-center justify-center p-4 text-center">
             <Play className="w-8 h-8 text-amber-400/50 mb-1.5" />
             <span className="text-xs text-zinc-300 font-bold line-clamp-2">
-              {currentItem.titleAr || currentItem.title}
+              {displayTitle}
             </span>
           </div>
         ) : (
           <img
             src={displayImage}
-            alt={currentItem.titleAr || currentItem.title}
+            alt={displayTitle}
             loading="lazy"
             referrerPolicy="no-referrer"
             onLoad={() => setImageLoaded(true)}
             onError={() => setImageError(true)}
-            className={`w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 ${
+            className={`w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-108 ${
               imageLoaded ? 'opacity-100' : 'opacity-0'
             }`}
           />
         )}
 
+        {/* Diagonal Gold Light Sheen Sweep on Hover */}
+        <div className="cinema-card-sheen pointer-events-none absolute inset-y-0 left-0 w-1/2 bg-gradient-to-r from-transparent via-amber-200/20 to-transparent opacity-0" />
+
         {/* Cinematic Gradient Scrim */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent opacity-85 group-hover:opacity-70 transition-opacity" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#0b0b0f] via-black/20 to-transparent opacity-90 group-hover:opacity-75 transition-opacity" />
 
         {/* Subtle Top Metadata Corners */}
-        <div className="absolute top-2.5 inset-x-2.5 flex items-center justify-between z-10 pointer-events-none">
-          {currentItem.videoQuality ? (
-            <span className="bg-amber-400 text-black font-black text-[10px] px-1.5 py-0.5 rounded-md shadow-sm uppercase">
-              {currentItem.videoQuality}
-            </span>
-          ) : (
-            <span />
-          )}
+        <div className="absolute top-2.5 inset-x-2.5 flex items-center justify-between gap-1 z-10 pointer-events-none">
+          <div className="flex items-center gap-1 flex-wrap">
+            {currentItem.videoQuality ? (
+              <span className="bg-amber-400 text-black font-black text-[10px] px-1.5 py-0.5 rounded-md shadow-sm uppercase">
+                {currentItem.videoQuality}
+              </span>
+            ) : null}
+            {isHiddenItem && (
+              <span className="inline-flex items-center gap-1 bg-zinc-950/90 border border-amber-400/60 text-amber-300 font-black text-[10px] px-1.5 py-0.5 rounded-md shadow">
+                <EyeOff className="w-2.5 h-2.5" />
+                <span>{t('مخفي', 'Hidden')}</span>
+              </span>
+            )}
+          </div>
 
           {typeof currentItem.rating === 'number' && currentItem.rating > 0 && (
-            <div className="inline-flex items-center gap-1 bg-black/65 backdrop-blur-md px-1.5 py-0.5 rounded-md text-amber-400 text-[11px] font-bold tabular-nums">
+            <div className="inline-flex items-center gap-1 bg-black/70 backdrop-blur-md px-1.5 py-0.5 rounded-md text-amber-400 text-[11px] font-bold tabular-nums border border-white/10">
               <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
               <span>{currentItem.rating.toFixed(1)}</span>
             </div>
           )}
         </div>
 
-        {/* Favorite Button (40x40 target) */}
+        {/* Favorite Button */}
         <button
           type="button"
           onClick={handleFavoriteClick}
-          aria-label={isFavorite ? 'إزالة من المفضلة' : 'إضافة إلى المفضلة'}
-          className={`absolute bottom-2.5 left-2.5 z-20 w-9 h-9 rounded-full flex items-center justify-center transition-all active:scale-90 cursor-pointer ${
+          aria-label={
             isFavorite
-              ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/30'
-              : 'bg-black/65 backdrop-blur-md text-white/85 hover:text-amber-300 border border-white/10'
+              ? t('إزالة من المفضلة', 'Remove from favorites')
+              : t('إضافة إلى المفضلة', 'Add to favorites')
+          }
+          className={`absolute bottom-2.5 ${
+            dir === 'ltr' ? 'right-2.5' : 'left-2.5'
+          } z-20 w-9 h-9 rounded-full flex items-center justify-center transition-all active:scale-90 cursor-pointer ${
+            isFavorite
+              ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/35'
+              : 'bg-black/65 backdrop-blur-md text-white/85 hover:text-amber-300 border border-white/15'
           }`}
         >
           <Heart className={`w-4 h-4 ${isFavorite ? 'fill-current' : ''}`} />
         </button>
 
-        {/* Center Play Hover Orb */}
+        {/* Center Play Hover Orb with Halo Ring */}
         <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-250 pointer-events-none">
-          <div className="w-12 h-12 rounded-full bg-amber-400 text-black flex items-center justify-center shadow-[0_0_25px_rgba(251,191,36,0.5)] transform scale-75 group-hover:scale-100 transition-transform duration-250">
-            <Play className="w-5 h-5 fill-current ml-0.5" />
+          <div className="relative flex items-center justify-center">
+            <span className="absolute w-14 h-14 rounded-full bg-amber-400/25 scale-75 group-hover:scale-115 opacity-0 group-hover:opacity-100 transition-all duration-500" />
+            <div className="relative w-12 h-12 rounded-full bg-gradient-to-br from-amber-300 to-amber-500 text-black flex items-center justify-center shadow-[0_0_28px_rgba(251,191,36,0.55)] transform scale-75 group-hover:scale-100 transition-transform duration-300">
+              <Play className="w-5 h-5 fill-current ml-0.5" />
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Card Footer Information (Unboxed clean line) */}
-      <div className="p-3 text-right">
+      {/* Card Footer Information */}
+      <div className={`p-3 ${dir === 'ltr' ? 'text-left' : 'text-right'}`}>
         <h3 className="font-black text-white text-xs sm:text-sm truncate group-hover:text-amber-400 transition-colors">
-          {currentItem.titleAr || currentItem.title}
+          {displayTitle}
         </h3>
 
         <div className="flex items-center gap-1.5 text-[11px] text-zinc-400 mt-1 truncate tabular-nums">
@@ -162,6 +197,6 @@ export const MediaCard: React.FC<MediaCardProps> = ({
           ) : null}
         </div>
       </div>
-    </article>
+    </motion.article>
   );
 };
