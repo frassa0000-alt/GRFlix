@@ -232,12 +232,18 @@ async function ensureFirestoreUserDocument(
     user.displayName?.trim() ||
     cleanEmail.split('@')[0] ||
     'GoldenFlix Member';
-  const photoURL =
+  const rawPhotoURL =
     preferredPhoto ||
     user.photoURL ||
     `https://ui-avatars.com/api/?name=${encodeURIComponent(
       displayName
     )}&background=facc15&color=000&size=128&bold=true`;
+  const photoURL =
+    rawPhotoURL.length <= 950
+      ? rawPhotoURL
+      : `https://ui-avatars.com/api/?name=${encodeURIComponent(
+          displayName
+        )}&background=facc15&color=000&size=128&bold=true`;
 
   try {
     await user.getIdToken();
@@ -412,7 +418,15 @@ export async function completeFirebaseEmailLinkSignIn(
  */
 export async function resetPassword(email: string): Promise<void> {
   const cleanEmail = email.trim().toLowerCase();
-  await sendPasswordResetEmail(auth, cleanEmail, getAuthActionCodeSettings(false));
+  try {
+    await sendPasswordResetEmail(auth, cleanEmail, getAuthActionCodeSettings(false));
+  } catch (err: any) {
+    if (err?.code === 'auth/unauthorized-domain') {
+      await sendPasswordResetEmail(auth, cleanEmail);
+      return;
+    }
+    throw err;
+  }
 }
 
 /**
@@ -495,7 +509,6 @@ export async function updateUserProfile(
 
   // Only write to Firestore when authenticated via Firebase Auth as this owner UID
   if (currentUser && currentUser.uid === uid) {
-    const path = `users/${uid}`;
     const nextDisplayName =
       updates.displayName ||
       currentUser.displayName ||
