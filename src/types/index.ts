@@ -19,7 +19,7 @@ export interface VideoSourceOption {
   id?: string;
   label: string;
   url: string;
-  format?: 'mp4' | 'hls' | 'webm' | string;
+  format?: 'mp4' | 'hls' | 'webm' | 'youtube' | string;
   quality?: string;
   isDefault?: boolean;
 }
@@ -65,7 +65,7 @@ export interface MediaItem {
   isPublished: boolean;
   fileSizeBytes?: number;
   storagePath?: string;
-  storageType?: 'firebase' | 'server';
+  storageType?: 'firebase' | 'server' | 'youtube' | 'external';
   isFeatured?: boolean;
   isLatest?: boolean;
   isMostWatched?: boolean;
@@ -140,7 +140,6 @@ export type BottomNavTab =
   | 'series'
   | 'categories'
   | 'favorites'
-  | 'downloads'
   | 'settings'
   | 'profile'
   | 'history';

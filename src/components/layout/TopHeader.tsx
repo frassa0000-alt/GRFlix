@@ -3,12 +3,10 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Search,
   Bell,
-  Menu,
   X,
   LayoutGrid,
   Clapperboard,
   Tv,
-  Flame,
   Zap,
   Drama,
   Ghost,
@@ -17,6 +15,8 @@ import {
   Compass,
   Star,
   Heart,
+  User,
+  Play,
 } from 'lucide-react';
 import {
   ActiveTab,
@@ -49,33 +49,53 @@ const TOP_NAV_ITEMS: {
   icon: React.ComponentType<{ className?: string }>;
 }[] = [
   { id: 'home', labelAr: 'الرئيسية', labelEn: 'Home', tab: 'home', icon: LayoutGrid },
-  { id: 'movies', labelAr: 'الأفلام', labelEn: 'Movies', tab: 'movies', icon: Clapperboard },
-  { id: 'series', labelAr: 'المسلسلات', labelEn: 'Series', tab: 'series', icon: Tv },
-  { id: 'categories', labelAr: 'أكثر', labelEn: 'More', bottomTab: 'categories', icon: Star },
-  { id: 'trending', labelAr: 'الأكثر مشاهدة', labelEn: 'Trending', tab: 'trending', icon: Flame },
+  { id: 'movies', labelAr: 'الأفلام', labelEn: 'Movies', tab: 'movies', icon: Star },
+  { id: 'series', labelAr: 'المسلسلات', labelEn: 'Series', tab: 'series', icon: Clapperboard },
+  { id: 'favorites', labelAr: 'المفضلة', labelEn: 'Favorites', tab: 'favorites', bottomTab: 'favorites', icon: Heart },
+  { id: 'categories', labelAr: 'التصنيفات', labelEn: 'Categories', bottomTab: 'categories', icon: Tv },
   { id: 'action', labelAr: 'أكشن', labelEn: 'Action', tab: 'action', icon: Zap },
   { id: 'drama', labelAr: 'دراما', labelEn: 'Drama', tab: 'drama', icon: Drama },
   { id: 'horror', labelAr: 'رعب', labelEn: 'Horror', tab: 'horror', icon: Ghost },
   { id: 'comedy', labelAr: 'كوميديا', labelEn: 'Comedy', tab: 'comedy', icon: Laugh },
   { id: 'sci-fi', labelAr: 'خيال علمي', labelEn: 'Sci-Fi', tab: 'sci-fi', icon: Rocket },
   { id: 'adventure', labelAr: 'مغامرات', labelEn: 'Adventure', tab: 'adventure', icon: Compass },
-  { id: 'favorites', labelAr: 'المفضلة', labelEn: 'Favorites', tab: 'favorites', bottomTab: 'favorites', icon: Heart },
 ];
+
+let hasPlayedEntryLogoSpin = false;
 
 export const TopHeader: React.FC<TopHeaderProps> = ({
   searchQuery,
   onSearchChange,
-  onOpenSideMenu,
+  onOpenGoogleLogin,
+  googleUser,
   activeTab,
   bottomNavTab,
   onSelectTab,
   onSelectBottomTab,
   notifications,
-  siteName,
+  siteName = 'GoldenFlix',
 }) => {
   const { lang, dir, t } = useLanguage();
   const [showNotifications, setShowNotifications] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const [shouldSpinOnEntry] = useState<boolean>(() => !hasPlayedEntryLogoSpin);
+
+  React.useEffect(() => {
+    hasPlayedEntryLogoSpin = true;
+  }, []);
+
+  const displaySiteName = (siteName || 'GoldenFlix').trim() || 'GoldenFlix';
+
+  const handleLogoClick = () => {
+    setShowNotifications(false);
+    if (searchQuery) {
+      onSearchChange('');
+    }
+    if (activeTab !== 'home') {
+      onSelectTab('home');
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   const activeNotifications = React.useMemo(
     () =>
@@ -84,18 +104,6 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
         .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)),
     [notifications]
   );
-
-  const handleOpenMenuSafely = () => {
-    setShowNotifications(false);
-    onOpenSideMenu();
-  };
-
-  const handleBrandClick = () => {
-    setShowNotifications(false);
-    onSearchChange('');
-    onSelectTab('home');
-    onSelectBottomTab('home');
-  };
 
   const handleTopNavClick = (item: (typeof TOP_NAV_ITEMS)[number]) => {
     setShowNotifications(false);
@@ -136,55 +144,86 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
     return lang === 'en' ? `${diffDays}d ago` : `منذ ${diffDays} ي`;
   };
 
-  const brandDisplay = siteName?.trim() || 'GoldenFlix';
-
   return (
-    <header className="sticky top-0 z-30 w-full bg-[#070709]/88 backdrop-blur-2xl select-none font-sans">
+    <header className="sticky top-0 z-30 w-full bg-[#070709]/90 backdrop-blur-2xl select-none font-sans">
       <div className="max-w-7xl mx-auto px-3 sm:px-6">
-        {/* Row 1: Circular Gold Drawer Button · Centered GoldenFlix Logo · Circular Search + Bell */}
-        <div className="h-16 flex items-center justify-between gap-2 sm:gap-4">
-          {/* Start Zone: Circular 3-bar Menu Button */}
-          <div className="flex items-center gap-2 shrink-0">
+        {/* Row 1: Profile + One-time Intro Spinning GoldenFelix · Desktop Search · Search + Bell */}
+        <div className="h-14 sm:h-16 flex items-center justify-between gap-1.5 sm:gap-4">
+          {/* Start Zone: Profile/Login Button + GoldenFelix Wordmark */}
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0 shrink-0">
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.92 }}
-              onClick={handleOpenMenuSafely}
+              onClick={onOpenGoogleLogin}
               type="button"
-              aria-label={t('فتح القائمة الجانبية', 'Open Menu')}
-              className="w-11 h-11 rounded-full bg-[#17171c] hover:bg-[#1f1f26] text-[#F7C600] flex items-center justify-center border border-[#F7C600]/25 hover:border-[#F7C600]/50 shadow-md transition-colors cursor-pointer shrink-0"
+              aria-label={googleUser ? t('الملف الشخصي', 'My Profile') : t('تسجيل الدخول', 'Sign In')}
+              title={googleUser ? googleUser.displayName || googleUser.name : t('تسجيل الدخول', 'Sign In')}
+              className={`relative w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#17171c] hover:bg-[#1f1f26] text-[#F7C600] flex items-center justify-center border transition-all cursor-pointer shrink-0 ${
+                googleUser
+                  ? 'border-[#F7C600] shadow-[0_0_18px_rgba(247,198,0,0.28)]'
+                  : 'border-[#F7C600]/35 hover:border-[#F7C600]/65 shadow-[0_0_16px_rgba(247,198,0,0.12)]'
+              }`}
             >
-              <Menu className="w-5 h-5" />
+              <div className="w-full h-full rounded-full overflow-hidden flex items-center justify-center">
+                {googleUser?.picture || googleUser?.photoURL ? (
+                  <img
+                    src={googleUser.picture || googleUser.photoURL}
+                    alt={googleUser.displayName || googleUser.name}
+                    referrerPolicy="no-referrer"
+                    className="w-full h-full object-cover"
+                  />
+                ) : googleUser ? (
+                  <span className="text-xs sm:text-sm font-black text-[#F7C600]">
+                    {(googleUser.displayName || googleUser.name || 'G').trim().charAt(0).toUpperCase()}
+                  </span>
+                ) : (
+                  <User className="w-4 h-4 sm:w-4.5 sm:h-4.5 fill-[#F7C600] text-[#F7C600]" />
+                )}
+              </div>
+            </motion.button>
+
+            {/* Horizontal Site Name Wordmark (Spins 360° once on site entry only) */}
+            <motion.button
+              type="button"
+              onClick={handleLogoClick}
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.96 }}
+              aria-label="GoldenFelix"
+              title="GoldenFelix"
+              className="relative flex items-center cursor-pointer shrink-0 py-1 px-0.5 focus:outline-none"
+            >
+              <motion.span
+                initial={shouldSpinOnEntry ? { rotate: 0, scale: 0.92 } : false}
+                animate={shouldSpinOnEntry ? { rotate: 360, scale: 1 } : { rotate: 0, scale: 1 }}
+                transition={{
+                  rotate: { duration: 0.85, ease: [0.22, 1, 0.36, 1] },
+                  scale: { duration: 0.5, ease: 'easeOut' },
+                }}
+                dir="ltr"
+                className="inline-flex items-center gap-1.5 whitespace-nowrap"
+              >
+                <Play className="w-4 h-4 sm:w-4.5 sm:h-4.5 fill-[#F7C600] text-[#F7C600] drop-shadow-[0_0_8px_rgba(247,198,0,0.45)] shrink-0" />
+                {displaySiteName.trim().toLowerCase() === 'goldenflix' ||
+                displaySiteName.trim().toLowerCase() === 'goldenfelix' ? (
+                  <span className="text-[15px] sm:text-lg font-black tracking-tight leading-none">
+                    <span className="text-white">Golden</span>
+                    <span className="text-[#F7C600] drop-shadow-[0_0_10px_rgba(247,198,0,0.38)]">
+                      Felix
+                    </span>
+                  </span>
+                ) : (
+                  <span className="text-[15px] sm:text-lg font-black tracking-tight text-[#F7C600] leading-none">
+                    {displaySiteName}
+                  </span>
+                )}
+              </motion.span>
             </motion.button>
           </div>
 
-          {/* Center Brand Mark (on mobile centered; on desktop compact left-aligned + inline search) */}
-          <div className="flex-1 flex items-center justify-center md:justify-between gap-4 min-w-0">
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              type="button"
-              onClick={handleBrandClick}
-              className="flex items-center gap-2 cursor-pointer group shrink-0"
-              title={t('العودة للرئيسية', 'Back to Home')}
-            >
-              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-[#ffe047] via-[#F7C600] to-[#d99b00] text-black flex items-center justify-center shadow-[0_4px_16px_rgba(247,198,0,0.35)] group-hover:scale-105 transition-transform shrink-0">
-                <svg className="w-4 h-4 fill-current ml-0.5" viewBox="0 0 24 24">
-                  <path d="M5 3l14 9-14 9V3z" />
-                </svg>
-              </div>
-              {brandDisplay.toLowerCase().includes('golden') ? (
-                <span className="text-xl sm:text-2xl font-black tracking-tight text-white whitespace-nowrap">
-                  Golden<span className="text-[#F7C600]">Flix</span>
-                </span>
-              ) : (
-                <span className="text-xl sm:text-2xl font-black tracking-tight text-white whitespace-nowrap">
-                  {brandDisplay}
-                </span>
-              )}
-            </motion.button>
-
+          {/* Center Zone: Desktop Search */}
+          <div className="hidden md:flex flex-1 items-center justify-center min-w-0">
             {/* Desktop Inline Search */}
-            <div className="hidden md:flex flex-1 max-w-md mx-2 relative items-center">
+            <div className="flex flex-1 max-w-md mx-2 relative items-center">
               <Search
                 className={`w-4 h-4 text-zinc-400 absolute pointer-events-none ${
                   dir === 'ltr' ? 'left-3.5' : 'right-3.5'
@@ -215,19 +254,19 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
           </div>
 
           {/* End Zone: Circular Search + Notifications Bell */}
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0">
             <motion.button
               whileTap={{ scale: 0.92 }}
               type="button"
               onClick={() => setMobileSearchOpen((v) => !v)}
               aria-label={t('البحث', 'Search')}
-              className={`md:hidden w-11 h-11 rounded-full flex items-center justify-center border transition-all cursor-pointer shrink-0 ${
+              className={`md:hidden w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center border transition-all cursor-pointer shrink-0 ${
                 mobileSearchOpen || searchQuery
                   ? 'bg-[#F7C600]/15 border-[#F7C600]/45 text-[#F7C600]'
                   : 'bg-[#17171c] hover:bg-[#1f1f26] border-white/10 text-zinc-200 hover:text-white'
               }`}
             >
-              <Search className="w-4.5 h-4.5" />
+              <Search className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
             </motion.button>
 
             <motion.button
@@ -236,15 +275,15 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
               onClick={() => setShowNotifications((v) => !v)}
               type="button"
               aria-label={t('الإشعارات', 'Notifications')}
-              className={`w-11 h-11 rounded-full flex items-center justify-center transition-all border relative cursor-pointer shrink-0 ${
+              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-all border relative cursor-pointer shrink-0 ${
                 showNotifications
                   ? 'bg-[#F7C600]/15 border-[#F7C600]/45 text-[#F7C600]'
                   : 'bg-[#17171c] hover:bg-[#1f1f26] text-zinc-200 hover:text-white border-white/10'
               }`}
             >
-              <Bell className="w-4.5 h-4.5" />
+              <Bell className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
               {activeNotifications.length > 0 && (
-                <span className="absolute top-1.5 right-1.5 min-w-[15px] h-[15px] px-1 rounded-full bg-[#F7C600] text-black text-[9px] font-black flex items-center justify-center leading-none tabular-nums">
+                <span className="absolute top-1 right-1 min-w-[14px] h-[14px] px-1 rounded-full bg-[#F7C600] text-black text-[9px] font-black flex items-center justify-center leading-none tabular-nums">
                   {activeNotifications.length > 9 ? '9+' : activeNotifications.length}
                 </span>
               )}
@@ -298,10 +337,10 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
           )}
         </AnimatePresence>
 
-        {/* Row 2: Pill Navigation Strip Matching Mockup (Bright Gold Active Pill + Charcoal Inactive Pills) */}
+        {/* Row 2: Pill Navigation Strip Matching Mockup */}
         <nav
           aria-label={t('التنقل الرئيسي', 'Main navigation')}
-          className="flex items-center justify-start md:justify-center gap-2 overflow-x-auto no-scrollbar pb-3 pt-1"
+          className="flex items-center justify-start md:justify-center gap-2 overflow-x-auto no-scrollbar pb-3 pt-0.5"
         >
           {TOP_NAV_ITEMS.map((item) => {
             const active = isNavActive(item);
@@ -312,7 +351,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                 whileTap={{ scale: 0.95 }}
                 type="button"
                 onClick={() => handleTopNavClick(item)}
-                className={`relative shrink-0 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                className={`relative shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-full text-[11px] sm:text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
                   active
                     ? 'bg-[#F7C600] text-black font-black shadow-[0_6px_18px_rgba(247,198,0,0.3)] border border-[#F7C600]'
                     : 'bg-[#15151a] hover:bg-[#1e1e26] text-zinc-200 hover:text-white border border-white/[0.08]'

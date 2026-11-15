@@ -108,13 +108,18 @@ export const SideMenuDrawer: React.FC<SideMenuDrawerProps> = ({
             {/* Top Header & User Profile Banner */}
             <div className="p-4 sm:p-5 pb-4 border-b border-zinc-800/80 bg-[#15151b] shrink-0">
               <div className="flex items-center justify-between mb-3.5">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2.5">
                   <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-300 via-amber-400 to-amber-600 text-black flex items-center justify-center font-black text-sm shadow-md shadow-amber-500/25">
                     GF
                   </div>
-                  <span className="text-white font-black text-lg sm:text-xl tracking-tight">
-                    Golden<span className="text-amber-400">Flix</span> Cinema
-                  </span>
+                  <div className="leading-tight">
+                    <span className="block text-white font-black text-base sm:text-lg tracking-tight">
+                      Golden<span className="text-amber-400">Flix</span>
+                    </span>
+                    <span className="block text-[10px] font-bold text-zinc-400">
+                      {t('الإعدادات والقائمة', 'Settings & Menu')}
+                    </span>
+                  </div>
                 </div>
                 <button
                   onClick={onClose}
@@ -172,19 +177,19 @@ export const SideMenuDrawer: React.FC<SideMenuDrawerProps> = ({
                   <div
                     onClick={() => {
                       onClose();
-                      onOpenProfileModal();
+                      onOpenLogin();
                     }}
-                    className="flex items-center gap-3 p-2.5 rounded-2xl bg-zinc-900/90 hover:bg-zinc-850 border border-zinc-800 transition-all cursor-pointer"
+                    className="flex items-center gap-3 p-2.5 rounded-2xl bg-zinc-900/90 hover:bg-zinc-850 border border-zinc-800 hover:border-amber-400/40 transition-all cursor-pointer"
                   >
                     <div className="w-10 h-10 rounded-full bg-zinc-800 text-amber-400 flex items-center justify-center shrink-0">
                       <User className="w-5 h-5" />
                     </div>
                     <div className="truncate flex-1">
                       <h4 className="text-xs sm:text-sm font-bold text-white">
-                        {t('الملف الشخصي (زائر)', 'Guest Profile')}
+                        {t('تسجيل الدخول إلى حسابك', 'Sign In to Your Account')}
                       </h4>
                       <p className="text-[10px] text-zinc-400">
-                        {t('تصفح ومشاهدة الأفلام متاحة مجاناً', 'Browse and watch movies for free')}
+                        {t('احفظ مفضلتك وسجل المشاهدة وصورتك', 'Save favorites, history & profile photo')}
                       </p>
                     </div>
                   </div>

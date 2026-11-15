@@ -59,7 +59,7 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
   const [titleEn, setTitleEn] = useState<string>('');
   const [description, setDescription] = useState<string>('');
   const [year, setYear] = useState<number>(new Date().getFullYear());
-  const [videoQuality, setVideoQuality] = useState<string>('1080p Full HD');
+  const [videoQuality, setVideoQuality] = useState<string>('1080p');
   const [ageRating, setAgeRating] = useState<string>('+16');
   const [rating, setRating] = useState<number>(8.8);
   const [director, setDirector] = useState<string>('');
@@ -475,7 +475,7 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
                 className="w-full bg-zinc-950 border border-white/10 rounded-xl px-2.5 py-2 text-white"
               >
                 <option value="4K Ultra HD">4K Ultra HD</option>
-                <option value="1080p Full HD">1080p Full HD</option>
+                <option value="1080p">1080p</option>
                 <option value="720p HD">720p HD</option>
               </select>
             </div>
@@ -857,7 +857,7 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
                     dir="ltr"
                     value={epVideoUrl}
                     onChange={(e) => setEpVideoUrl(e.target.value)}
-                    placeholder="أو رابط الفيديو المباشر (/uploads/... أو https://...)"
+                    placeholder="أو رابط يوتيوب / فيديو مباشر (YouTube أو /uploads/...)"
                     className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono"
                   />
 

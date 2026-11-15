@@ -554,7 +554,7 @@ export const saveMovieToDatabases = async (
     posterUrl: movieData.posterUrl || '',
     bannerUrl: movieData.bannerUrl || movieData.posterUrl || '',
     videoUrl: movieData.videoUrl || '',
-    videoQuality: movieData.videoQuality || '1080p Full HD',
+    videoQuality: movieData.videoQuality || '1080p',
     ageRating: movieData.ageRating || '+16',
     duration: movieData.duration || (mediaType === 'series' ? 'مسلسل' : '120 دقيقة'),
     year: Number(movieData.year) || new Date().getFullYear(),

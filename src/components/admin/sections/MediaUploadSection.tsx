@@ -11,9 +11,11 @@ import {
   Play,
   Plus,
   RefreshCw,
+  Sparkles,
   Trash2,
   UploadCloud,
   X,
+  Youtube,
 } from 'lucide-react';
 import { CategoryItem, MediaItem, PersonItem, VideoSourceOption } from '../../../types';
 import {
@@ -25,6 +27,14 @@ import {
   uploadMovieVideo,
   UploadProgressInfo,
 } from '../../../services/movieService';
+import {
+  extractYouTubeVideoId,
+  fetchYouTubeOEmbedMetadata,
+  getYouTubeCanonicalUrl,
+  getYouTubeEmbedUrl,
+  getYouTubeThumbnailUrl,
+  isYouTubeUrl,
+} from '../../../utils/youtube';
 
 interface QueueVideoTask {
   id: string;
@@ -49,7 +59,7 @@ interface MediaUploadSectionProps {
   onNavigateManage: () => void;
 }
 
-const QUALITY_OPTIONS = ['4K Ultra HD', '1080p Full HD', '720p HD', '480p SD'];
+const QUALITY_OPTIONS = ['4K Ultra HD', '1080p', '720p HD', '480p SD'];
 const AGE_RATING_OPTIONS = ['عام', '+13', '+16', '+18'];
 
 export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
@@ -77,7 +87,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
   const [description, setDescription] = useState<string>('');
   const [year, setYear] = useState<number>(new Date().getFullYear());
   const [duration, setDuration] = useState<string>('120 دقيقة');
-  const [videoQuality, setVideoQuality] = useState<string>('1080p Full HD');
+  const [videoQuality, setVideoQuality] = useState<string>('1080p');
   const [ageRating, setAgeRating] = useState<string>('+16');
   const [rating, setRating] = useState<number>(8.5);
   const [selectedGenres, setSelectedGenres] = useState<string[]>(['action']);
@@ -94,6 +104,10 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
   const [isMostWatched, setIsMostWatched] = useState<boolean>(false);
 
   // Additional playback sources (optional)
+  const [uploadSourceMode, setUploadSourceMode] = useState<'file' | 'youtube' | 'external'>('file');
+  const [youtubeUrlInput, setYoutubeUrlInput] = useState<string>('');
+  const [isFetchingYoutubeMeta, setIsFetchingYoutubeMeta] = useState<boolean>(false);
+  const [youtubeMetaNote, setYoutubeMetaNote] = useState<string | null>(null);
   const [extraSources, setExtraSources] = useState<VideoSourceOption[]>([]);
   const [externalVideoUrl, setExternalVideoUrl] = useState<string>('');
 
@@ -105,6 +119,11 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [savedItems, setSavedItems] = useState<MediaItem[]>([]);
+
+  const detectedYoutubeId = extractYouTubeVideoId(youtubeUrlInput);
+  const detectedYoutubeThumb = detectedYoutubeId
+    ? getYouTubeThumbnailUrl(detectedYoutubeId, 'hq')
+    : null;
 
   const videoInputRef = useRef<HTMLInputElement>(null);
   const posterInputRef = useRef<HTMLInputElement>(null);
@@ -238,16 +257,64 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
     setQueue((prev) => prev.filter((t) => t.id !== task.id));
   };
 
+  const handleFetchYoutubeInfo = async () => {
+    setErrorMsg(null);
+    setYoutubeMetaNote(null);
+    const id = extractYouTubeVideoId(youtubeUrlInput);
+    if (!id) {
+      setErrorMsg('رابط يوتيوب غير صالح. يرجى لصق رابط مثل https://www.youtube.com/watch?v=...');
+      return;
+    }
+
+    setIsFetchingYoutubeMeta(true);
+    try {
+      const meta = await fetchYouTubeOEmbedMetadata(youtubeUrlInput);
+      if (meta) {
+        if (meta.title) {
+          if (!titleAr.trim()) setTitleAr(meta.title);
+          if (!titleEn.trim()) setTitleEn(meta.title);
+        }
+        if (meta.authorName && !director.trim()) {
+          setDirector(meta.authorName);
+        }
+        if (meta.thumbnailUrl) {
+          if (!posterFile && !posterUrl.trim()) setPosterUrl(meta.thumbnailUrl);
+          if (!bannerFile && !bannerUrl.trim()) setBannerUrl(meta.thumbnailUrl);
+        }
+        setYoutubeMetaNote(
+          meta.title
+            ? `تم جلب عنوان الفيديو والصورة المصغرة من يوتيوب بنجاح (${meta.title})`
+            : 'تم التحقق من معرف الفيديو وتجهيز الصورة المصغرة تلقائياً'
+        );
+      }
+    } finally {
+      setIsFetchingYoutubeMeta(false);
+    }
+  };
+
   const handleSubmitAll = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
 
     const activeQueue = queue.filter((q) => q.status === 'pending' || q.status === 'error');
     const hasCompletedTask = queue.some((q) => q.status === 'completed' && q.uploadedUrl);
-    const hasExternalUrl = Boolean(externalVideoUrl.trim());
+    const trimmedYoutubeUrl = youtubeUrlInput.trim();
+    const trimmedExternalUrl = externalVideoUrl.trim();
+    const hasYoutubeUrl = Boolean(trimmedYoutubeUrl);
+    const hasExternalUrl = Boolean(trimmedExternalUrl);
 
-    if (activeQueue.length === 0 && !hasCompletedTask && !hasExternalUrl) {
-      setErrorMsg('يرجى اختيار ملف فيديو واحد على الأقل من جهازك أو إدخال رابط تشغيل مباشر');
+    if (uploadSourceMode === 'youtube' && !hasYoutubeUrl) {
+      setErrorMsg('يرجى إدخال رابط فيديو يوتيوب لإضافة الفيلم');
+      return;
+    }
+
+    if (hasYoutubeUrl && !extractYouTubeVideoId(trimmedYoutubeUrl) && uploadSourceMode === 'youtube') {
+      setErrorMsg('رابط يوتيوب المدخل غير صالح. تأكد من نسخ الرابط الصحيح من يوتيوب');
+      return;
+    }
+
+    if (activeQueue.length === 0 && !hasCompletedTask && !hasExternalUrl && !hasYoutubeUrl) {
+      setErrorMsg('يرجى اختيار ملف فيديو من جهازك، أو ربط فيلم عبر يوتيوب، أو إدخال رابط بث مباشر');
       return;
     }
 
@@ -260,10 +327,16 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
     const newlySaved: MediaItem[] = [];
 
     try {
+      const candidateLinkUrl =
+        uploadSourceMode === 'youtube'
+          ? trimmedYoutubeUrl
+          : trimmedExternalUrl || trimmedYoutubeUrl;
+      const autoYoutubeThumb = candidateLinkUrl
+        ? getYouTubeThumbnailUrl(candidateLinkUrl, 'hq') || ''
+        : '';
+
       // 1. Upload poster & banner once and reuse across batch
-      let finalPosterUrl =
-        posterUrl.trim() ||
-        'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=800&q=80';
+      let finalPosterUrl = posterUrl.trim() || autoYoutubeThumb || '';
       if (posterFile) {
         const uploadedPoster = await uploadMoviePoster(posterFile, token);
         finalPosterUrl = uploadedPoster.posterUrl;
@@ -280,18 +353,33 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
         .map((s) => s.trim())
         .filter(Boolean);
 
-      const cleanExtraSources = extraSources.filter((s) => s.url.trim());
+      const cleanExtraSources = extraSources
+        .filter((s) => s.url.trim())
+        .map((s) => ({
+          ...s,
+          url: s.url.trim(),
+          format: isYouTubeUrl(s.url) ? 'youtube' : s.format || 'mp4',
+        }));
 
-      // 2. If only external URL provided (no device files)
-      if (queue.length === 0 && hasExternalUrl) {
-        const mainUrl = externalVideoUrl.trim();
-        const isHls = mainUrl.toLowerCase().includes('.m3u8');
+      // 2. If saving via YouTube link or direct external stream URL (no device file queue)
+      const shouldUseLinkOnly =
+        queue.length === 0 || (uploadSourceMode !== 'file' && activeQueue.length === 0 && !hasCompletedTask);
+
+      if (shouldUseLinkOnly && (hasYoutubeUrl || hasExternalUrl)) {
+        const rawMainUrl =
+          uploadSourceMode === 'youtube'
+            ? trimmedYoutubeUrl
+            : trimmedExternalUrl || trimmedYoutubeUrl;
+        const isYt = isYouTubeUrl(rawMainUrl);
+        const mainUrl = isYt ? getYouTubeCanonicalUrl(rawMainUrl) || rawMainUrl : rawMainUrl;
+        const isHls = !isYt && mainUrl.toLowerCase().includes('.m3u8');
+
         const allSources: VideoSourceOption[] = [
           {
             id: `src-main-${Date.now()}`,
-            label: `المصدر الرئيسي (${videoQuality})`,
+            label: isYt ? 'مشغل يوتيوب (YouTube)' : `المصدر الرئيسي (${videoQuality})`,
             url: mainUrl,
-            format: isHls ? 'hls' : 'mp4',
+            format: isYt ? 'youtube' : isHls ? 'hls' : 'mp4',
             quality: videoQuality,
             isDefault: true,
           },
@@ -323,7 +411,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
             introStart: introStart ? Number(introStart) : undefined,
             introEnd: introEnd ? Number(introEnd) : undefined,
             sources: allSources,
-            storageType: 'server',
+            storageType: isYt ? 'youtube' : 'server',
           },
           token
         );
@@ -493,21 +581,58 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
         </div>
       )}
 
-      {/* 1. Video Dropzone & Multi-File Queue */}
+      {/* 1. Video Source Selector: Device Upload / YouTube Link / Direct Stream */}
       <div className="p-4 rounded-2xl bg-[#111116] border border-white/[0.08] space-y-4">
-        <div className="flex items-center justify-between border-b border-white/[0.06] pb-2.5">
-          <div className="flex items-center gap-2 text-xs font-black text-amber-400">
-            <UploadCloud className="w-4 h-4" />
-            <span>ملفات الفيديو المرفوعة من الجهاز</span>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.06] pb-3">
+          <div className="flex items-center gap-1.5 p-1 rounded-xl bg-zinc-950 border border-white/10 text-xs font-bold">
+            <button
+              type="button"
+              onClick={() => setUploadSourceMode('file')}
+              className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer ${
+                uploadSourceMode === 'file'
+                  ? 'bg-amber-400 text-black font-black'
+                  : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              <UploadCloud className="w-3.5 h-3.5" />
+              <span>رفع من الجهاز</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setUploadSourceMode('youtube')}
+              className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer ${
+                uploadSourceMode === 'youtube'
+                  ? 'bg-amber-400 text-black font-black'
+                  : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              <Youtube className="w-3.5 h-3.5" />
+              <span>ربط عبر يوتيوب</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setUploadSourceMode('external')}
+              className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer ${
+                uploadSourceMode === 'external'
+                  ? 'bg-amber-400 text-black font-black'
+                  : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              <Link2 className="w-3.5 h-3.5" />
+              <span>رابط بث مباشر</span>
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={() => videoInputRef.current?.click()}
-            className="text-xs font-bold text-amber-400 hover:text-amber-300 flex items-center gap-1 cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>إضافة فيديو</span>
-          </button>
+
+          {uploadSourceMode === 'file' && (
+            <button
+              type="button"
+              onClick={() => videoInputRef.current?.click()}
+              className="text-xs font-bold text-amber-400 hover:text-amber-300 flex items-center gap-1 cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>إضافة فيديو</span>
+            </button>
+          )}
         </div>
 
         <input
@@ -522,201 +647,291 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
           }}
         />
 
-        <div
-          onClick={() => videoInputRef.current?.click()}
-          onDragOver={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-          }}
-          onDrop={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            if (e.dataTransfer.files?.length) handleFilesSelected(e.dataTransfer.files);
-          }}
-          className="border-2 border-dashed border-zinc-700 hover:border-amber-400/80 rounded-2xl p-6 text-center cursor-pointer transition-all hover:bg-amber-400/[0.03]"
-        >
-          <div className="w-11 h-11 rounded-2xl bg-zinc-900 text-amber-400 flex items-center justify-center mx-auto mb-2 border border-white/10">
-            <UploadCloud className="w-5 h-5" />
-          </div>
-          <p className="text-xs sm:text-sm font-black text-white">
-            اسحب ملف أو عدة ملفات فيديو هنا أو اضغط للاختيار من جهازك
-          </p>
-          <p className="text-[11px] text-zinc-400 mt-1">
-            يتم استخراج المدة وحجم الملف تلقائياً مع دعم الإيقاف المؤقت والاستكمال
-          </p>
-        </div>
-
-        {/* Queue items */}
-        {queue.length > 0 && (
-          <div className="space-y-2.5">
-            {queue.map((task) => {
-              const isUploadingThis = task.status === 'uploading' || task.status === 'paused';
-              return (
-                <div
-                  key={task.id}
-                  className="p-3.5 rounded-xl bg-zinc-950/90 border border-white/[0.08] space-y-2.5"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="w-9 h-9 rounded-xl bg-amber-400/15 text-amber-400 flex items-center justify-center shrink-0">
-                        <Film className="w-4 h-4" />
-                      </div>
-                      <div className="min-w-0">
-                        {queue.length > 1 ? (
-                          <input
-                            type="text"
-                            value={task.titleAr}
-                            onChange={(e) =>
-                              updateTaskState(task.id, (t) => ({ ...t, titleAr: e.target.value }))
-                            }
-                            disabled={isUploadingThis || task.status === 'completed'}
-                            className="bg-transparent border-b border-white/15 focus:border-amber-400 text-xs font-black text-white focus:outline-none w-52 sm:w-72"
-                          />
-                        ) : (
-                          <p className="text-xs font-black text-white truncate max-w-xs">
-                            {task.file.name}
-                          </p>
-                        )}
-                        <div className="flex items-center gap-2 text-[11px] text-zinc-400 font-mono mt-0.5">
-                          <span>{formatFileSize(task.file.size)}</span>
-                          <span>•</span>
-                          <span className="flex items-center gap-1">
-                            <Clock className="w-3 h-3" />
-                            {task.duration}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPreviewVideoSrc(task.previewObjectUrl);
-                          setPreviewTitle(task.titleAr || task.file.name);
-                        }}
-                        className="px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-200 text-[11px] font-bold border border-white/10 flex items-center gap-1 cursor-pointer"
-                      >
-                        <Play className="w-3 h-3" />
-                        <span>معاينة</span>
-                      </button>
-
-                      {isUploadingThis && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => handlePauseResumeTask(task)}
-                            className="px-2.5 py-1.5 rounded-lg bg-amber-400/15 hover:bg-amber-400/25 text-amber-300 text-[11px] font-bold border border-amber-400/30 flex items-center gap-1 cursor-pointer"
-                          >
-                            {task.status === 'paused' ? (
-                              <>
-                                <Play className="w-3 h-3" />
-                                <span>استكمال</span>
-                              </>
-                            ) : (
-                              <>
-                                <Pause className="w-3 h-3" />
-                                <span>إيقاف مؤقت</span>
-                              </>
-                            )}
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => handleCancelTask(task)}
-                            className="px-2.5 py-1.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 text-[11px] font-bold border border-rose-500/30 cursor-pointer"
-                          >
-                            إلغاء
-                          </button>
-                        </>
-                      )}
-
-                      {!isUploadingThis && (
-                        <button
-                          type="button"
-                          onClick={() => removeTaskFromQueue(task)}
-                          className="w-7 h-7 rounded-lg bg-zinc-900 hover:bg-rose-500/20 text-zinc-400 hover:text-rose-400 flex items-center justify-center cursor-pointer"
-                          title="إزالة من القائمة"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Progress Bar */}
-                  {(isUploadingThis || task.status === 'completed' || task.status === 'error') && (
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between text-[11px] font-mono">
-                        <span
-                          className={
-                            task.status === 'completed'
-                              ? 'text-emerald-400 font-bold'
-                              : task.status === 'error'
-                              ? 'text-rose-400 font-bold'
-                              : task.status === 'paused'
-                              ? 'text-amber-400 font-bold'
-                              : 'text-zinc-300'
-                          }
-                        >
-                          {task.error
-                            ? task.error
-                            : `${task.progress.speedFormatted} • ${task.progress.etaFormatted}`}
-                        </span>
-                        <span className="text-amber-400 font-black tabular-nums">
-                          {task.progress.percent}%
-                        </span>
-                      </div>
-                      <div className="h-2 rounded-full bg-zinc-900 overflow-hidden">
-                        <div
-                          className={`h-full transition-all duration-200 ${
-                            task.status === 'completed'
-                              ? 'bg-emerald-500'
-                              : task.status === 'error'
-                              ? 'bg-rose-500'
-                              : task.status === 'paused'
-                              ? 'bg-amber-500/70'
-                              : 'bg-amber-400'
-                          }`}
-                          style={{ width: `${task.progress.percent}%` }}
-                        />
-                      </div>
-                    </div>
+        {uploadSourceMode === 'youtube' && (
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <label className="block text-xs font-black text-white">
+                رابط الفيلم من يوتيوب (YouTube URL)
+              </label>
+              <p className="text-[11px] text-zinc-400">
+                يدعم روابط Watch و youtu.be و Shorts و Embed مع جلب العنوان والصورة تلقائياً
+              </p>
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1">
+                <input
+                  type="url"
+                  dir="ltr"
+                  placeholder="https://www.youtube.com/watch?v=... أو https://youtu.be/..."
+                  value={youtubeUrlInput}
+                  onChange={(e) => {
+                    setYoutubeUrlInput(e.target.value);
+                    setYoutubeMetaNote(null);
+                  }}
+                  className="flex-1 bg-zinc-950 border border-white/10 focus:border-amber-400 rounded-xl px-3 py-2.5 text-xs text-white font-mono focus:outline-none"
+                />
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    disabled={!detectedYoutubeId || isFetchingYoutubeMeta}
+                    onClick={handleFetchYoutubeInfo}
+                    className="px-3.5 py-2.5 rounded-xl bg-amber-400/15 hover:bg-amber-400/25 disabled:opacity-45 text-amber-300 text-xs font-black border border-amber-400/35 flex items-center gap-1.5 cursor-pointer"
+                  >
+                    {isFetchingYoutubeMeta ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Sparkles className="w-3.5 h-3.5" />
+                    )}
+                    <span>جلب البيانات</span>
+                  </button>
+                  {detectedYoutubeId && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPreviewVideoSrc(youtubeUrlInput.trim());
+                        setPreviewTitle(titleAr || 'معاينة يوتيوب');
+                      }}
+                      className="px-3.5 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 text-xs font-bold border border-white/10 flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Play className="w-3.5 h-3.5 fill-current" />
+                      <span>معاينة</span>
+                    </button>
                   )}
                 </div>
-              );
-            })}
+              </div>
+            </div>
+
+            {youtubeUrlInput.trim() && !detectedYoutubeId && (
+              <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/25 text-rose-300 text-[11px] flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>لم يتم التعرف على معرف فيديو يوتيوب صالح في هذا الرابط.</span>
+              </div>
+            )}
+
+            {detectedYoutubeId && (
+              <div className="p-3 rounded-xl bg-zinc-950/90 border border-amber-400/25 flex flex-wrap sm:flex-nowrap items-center gap-3">
+                {detectedYoutubeThumb && (
+                  <img
+                    src={detectedYoutubeThumb}
+                    alt="YouTube Thumbnail"
+                    className="w-32 h-20 rounded-lg object-cover border border-white/10 shrink-0"
+                  />
+                )}
+                <div className="min-w-0 flex-1 space-y-1">
+                  <div className="flex items-center gap-2 text-xs font-black text-emerald-400">
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                    <span>جاهز للربط والتشغيل داخل مشغل الموقع</span>
+                  </div>
+                  <p className="text-[11px] text-zinc-400 font-mono" dir="ltr">
+                    YouTube ID: {detectedYoutubeId}
+                  </p>
+                  {youtubeMetaNote && (
+                    <p className="text-[11px] text-amber-300 font-semibold">{youtubeMetaNote}</p>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
-        {/* Or Direct External Stream URL */}
-        <div className="pt-2 border-t border-white/[0.06]">
-          <label className="block text-[11px] font-bold text-zinc-400 mb-1">
-            أو رابط بث مباشر (MP4 / HLS .m3u8) في حال عدم الرفع من الجهاز:
-          </label>
-          <div className="flex items-center gap-2">
-            <input
-              type="url"
-              dir="ltr"
-              placeholder="https://cdn.example.com/movie/master.m3u8"
-              value={externalVideoUrl}
-              onChange={(e) => setExternalVideoUrl(e.target.value)}
-              className="flex-1 bg-zinc-950 border border-white/10 focus:border-amber-400 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none"
-            />
-            {externalVideoUrl.trim() && (
-              <button
-                type="button"
-                onClick={() => {
-                  setPreviewVideoSrc(externalVideoUrl.trim());
-                  setPreviewTitle(titleAr || 'معاينة الرابط');
-                }}
-                className="px-3 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 text-xs font-bold border border-white/10 cursor-pointer shrink-0"
-              >
-                معاينة
-              </button>
+        {uploadSourceMode === 'file' && (
+          <>
+            <div
+              onClick={() => videoInputRef.current?.click()}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (e.dataTransfer.files?.length) handleFilesSelected(e.dataTransfer.files);
+              }}
+              className="border-2 border-dashed border-zinc-700 hover:border-amber-400/80 rounded-2xl p-6 text-center cursor-pointer transition-all hover:bg-amber-400/[0.03]"
+            >
+              <div className="w-11 h-11 rounded-2xl bg-zinc-900 text-amber-400 flex items-center justify-center mx-auto mb-2 border border-white/10">
+                <UploadCloud className="w-5 h-5" />
+              </div>
+              <p className="text-xs sm:text-sm font-black text-white">
+                اسحب ملف أو عدة ملفات فيديو هنا أو اضغط للاختيار من جهازك
+              </p>
+              <p className="text-[11px] text-zinc-400 mt-1">
+                يتم استخراج المدة وحجم الملف تلقائياً مع دعم الإيقاف المؤقت والاستكمال
+              </p>
+            </div>
+
+            {/* Queue items */}
+            {queue.length > 0 && (
+              <div className="space-y-2.5">
+                {queue.map((task) => {
+                  const isUploadingThis = task.status === 'uploading' || task.status === 'paused';
+                  return (
+                    <div
+                      key={task.id}
+                      className="p-3.5 rounded-xl bg-zinc-950/90 border border-white/[0.08] space-y-2.5"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-9 h-9 rounded-xl bg-amber-400/15 text-amber-400 flex items-center justify-center shrink-0">
+                            <Film className="w-4 h-4" />
+                          </div>
+                          <div className="min-w-0">
+                            {queue.length > 1 ? (
+                              <input
+                                type="text"
+                                value={task.titleAr}
+                                onChange={(e) =>
+                                  updateTaskState(task.id, (t) => ({ ...t, titleAr: e.target.value }))
+                                }
+                                disabled={isUploadingThis || task.status === 'completed'}
+                                className="bg-transparent border-b border-white/15 focus:border-amber-400 text-xs font-black text-white focus:outline-none w-52 sm:w-72"
+                              />
+                            ) : (
+                              <p className="text-xs font-black text-white truncate max-w-xs">
+                                {task.file.name}
+                              </p>
+                            )}
+                            <div className="flex items-center gap-2 text-[11px] text-zinc-400 font-mono mt-0.5">
+                              <span>{formatFileSize(task.file.size)}</span>
+                              <span>•</span>
+                              <span className="flex items-center gap-1">
+                                <Clock className="w-3 h-3" />
+                                {task.duration}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPreviewVideoSrc(task.previewObjectUrl);
+                              setPreviewTitle(task.titleAr || task.file.name);
+                            }}
+                            className="px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-200 text-[11px] font-bold border border-white/10 flex items-center gap-1 cursor-pointer"
+                          >
+                            <Play className="w-3 h-3" />
+                            <span>معاينة</span>
+                          </button>
+
+                          {isUploadingThis && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handlePauseResumeTask(task)}
+                                className="px-2.5 py-1.5 rounded-lg bg-amber-400/15 hover:bg-amber-400/25 text-amber-300 text-[11px] font-bold border border-amber-400/30 flex items-center gap-1 cursor-pointer"
+                              >
+                                {task.status === 'paused' ? (
+                                  <>
+                                    <Play className="w-3 h-3" />
+                                    <span>استكمال</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Pause className="w-3 h-3" />
+                                    <span>إيقاف مؤقت</span>
+                                  </>
+                                )}
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleCancelTask(task)}
+                                className="px-2.5 py-1.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 text-[11px] font-bold border border-rose-500/30 cursor-pointer"
+                              >
+                                إلغاء
+                              </button>
+                            </>
+                          )}
+
+                          {!isUploadingThis && (
+                            <button
+                              type="button"
+                              onClick={() => removeTaskFromQueue(task)}
+                              className="w-7 h-7 rounded-lg bg-zinc-900 hover:bg-rose-500/20 text-zinc-400 hover:text-rose-400 flex items-center justify-center cursor-pointer"
+                              title="إزالة من القائمة"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Progress Bar */}
+                      {(isUploadingThis || task.status === 'completed' || task.status === 'error') && (
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between text-[11px] font-mono">
+                            <span
+                              className={
+                                task.status === 'completed'
+                                  ? 'text-emerald-400 font-bold'
+                                  : task.status === 'error'
+                                  ? 'text-rose-400 font-bold'
+                                  : task.status === 'paused'
+                                  ? 'text-amber-400 font-bold'
+                                  : 'text-zinc-300'
+                              }
+                            >
+                              {task.error
+                                ? task.error
+                                : `${task.progress.speedFormatted} • ${task.progress.etaFormatted}`}
+                            </span>
+                            <span className="text-amber-400 font-black tabular-nums">
+                              {task.progress.percent}%
+                            </span>
+                          </div>
+                          <div className="h-2 rounded-full bg-zinc-900 overflow-hidden">
+                            <div
+                              className={`h-full transition-all duration-200 ${
+                                task.status === 'completed'
+                                  ? 'bg-emerald-500'
+                                  : task.status === 'error'
+                                  ? 'bg-rose-500'
+                                  : task.status === 'paused'
+                                  ? 'bg-amber-500/70'
+                                  : 'bg-amber-400'
+                              }`}
+                              style={{ width: `${task.progress.percent}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             )}
+          </>
+        )}
+
+        {uploadSourceMode === 'external' && (
+          <div className="space-y-1.5">
+            <label className="block text-xs font-black text-white">
+              رابط بث مباشر (MP4 / HLS .m3u8 أو يوتيوب):
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="url"
+                dir="ltr"
+                placeholder="https://cdn.example.com/movie/master.m3u8"
+                value={externalVideoUrl}
+                onChange={(e) => setExternalVideoUrl(e.target.value)}
+                className="flex-1 bg-zinc-950 border border-white/10 focus:border-amber-400 rounded-xl px-3 py-2.5 text-xs text-white font-mono focus:outline-none"
+              />
+              {externalVideoUrl.trim() && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPreviewVideoSrc(externalVideoUrl.trim());
+                    setPreviewTitle(titleAr || 'معاينة الرابط');
+                  }}
+                  className="px-3.5 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 text-xs font-bold border border-white/10 cursor-pointer shrink-0"
+                >
+                  معاينة
+                </button>
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* 2. Poster & Banner Images */}
@@ -1109,11 +1324,20 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
               type="url"
               dir="ltr"
               value={src.url}
-              onChange={(e) =>
+              onChange={(e) => {
+                const nextUrl = e.target.value;
                 setExtraSources((prev) =>
-                  prev.map((s, i) => (i === idx ? { ...s, url: e.target.value } : s))
-                )
-              }
+                  prev.map((s, i) =>
+                    i === idx
+                      ? {
+                          ...s,
+                          url: nextUrl,
+                          format: isYouTubeUrl(nextUrl) ? 'youtube' : s.format,
+                        }
+                      : s
+                  )
+                );
+              }}
               placeholder="https://..."
               className="sm:col-span-5 bg-zinc-950 border border-white/10 rounded-xl px-2.5 py-2 text-xs text-white font-mono"
             />
@@ -1129,6 +1353,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
               <option value="mp4">MP4</option>
               <option value="hls">HLS (.m3u8)</option>
               <option value="webm">WebM</option>
+              <option value="youtube">YouTube</option>
             </select>
             <input
               type="text"
@@ -1161,17 +1386,21 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
         {isSubmitting ? (
           <>
             <RefreshCw className="w-4 h-4 animate-spin" />
-            <span>جارٍ الرفع والحفظ في قاعدة البيانات... {activeTaskId ? '' : ''}</span>
+            <span>جارٍ الحفظ في قاعدة البيانات... {activeTaskId ? '' : ''}</span>
           </>
         ) : (
           <>
             <Layers className="w-4 h-4" />
-            <span>بدء الرفع وحفظ الفيلم في قاعدة البيانات</span>
+            <span>
+              {uploadSourceMode === 'youtube'
+                ? 'ربط الفيلم من يوتيوب ونشره في الموقع'
+                : 'بدء الرفع وحفظ الفيلم في قاعدة البيانات'}
+            </span>
           </>
         )}
       </button>
 
-      {/* Local Video Preview Modal */}
+      {/* Local / YouTube Video Preview Modal */}
       {previewVideoSrc && (
         <div
           className="fixed inset-0 z-[130] bg-black/90 backdrop-blur-md flex items-center justify-center p-4"
@@ -1191,7 +1420,17 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
               </button>
             </div>
             <div className="bg-black aspect-video">
-              <video src={previewVideoSrc} controls autoPlay className="w-full h-full object-contain" />
+              {isYouTubeUrl(previewVideoSrc) ? (
+                <iframe
+                  src={getYouTubeEmbedUrl(previewVideoSrc, { autoplay: true }) || ''}
+                  title={previewTitle || 'YouTube Preview'}
+                  className="w-full h-full border-0"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowFullScreen
+                />
+              ) : (
+                <video src={previewVideoSrc} controls autoPlay className="w-full h-full object-contain" />
+              )}
             </div>
           </div>
         </div>

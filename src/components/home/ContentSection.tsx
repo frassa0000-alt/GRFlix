@@ -1,6 +1,15 @@
 import React, { useRef } from 'react';
 import { motion } from 'motion/react';
-import { ChevronRight, ChevronLeft, Film, Tv, Flame, Sparkles } from 'lucide-react';
+import {
+  ChevronRight,
+  ChevronLeft,
+  Film,
+  Tv,
+  Flame,
+  Sparkles,
+  ArrowLeft,
+  ArrowRight,
+} from 'lucide-react';
 import { MediaItem } from '../../types';
 import { MediaCard } from '../cards/MediaCard';
 import { useLanguage } from '../../contexts/LanguageContext';
@@ -54,19 +63,17 @@ export const ContentSection: React.FC<ContentSectionProps> = ({
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: '-40px' }}
       transition={{ duration: 0.38, ease: [0.16, 1, 0.3, 1] }}
-      className="mb-9 relative"
+      className="mb-8 relative"
     >
       {/* Section Header */}
-      <div className="flex items-center justify-between gap-2 mb-4 pb-2 border-b border-white/[0.06]">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-amber-400/20 to-amber-500/5 border border-amber-400/35 text-amber-400 flex items-center justify-center shrink-0 shadow-[0_0_15px_rgba(251,191,36,0.12)]">
-            <SectionIcon className="w-4 h-4" />
-          </div>
-          <h2 className="text-base sm:text-lg md:text-xl font-black text-white flex items-center gap-2 truncate">
+      <div className="flex items-center justify-between gap-2 mb-3.5">
+        <div className="flex items-center gap-2 min-w-0">
+          <SectionIcon className="w-5 h-5 text-[#F7C600] fill-[#F7C600]/20 shrink-0" />
+          <span className="text-white/25 font-light text-sm select-none" aria-hidden="true">
+            |
+          </span>
+          <h2 className="text-sm sm:text-base md:text-lg font-black text-white flex items-center gap-1.5 truncate">
             <span className="truncate">{title}</span>
-            <span className="text-xs font-mono font-bold text-amber-400 tabular-nums shrink-0">
-              ({items.length})
-            </span>
           </h2>
         </div>
 
@@ -75,9 +82,14 @@ export const ContentSection: React.FC<ContentSectionProps> = ({
             <button
               type="button"
               onClick={onViewAll}
-              className="min-h-[38px] px-2.5 text-xs sm:text-sm font-bold text-amber-400 hover:text-amber-300 transition-colors cursor-pointer whitespace-nowrap"
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#15151a] hover:bg-[#1e1e26] border border-white/[0.08] text-xs font-bold text-zinc-200 transition-colors cursor-pointer whitespace-nowrap"
             >
-              {t('عرض الكل', 'View All')}
+              <span>{t('عرض الكل', 'View All')}</span>
+              {dir === 'ltr' ? (
+                <ArrowRight className="w-3.5 h-3.5 text-[#F7C600]" />
+              ) : (
+                <ArrowLeft className="w-3.5 h-3.5 text-[#F7C600]" />
+              )}
             </button>
           )}
 

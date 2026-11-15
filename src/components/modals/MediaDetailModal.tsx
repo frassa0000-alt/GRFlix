@@ -3,6 +3,7 @@ import { Play, Star, Heart, X, Film, AlertTriangle, ShieldAlert, ShieldCheck, Ey
 import { MediaItem } from '../../types';
 import { getMediaProgress } from '../../services/storage';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { formatQualityLabel } from '../../utils/quality';
 
 interface MediaDetailModalProps {
   media: MediaItem | null;
@@ -150,7 +151,7 @@ export const MediaDetailModal: React.FC<MediaDetailModalProps> = ({
           <div>
             <div className="flex items-center gap-2 mb-2 flex-wrap">
               <span className="text-[10px] sm:text-xs font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">
-                {media.videoQuality || '1080p Full HD'}
+                {formatQualityLabel(media.videoQuality)}
               </span>
 
               {media.isPublished === false && (

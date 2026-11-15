@@ -86,7 +86,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             </div>
             <div>
               <span className="text-xs font-bold text-white block">جودة البث الافتراضية</span>
-              <span className="text-[10px] text-zinc-400">4K Ultra HD / 1080p Full HD</span>
+              <span className="text-[10px] text-zinc-400">4K Ultra HD / 1080p</span>
             </div>
           </div>
           <span className="text-xs font-black text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-lg">

@@ -24,6 +24,7 @@ import {
   formatFileSize,
   updateMovieInDatabases,
 } from '../../../services/movieService';
+import { getYouTubeThumbnailUrl, isYouTubeUrl } from '../../../utils/youtube';
 
 interface MediaCatalogSectionProps {
   mode: 'movie' | 'series';
@@ -164,6 +165,12 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
     setIsSavingEdit(true);
     setActionError(null);
     try {
+      const nextVideoUrl = (editingItem.videoUrl || '').trim();
+      const isYt = isYouTubeUrl(nextVideoUrl);
+      const nextPoster =
+        (editingItem.posterUrl || '').trim() ||
+        (isYt ? getYouTubeThumbnailUrl(nextVideoUrl, 'hq') || '' : '');
+
       await updateMovieInDatabases(
         editingItem.id,
         {
@@ -171,8 +178,10 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
           title: editingItem.title,
           type: editingItem.type as MediaType,
           description: editingItem.description,
-          posterUrl: editingItem.posterUrl,
-          bannerUrl: editingItem.bannerUrl,
+          posterUrl: nextPoster,
+          bannerUrl: (editingItem.bannerUrl || '').trim() || nextPoster,
+          videoUrl: nextVideoUrl,
+          storageType: isYt ? 'youtube' : editingItem.storageType || 'server',
           year: Number(editingItem.year),
           duration: editingItem.duration,
           videoQuality: editingItem.videoQuality,
@@ -369,14 +378,17 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
                       </td>
                       <td className="py-3 px-3">
                         <div className="flex items-center gap-3 min-w-[210px]">
-                          <img
-                            src={
-                              item.posterUrl ||
-                              'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=200'
-                            }
-                            alt={item.titleAr}
-                            className="w-10 h-14 rounded-lg object-cover bg-zinc-900 shrink-0"
-                          />
+                          {item.posterUrl ? (
+                            <img
+                              src={item.posterUrl}
+                              alt={item.titleAr}
+                              className="w-10 h-14 rounded-lg object-cover bg-zinc-900 shrink-0"
+                            />
+                          ) : (
+                            <div className="w-10 h-14 rounded-lg bg-zinc-900 border border-white/10 flex items-center justify-center text-amber-400/60 shrink-0">
+                              <Film className="w-4 h-4" />
+                            </div>
+                          )}
                           <div className="min-w-0">
                             <p className="font-black text-white truncate max-w-[200px]">
                               {item.titleAr || item.title}
@@ -613,6 +625,19 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
                   dir="ltr"
                   value={editingItem.bannerUrl || ''}
                   onChange={(e) => setEditingItem({ ...editingItem, bannerUrl: e.target.value })}
+                  className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="block text-zinc-400 mb-1 font-bold">
+                  رابط الفيديو أو يوتيوب (YouTube / MP4 / HLS)
+                </label>
+                <input
+                  type="url"
+                  dir="ltr"
+                  value={editingItem.videoUrl || ''}
+                  onChange={(e) => setEditingItem({ ...editingItem, videoUrl: e.target.value })}
+                  placeholder="https://www.youtube.com/watch?v=... أو /uploads/videos/..."
                   className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono"
                 />
               </div>

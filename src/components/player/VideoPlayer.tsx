@@ -7,6 +7,7 @@ import {
   Captions,
   Check,
   Clock,
+  ExternalLink,
   FastForward,
   Film,
   Gauge,
@@ -20,6 +21,7 @@ import {
   RotateCcw,
   RotateCw,
   Server,
+  Settings,
   SlidersHorizontal,
   Trash2,
   Upload,
@@ -39,6 +41,16 @@ import {
   SubtitleCue,
   SubtitleSizeOption,
 } from '../../utils/subtitles';
+import {
+  extractYouTubeStartSeconds,
+  extractYouTubeVideoId,
+  formatYouTubeQualityCode,
+  getYouTubeCanonicalUrl,
+  isYouTubeUrl,
+  loadYouTubeIframeApi,
+  YTPlayerInstance,
+} from '../../utils/youtube';
+import { formatQualityLabel } from '../../utils/quality';
 
 interface VideoPlayerProps {
   media: MediaItem;
@@ -66,16 +78,25 @@ interface OrderedServerItem {
   shortLabel: string;
   label: string;
   url: string;
-  format: 'mp4' | 'hls' | 'webm';
+  format: 'mp4' | 'hls' | 'webm' | 'youtube';
   qualityLabel: string;
   qualityRank: number;
   isDefault: boolean;
-  engineType: 'direct-mp4' | 'hls-adaptive' | 'custom-source';
+  engineType: 'direct-mp4' | 'hls-adaptive' | 'youtube-embed' | 'custom-source';
 }
 
-type ActivePopover = 'speed' | 'quality' | 'subtitles' | 'episodes' | null;
+type ActivePanel = 'quality' | 'settings' | 'episodes' | null;
+type SettingsTab = 'speed' | 'subtitles' | 'servers';
 
 const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2];
+
+const YOUTUBE_PRESET_QUALITIES: QualityOption[] = [
+  { id: 'auto', label: 'تلقائي', status: 'ready', rank: 9999 },
+  { id: 'hd1080', label: '1080p', status: 'ready', rank: 1080 },
+  { id: 'hd720', label: '720p', status: 'ready', rank: 720 },
+  { id: 'large', label: '480p', status: 'ready', rank: 480 },
+  { id: 'medium', label: '360p', status: 'ready', rank: 360 },
+];
 
 function extractLocalVideoFilename(url: string | undefined): string | null {
   if (!url) return null;
@@ -96,7 +117,7 @@ function getQualityRank(labelOrUrl: string | undefined): number {
   const s = (labelOrUrl || '').toLowerCase();
   if (s.includes('2160') || s.includes('4k')) return 2160;
   if (s.includes('1440') || s.includes('2k')) return 1440;
-  if (s.includes('1080') || s.includes('full hd') || s.includes('fhd')) return 1080;
+  if (s.includes('1080') || s.includes('fhd')) return 1080;
   if (s.includes('720') || s.includes('hd')) return 720;
   if (s.includes('480') || s.includes('sd')) return 480;
   if (s.includes('360')) return 360;
@@ -138,7 +159,10 @@ function formatClockTime(secs: number): string {
 
 export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, playerDefaults }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const ytHostRef = useRef<HTMLDivElement>(null);
+  const ytPlayerRef = useRef<YTPlayerInstance | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const controlsTimerRef = useRef<number | null>(null);
@@ -197,10 +221,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
     [activeEpisode?.sources, media.sources]
   );
 
-  // Core playback state
+  // Playback & stream state
   const [selectedSourceUrl, setSelectedSourceUrl] = useState<string>(baseVideoUrl);
   const [activeServerId, setActiveServerId] = useState<string>('server-direct-mp4');
   const [serverStreamData, setServerStreamData] = useState<VideoStreamsResponse | null>(null);
+  const isYouTubeSource = useMemo(() => isYouTubeUrl(selectedSourceUrl), [selectedSourceUrl]);
+  const [ytQualityOptions, setYtQualityOptions] = useState<QualityOption[]>([]);
+  const [activeYtQualityId, setActiveYtQualityId] = useState<string>('auto');
+  const [ytEmbedBlocked, setYtEmbedBlocked] = useState<boolean>(false);
+
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [duration, setDuration] = useState<number>(0);
@@ -208,12 +237,25 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
   const [volume, setVolume] = useState<number>(1);
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
-  const [playbackSpeed, setPlaybackSpeed] = useState<number>(
-    playerDefaults?.defaultSpeed || 1
-  );
+  const [isLandscapeMode, setIsLandscapeMode] = useState<boolean>(false);
+  const [viewportSize, setViewportSize] = useState<{ width: number; height: number }>(() => ({
+    width:
+      typeof window !== 'undefined'
+        ? window.visualViewport?.width || window.innerWidth
+        : 1280,
+    height:
+      typeof window !== 'undefined'
+        ? window.visualViewport?.height || window.innerHeight
+        : 720,
+  }));
+  const [stageSize, setStageSize] = useState<{ width: number; height: number }>({
+    width: 0,
+    height: 0,
+  });
+  const [playbackSpeed, setPlaybackSpeed] = useState<number>(playerDefaults?.defaultSpeed || 1);
   const [isEnded, setIsEnded] = useState<boolean>(false);
 
-  // Quality & buffering state
+  // Quality & loading state
   const [hlsQualityOptions, setHlsQualityOptions] = useState<QualityOption[]>([]);
   const [activeHlsQualityId, setActiveHlsQualityId] = useState<string>('auto');
   const [detectedResolution, setDetectedResolution] = useState<string | null>(null);
@@ -224,16 +266,17 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [retryToken, setRetryToken] = useState<number>(0);
 
-  // Interactive HUD & UI overlays
+  // HUD & Popover state
   const [showControls, setShowControls] = useState<boolean>(true);
-  const [activePopover, setActivePopover] = useState<ActivePopover>(null);
+  const [activePanel, setActivePanel] = useState<ActivePanel>(null);
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>('speed');
   const [resumePrompt, setResumePrompt] = useState<number | null>(null);
   const [seekFeedback, setSeekFeedback] = useState<'forward' | 'backward' | null>(null);
   const [hoverSeek, setHoverSeek] = useState<{ time: number; percent: number } | null>(null);
   const [isProgressHovered, setIsProgressHovered] = useState<boolean>(false);
   const [isScrubbing, setIsScrubbing] = useState<boolean>(false);
 
-  // Subtitle state
+  // Subtitles state
   const [subtitlesEnabled, setSubtitlesEnabled] = useState<boolean>(true);
   const [subtitleCues, setSubtitleCues] = useState<SubtitleCue[]>([]);
   const [subtitleFileName, setSubtitleFileName] = useState<string | null>(null);
@@ -255,7 +298,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
     return null;
   }, [baseVideoUrl, availableCustomSources]);
 
-  // Discover real server engines (MP4 Range + HLS Adaptive) & poll while background qualities encode
+  // Discover uploaded multi-engine server streams
   useEffect(() => {
     if (!localVideoFilename) {
       setServerStreamData(null);
@@ -286,21 +329,22 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
     };
   }, [localVideoFilename, retryToken]);
 
-  // Keep selected source synced when episode/media changes
+  // Sync source state when episode/media changes
   useEffect(() => {
     setSelectedSourceUrl(baseVideoUrl);
-    setActiveServerId(
-      extractLocalVideoFilename(baseVideoUrl) ? 'server-direct-mp4' : 'custom-0'
-    );
+    setActiveServerId(extractLocalVideoFilename(baseVideoUrl) ? 'server-direct-mp4' : 'custom-0');
     setHlsQualityOptions([]);
     setActiveHlsQualityId('auto');
+    setYtQualityOptions([]);
+    setActiveYtQualityId('auto');
+    setYtEmbedBlocked(false);
     setCurrentTime(0);
     setDuration(0);
     setBufferedTime(0);
     setIsEnded(false);
     setErrorMessage(null);
     hasFatalErrorRef.current = false;
-    setActivePopover(null);
+    setActivePanel(null);
     setDetectedResolution(null);
     pendingSeekRef.current = null;
     resumeAutoplayRef.current = false;
@@ -315,19 +359,17 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
     };
   }, []);
 
-  // Network online/offline listeners
+  // Network listeners
   useEffect(() => {
     const handleOffline = () => {
       setIsOffline(true);
       setIsLoading(false);
       if (!videoRef.current || videoRef.current.readyState < 3) {
         hasFatalErrorRef.current = true;
-        setErrorMessage('انقطع الاتصال بالإنترنت. تحقق من اتصال الشبكة ثم اضغط إعادة المحاولة.');
+        setErrorMessage('انقطع الاتصال بالإنترنت. تحقق من اتصال الشبكة ثم أعد المحاولة.');
       }
     };
-    const handleOnline = () => {
-      setIsOffline(false);
-    };
+    const handleOnline = () => setIsOffline(false);
 
     window.addEventListener('offline', handleOffline);
     window.addEventListener('online', handleOnline);
@@ -337,7 +379,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
     };
   }, []);
 
-  // Load saved watch progress prompt for current movie/episode
+  // Resume saved progress prompt
   useEffect(() => {
     const prev = getMediaProgress(media.id, activeEpisode?.id);
     if (prev && prev.currentTime > 5 && prev.duration - prev.currentTime > 15) {
@@ -347,7 +389,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
     }
   }, [media.id, activeEpisode?.id]);
 
-  // Load remote subtitle URL if attached to episode or media item
+  // Remote subtitle loader
   useEffect(() => {
     const remoteSubUrl = activeEpisode?.subtitleUrl || media.subtitleUrl;
     if (!remoteSubUrl) return;
@@ -365,36 +407,75 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
           setSubtitlesEnabled(true);
         }
       })
-      .catch(() => {
-        // Silent fallback if no external remote subtitle is reachable
-      });
+      .catch(() => {});
 
     return () => {
       cancelled = true;
     };
   }, [activeEpisode?.subtitleUrl, media.subtitleUrl]);
 
-  // Fullscreen state listeners + orientation cleanup
+  // Fullscreen, viewport, stage ResizeObserver & physical orientation listeners
   useEffect(() => {
+    const updateViewportSize = () => {
+      const w = window.visualViewport?.width || window.innerWidth;
+      const h = window.visualViewport?.height || window.innerHeight;
+      setViewportSize({ width: w, height: h });
+      // Prevent double rotation if device physically rotated into landscape
+      if (w > h) {
+        setIsLandscapeMode(false);
+      }
+    };
+
     const handleFsChange = () => {
       const fsActive = Boolean(
-        document.fullscreenElement || (document as unknown as { webkitFullscreenElement?: Element }).webkitFullscreenElement
+        document.fullscreenElement ||
+          (document as unknown as { webkitFullscreenElement?: Element }).webkitFullscreenElement
       );
       setIsFullscreen(fsActive);
       if (!fsActive && screen.orientation && 'unlock' in screen.orientation) {
         try {
           screen.orientation.unlock();
         } catch {
-          // Ignore browsers without orientation lock permission
+          // Browsers without orientation lock ignore safely
         }
       }
+      updateViewportSize();
     };
+
+    updateViewportSize();
 
     document.addEventListener('fullscreenchange', handleFsChange);
     document.addEventListener('webkitfullscreenchange', handleFsChange);
+    window.addEventListener('resize', updateViewportSize);
+    window.addEventListener('orientationchange', updateViewportSize);
+    window.visualViewport?.addEventListener('resize', updateViewportSize);
+
+    let observer: ResizeObserver | null = null;
+    if (stageRef.current && typeof ResizeObserver !== 'undefined') {
+      const syncStage = () => {
+        if (!stageRef.current) return;
+        const nextW = stageRef.current.clientWidth;
+        const nextH = stageRef.current.clientHeight;
+        if (nextW > 0 && nextH > 0) {
+          setStageSize((prev) =>
+            prev.width === nextW && prev.height === nextH
+              ? prev
+              : { width: nextW, height: nextH }
+          );
+        }
+      };
+      syncStage();
+      observer = new ResizeObserver(syncStage);
+      observer.observe(stageRef.current);
+    }
+
     return () => {
       document.removeEventListener('fullscreenchange', handleFsChange);
       document.removeEventListener('webkitfullscreenchange', handleFsChange);
+      window.removeEventListener('resize', updateViewportSize);
+      window.removeEventListener('orientationchange', updateViewportSize);
+      window.visualViewport?.removeEventListener('resize', updateViewportSize);
+      observer?.disconnect();
     };
   }, []);
 
@@ -408,11 +489,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
   const scheduleControlsHide = useCallback(() => {
     clearControlsTimer();
     controlsTimerRef.current = window.setTimeout(() => {
-      const video = videoRef.current;
+      const playingNow = isYouTubeSource
+        ? ytPlayerRef.current?.getPlayerState?.() === 1
+        : Boolean(videoRef.current && !videoRef.current.paused);
       if (
-        video &&
-        !video.paused &&
-        !activePopover &&
+        playingNow &&
+        !activePanel &&
         !errorMessage &&
         !isEnded &&
         !isScrubbing &&
@@ -420,8 +502,16 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
       ) {
         setShowControls(false);
       }
-    }, 3200);
-  }, [activePopover, clearControlsTimer, errorMessage, isEnded, isProgressHovered, isScrubbing]);
+    }, 3000);
+  }, [
+    activePanel,
+    clearControlsTimer,
+    errorMessage,
+    isEnded,
+    isProgressHovered,
+    isScrubbing,
+    isYouTubeSource,
+  ]);
 
   const revealControls = useCallback(() => {
     setShowControls(true);
@@ -429,7 +519,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
   }, [scheduleControlsHide]);
 
   useEffect(() => {
-    if (activePopover || errorMessage || isEnded || !isPlaying || isScrubbing || isProgressHovered) {
+    if (
+      activePanel ||
+      errorMessage ||
+      isEnded ||
+      !isPlaying ||
+      isScrubbing ||
+      isProgressHovered
+    ) {
       clearControlsTimer();
       setShowControls(true);
     } else {
@@ -437,7 +534,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
     }
     return clearControlsTimer;
   }, [
-    activePopover,
+    activePanel,
     clearControlsTimer,
     errorMessage,
     isEnded,
@@ -447,19 +544,43 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
     scheduleControlsHide,
   ]);
 
-  // Initialize playback engine (HLS.js or native MP4 progressive streaming)
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
+  const persistProgress = useCallback(
+    (time: number, total: number) => {
+      if (time > 5 && total > 0 && !hasFatalErrorRef.current) {
+        saveWatchProgress({
+          mediaId: media.id,
+          episodeId: activeEpisode?.id,
+          seasonNumber: activeEpisode?.seasonNumber,
+          currentTime: time,
+          duration: total,
+        });
+      }
+    },
+    [media.id, activeEpisode?.id, activeEpisode?.seasonNumber]
+  );
 
-    // Clean up any prior HLS instance first
+  // Initialize playback engine (YouTube IFrame API / HLS.js / Native MP4)
+  useEffect(() => {
     if (hlsRef.current) {
       hlsRef.current.destroy();
       hlsRef.current = null;
     }
 
+    if (ytPlayerRef.current) {
+      try {
+        ytPlayerRef.current.destroy();
+      } catch {
+        // Ignore cleanup errors
+      }
+      ytPlayerRef.current = null;
+    }
+    if (ytHostRef.current) {
+      ytHostRef.current.innerHTML = '';
+    }
+
     hasFatalErrorRef.current = false;
     setErrorMessage(null);
+    setYtEmbedBlocked(false);
     setIsEnded(false);
 
     if (!navigator.onLine) {
@@ -468,6 +589,227 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
       setErrorMessage('لا يوجد اتصال بالإنترنت. تأكد من اتصالك بالشبكة ثم أعد المحاولة.');
       return;
     }
+
+    if (isYouTubeUrl(selectedSourceUrl)) {
+      const videoId = extractYouTubeVideoId(selectedSourceUrl);
+      if (!videoId) {
+        hasFatalErrorRef.current = true;
+        setIsLoading(false);
+        setErrorMessage('رابط يوتيوب غير صالح أو تعذر استخراج معرف الفيديو.');
+        return;
+      }
+
+      let cancelled = false;
+      let progressTimer: number | null = null;
+
+      setIsLoading(true);
+      setIsPlaying(false);
+      setHlsQualityOptions([]);
+      setYtQualityOptions(YOUTUBE_PRESET_QUALITIES);
+      setActiveYtQualityId('auto');
+
+      const syncYouTubeQualities = (target: YTPlayerInstance) => {
+        const rawLevels = target.getAvailableQualityLevels?.() || [];
+        const unique = new Map<string, QualityOption>();
+        rawLevels
+          .filter((lvl) => lvl && lvl !== 'auto' && lvl !== 'unknown')
+          .forEach((lvl) => {
+            const label = formatYouTubeQualityCode(lvl);
+            unique.set(lvl, {
+              id: lvl,
+              label,
+              status: 'ready',
+              rank: getQualityRank(label),
+            });
+          });
+
+        if (unique.size > 0) {
+          const sorted = Array.from(unique.values()).sort(
+            (a, b) => (b.rank || 0) - (a.rank || 0)
+          );
+          setYtQualityOptions([
+            { id: 'auto', label: 'تلقائي', status: 'ready', rank: 9999 },
+            ...sorted,
+          ]);
+        } else {
+          setYtQualityOptions(YOUTUBE_PRESET_QUALITIES);
+        }
+      };
+
+      loadYouTubeIframeApi()
+        .then((YT) => {
+          if (cancelled || !ytHostRef.current) return;
+          ytHostRef.current.innerHTML = '';
+          const mountNode = document.createElement('div');
+          mountNode.style.width = '100%';
+          mountNode.style.height = '100%';
+          ytHostRef.current.appendChild(mountNode);
+
+          const startSeconds =
+            pendingSeekRef.current !== null
+              ? pendingSeekRef.current
+              : extractYouTubeStartSeconds(selectedSourceUrl);
+
+          const enforceYoutubeIframeStyle = () => {
+            const iframeEl = ytHostRef.current?.querySelector('iframe');
+            if (iframeEl) {
+              iframeEl.style.position = 'absolute';
+              iframeEl.style.top = '0';
+              iframeEl.style.left = '0';
+              iframeEl.style.width = '100%';
+              iframeEl.style.height = '100%';
+              iframeEl.style.display = 'block';
+              iframeEl.style.border = '0';
+            }
+          };
+
+          const player = new YT.Player(mountNode, {
+            videoId,
+            width: '100%',
+            height: '100%',
+            playerVars: {
+              autoplay: 1,
+              controls: 0,
+              disablekb: 1,
+              fs: 0,
+              iv_load_policy: 3,
+              modestbranding: 1,
+              rel: 0,
+              playsinline: 1,
+              origin: typeof window !== 'undefined' ? window.location.origin : undefined,
+              ...(typeof startSeconds === 'number' && startSeconds > 0
+                ? { start: Math.floor(startSeconds) }
+                : {}),
+            },
+            events: {
+              onReady: ({ target }) => {
+                if (cancelled) return;
+                ytPlayerRef.current = target;
+                enforceYoutubeIframeStyle();
+                setIsLoading(false);
+
+                const dur = target.getDuration?.() || 0;
+                if (dur > 0) setDuration(dur);
+
+                if (typeof target.setVolume === 'function') {
+                  target.setVolume(isMuted ? 0 : Math.round(volume * 100));
+                }
+                if (isMuted) target.mute?.();
+                else target.unMute?.();
+
+                if (playbackSpeed !== 1) {
+                  target.setPlaybackRate?.(playbackSpeed);
+                }
+
+                syncYouTubeQualities(target);
+
+                if (pendingSeekRef.current !== null) {
+                  target.seekTo?.(pendingSeekRef.current, true);
+                  pendingSeekRef.current = null;
+                }
+
+                target.playVideo?.();
+
+                progressTimer = window.setInterval(() => {
+                  const p = ytPlayerRef.current;
+                  if (!p || hasFatalErrorRef.current) return;
+                  const now = Number(p.getCurrentTime?.() || 0);
+                  const total = Number(p.getDuration?.() || 0);
+                  const loadedFrac = Number(p.getVideoLoadedFraction?.() || 0);
+                  if (Number.isFinite(now)) setCurrentTime(now);
+                  if (Number.isFinite(total) && total > 0) {
+                    setDuration(total);
+                    setBufferedTime(Math.min(total, loadedFrac * total));
+                  }
+                  const wallNow = Date.now();
+                  if (wallNow - lastSavedTickRef.current >= 2000 && total > 0) {
+                    lastSavedTickRef.current = wallNow;
+                    persistProgress(now, total);
+                  }
+                }, 250);
+              },
+              onStateChange: ({ data, target }) => {
+                if (cancelled) return;
+                if (data === 1) {
+                  setIsLoading(false);
+                  setIsPlaying(true);
+                  setIsEnded(false);
+                  const dur = target.getDuration?.() || 0;
+                  if (dur > 0) setDuration(dur);
+                  syncYouTubeQualities(target);
+                  const currentQ = target.getPlaybackQuality?.();
+                  if (currentQ && currentQ !== 'unknown') {
+                    setDetectedResolution(formatYouTubeQualityCode(currentQ));
+                  }
+                } else if (data === 2) {
+                  setIsLoading(false);
+                  setIsPlaying(false);
+                } else if (data === 3) {
+                  setIsLoading(true);
+                } else if (data === 0) {
+                  setIsLoading(false);
+                  setIsPlaying(false);
+                  setIsEnded(true);
+                  const dur = target.getDuration?.() || duration;
+                  persistProgress(dur, dur);
+                } else if (data === 5 || data === -1) {
+                  setIsLoading(false);
+                }
+              },
+              onPlaybackQualityChange: ({ data }) => {
+                if (!cancelled && data && data !== 'unknown') {
+                  setDetectedResolution(formatYouTubeQualityCode(data));
+                }
+              },
+              onError: ({ data }) => {
+                if (cancelled) return;
+                hasFatalErrorRef.current = true;
+                setIsLoading(false);
+                setIsPlaying(false);
+                if (data === 101 || data === 150) {
+                  setYtEmbedBlocked(true);
+                  setErrorMessage(
+                    'ناشر هذا الفيديو يمنع تشغيله داخل المشغلات المضمّنة. يمكنك فتحه مباشرة على يوتيوب أو تبديل المشغل.'
+                  );
+                } else if (data === 2 || data === 100) {
+                  setErrorMessage('رابط يوتيوب غير صالح أو أن الفيديو لم يعد متاحاً.');
+                } else {
+                  setErrorMessage('تعذر تشغيل فيديو يوتيوب داخل المتصفح الحالي.');
+                }
+              },
+            },
+          });
+          ytPlayerRef.current = player;
+          enforceYoutubeIframeStyle();
+        })
+        .catch(() => {
+          if (cancelled) return;
+          hasFatalErrorRef.current = true;
+          setIsLoading(false);
+          setErrorMessage('تعذر تجهيز مشغل يوتيوب. تأكد من الاتصال بالإنترنت ثم أعد المحاولة.');
+        });
+
+      return () => {
+        cancelled = true;
+        if (progressTimer !== null) {
+          window.clearInterval(progressTimer);
+        }
+        if (ytPlayerRef.current) {
+          try {
+            ytPlayerRef.current.destroy();
+          } catch {
+            // Ignore cleanup errors
+          }
+          ytPlayerRef.current = null;
+        }
+        if (ytHostRef.current) {
+          ytHostRef.current.innerHTML = '';
+        }
+      };
+    }
+
+    const video = videoRef.current;
+    if (!video) return;
 
     if (!isValidVideoUrl(selectedSourceUrl)) {
       hasFatalErrorRef.current = true;
@@ -513,12 +855,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
             }
           });
 
-          const sortedLevels = Array.from(uniqueMap.values()).sort((a, b) => {
-            return (b.rank || 0) - (a.rank || 0);
-          });
+          const sortedLevels = Array.from(uniqueMap.values()).sort(
+            (a, b) => (b.rank || 0) - (a.rank || 0)
+          );
 
           setHlsQualityOptions([
-            { id: 'auto', label: 'تلقائي (Auto)', hlsLevel: -1, status: 'ready', rank: 9999 },
+            { id: 'auto', label: 'تلقائي', hlsLevel: -1, status: 'ready', rank: 9999 },
             ...sortedLevels,
           ]);
           setActiveHlsQualityId('auto');
@@ -540,7 +882,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
             return;
           }
 
-          // Stop retries immediately to prevent error loops
           hasFatalErrorRef.current = true;
           hls.destroy();
           hlsRef.current = null;
@@ -575,23 +916,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
         hlsRef.current = null;
       }
     };
-  }, [selectedSourceUrl, retryToken]);
-
-  // Persist current watch progress helper
-  const persistProgress = useCallback(
-    (time: number, total: number) => {
-      if (time > 5 && total > 0 && !hasFatalErrorRef.current) {
-        saveWatchProgress({
-          mediaId: media.id,
-          episodeId: activeEpisode?.id,
-          seasonNumber: activeEpisode?.seasonNumber,
-          currentTime: time,
-          duration: total,
-        });
-      }
-    },
-    [media.id, activeEpisode?.id, activeEpisode?.seasonNumber]
-  );
+  }, [selectedSourceUrl, retryToken, persistProgress]);
 
   const handleTimeUpdate = useCallback(() => {
     const video = videoRef.current;
@@ -614,8 +939,34 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
   }, [persistProgress]);
 
   const togglePlay = useCallback(() => {
+    if (hasFatalErrorRef.current) return;
+
+    if (isYouTubeSource) {
+      const yt = ytPlayerRef.current;
+      if (!yt) return;
+      if (isEnded) {
+        yt.seekTo(0, true);
+        setIsEnded(false);
+        yt.playVideo();
+        setIsPlaying(true);
+        revealControls();
+        return;
+      }
+      const state = yt.getPlayerState?.();
+      if (state === 1) {
+        yt.pauseVideo();
+        setIsPlaying(false);
+        persistProgress(yt.getCurrentTime?.() || currentTime, yt.getDuration?.() || duration);
+      } else {
+        yt.playVideo();
+        setIsPlaying(true);
+      }
+      revealControls();
+      return;
+    }
+
     const video = videoRef.current;
-    if (!video || hasFatalErrorRef.current) return;
+    if (!video) return;
 
     if (isEnded) {
       video.currentTime = 0;
@@ -633,22 +984,34 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
       persistProgress(video.currentTime, video.duration || 0);
     }
     revealControls();
-  }, [isEnded, persistProgress, revealControls]);
+  }, [currentTime, duration, isEnded, isYouTubeSource, persistProgress, revealControls]);
 
   const handleSeek = useCallback(
     (newTime: number) => {
+      if (hasFatalErrorRef.current) return;
+
+      if (isYouTubeSource) {
+        const yt = ytPlayerRef.current;
+        if (!yt) return;
+        const maxDuration = yt.getDuration?.() || duration || 0;
+        const clamped = Math.max(0, Math.min(newTime, maxDuration));
+        yt.seekTo(clamped, true);
+        setCurrentTime(clamped);
+        if (isEnded && clamped < maxDuration - 0.5) setIsEnded(false);
+        revealControls();
+        return;
+      }
+
       const video = videoRef.current;
-      if (!video || hasFatalErrorRef.current) return;
+      if (!video) return;
       const maxDuration = video.duration || duration || 0;
       const clamped = Math.max(0, Math.min(newTime, maxDuration));
       video.currentTime = clamped;
       setCurrentTime(clamped);
-      if (isEnded && clamped < maxDuration - 0.5) {
-        setIsEnded(false);
-      }
+      if (isEnded && clamped < maxDuration - 0.5) setIsEnded(false);
       revealControls();
     },
-    [duration, isEnded, revealControls]
+    [duration, isEnded, isYouTubeSource, revealControls]
   );
 
   const triggerSeekFeedback = useCallback((direction: 'forward' | 'backward') => {
@@ -658,38 +1021,73 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
     }
     seekFeedbackTimerRef.current = window.setTimeout(() => {
       setSeekFeedback(null);
-    }, 550);
+    }, 520);
   }, []);
 
   const skipForward = useCallback(() => {
-    const video = videoRef.current;
-    const base = video ? video.currentTime : currentTime;
+    const base = isYouTubeSource
+      ? ytPlayerRef.current?.getCurrentTime?.() ?? currentTime
+      : videoRef.current
+      ? videoRef.current.currentTime
+      : currentTime;
     handleSeek(base + 10);
     triggerSeekFeedback('forward');
-  }, [currentTime, handleSeek, triggerSeekFeedback]);
+  }, [currentTime, handleSeek, isYouTubeSource, triggerSeekFeedback]);
 
   const skipBackward = useCallback(() => {
-    const video = videoRef.current;
-    const base = video ? video.currentTime : currentTime;
+    const base = isYouTubeSource
+      ? ytPlayerRef.current?.getCurrentTime?.() ?? currentTime
+      : videoRef.current
+      ? videoRef.current.currentTime
+      : currentTime;
     handleSeek(base - 10);
     triggerSeekFeedback('backward');
-  }, [currentTime, handleSeek, triggerSeekFeedback]);
+  }, [currentTime, handleSeek, isYouTubeSource, triggerSeekFeedback]);
 
   const handleVolumeChange = useCallback(
     (newVol: number) => {
+      const clamped = Math.max(0, Math.min(1, newVol));
+      if (isYouTubeSource) {
+        const yt = ytPlayerRef.current;
+        if (yt) {
+          yt.setVolume(Math.round(clamped * 100));
+          if (clamped === 0) yt.mute();
+          else yt.unMute();
+        }
+        setVolume(clamped);
+        setIsMuted(clamped === 0);
+        revealControls();
+        return;
+      }
+
       const video = videoRef.current;
       if (!video) return;
-      const clamped = Math.max(0, Math.min(1, newVol));
       video.volume = clamped;
       video.muted = clamped === 0;
       setVolume(clamped);
       setIsMuted(clamped === 0);
       revealControls();
     },
-    [revealControls]
+    [isYouTubeSource, revealControls]
   );
 
   const toggleMute = useCallback(() => {
+    if (isYouTubeSource) {
+      const yt = ytPlayerRef.current;
+      if (isMuted) {
+        const restored = volume > 0.05 ? volume : 0.8;
+        yt?.unMute();
+        yt?.setVolume(Math.round(restored * 100));
+        setVolume(restored);
+        setIsMuted(false);
+      } else {
+        yt?.mute();
+        setIsMuted(true);
+      }
+      revealControls();
+      return;
+    }
+
     const video = videoRef.current;
     if (!video) return;
     if (isMuted || video.muted) {
@@ -703,8 +1101,60 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
       setIsMuted(true);
     }
     revealControls();
-  }, [isMuted, revealControls, volume]);
+  }, [isMuted, isYouTubeSource, revealControls, volume]);
 
+  // Dedicated Screen Orientation (Landscape Rotation Toggle)
+  const toggleLandscapeOrientation = useCallback(() => {
+    const orientation = screen.orientation as ScreenOrientation & {
+      lock?: (mode: string) => Promise<void>;
+      unlock?: () => void;
+    };
+    const container = containerRef.current;
+
+    if (!isLandscapeMode) {
+      const isPortrait =
+        typeof window !== 'undefined' && window.innerHeight > window.innerWidth;
+      if (isPortrait) {
+        setIsLandscapeMode(true);
+        if (!document.fullscreenElement && container?.requestFullscreen) {
+          container
+            .requestFullscreen()
+            .then(() => {
+              setIsFullscreen(true);
+              if (orientation?.lock) {
+                orientation
+                  .lock('landscape')
+                  .then(() => setIsLandscapeMode(false))
+                  .catch(() => {});
+              }
+            })
+            .catch(() => {});
+        } else if (document.fullscreenElement && orientation?.lock) {
+          orientation
+            .lock('landscape')
+            .then(() => setIsLandscapeMode(false))
+            .catch(() => {});
+        }
+      } else if (!document.fullscreenElement && container?.requestFullscreen) {
+        container
+          .requestFullscreen()
+          .then(() => setIsFullscreen(true))
+          .catch(() => {});
+      }
+    } else {
+      setIsLandscapeMode(false);
+      if (orientation?.unlock) {
+        try {
+          orientation.unlock();
+        } catch {
+          // Ignore unlock failure
+        }
+      }
+    }
+    revealControls();
+  }, [isLandscapeMode, revealControls]);
+
+  // Dedicated Fullscreen Toggle with Automatic Landscape Lock Attempt
   const toggleFullscreen = useCallback(() => {
     const container = containerRef.current;
     const video = videoRef.current as (HTMLVideoElement & {
@@ -715,59 +1165,87 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
       document.fullscreenElement ||
       (document as unknown as { webkitFullscreenElement?: Element }).webkitFullscreenElement;
 
+    const orientation = screen.orientation as ScreenOrientation & {
+      lock?: (mode: string) => Promise<void>;
+    };
+
     if (!fsElement) {
       if (container?.requestFullscreen) {
         container
           .requestFullscreen()
           .then(() => {
             setIsFullscreen(true);
-            const orientation = screen.orientation as ScreenOrientation & {
-              lock?: (mode: string) => Promise<void>;
-            };
             if (orientation?.lock) {
-              orientation.lock('landscape').catch(() => {});
+              orientation
+                .lock('landscape')
+                .then(() => setIsLandscapeMode(false))
+                .catch(() => {});
             }
           })
           .catch(() => {
-            if (video?.webkitEnterFullscreen) {
+            if (!isYouTubeSource && video?.webkitEnterFullscreen) {
               video.webkitEnterFullscreen();
-              setIsFullscreen(true);
             }
           });
-      } else if (video?.webkitEnterFullscreen) {
+      } else if (!isYouTubeSource && video?.webkitEnterFullscreen) {
         video.webkitEnterFullscreen();
         setIsFullscreen(true);
       }
     } else {
+      setIsLandscapeMode(false);
       if (document.exitFullscreen) {
-        document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
+        document
+          .exitFullscreen()
+          .then(() => setIsFullscreen(false))
+          .catch(() => setIsFullscreen(false));
+      } else {
+        setIsFullscreen(false);
       }
     }
     revealControls();
-  }, [revealControls]);
+  }, [isYouTubeSource, revealControls]);
 
   const changeSpeed = useCallback(
     (speed: number) => {
-      const video = videoRef.current;
-      if (!video) return;
-      video.playbackRate = speed;
+      if (isYouTubeSource) {
+        ytPlayerRef.current?.setPlaybackRate?.(speed);
+      } else if (videoRef.current) {
+        videoRef.current.playbackRate = speed;
+      }
       setPlaybackSpeed(speed);
-      setActivePopover(null);
       revealControls();
     },
-    [revealControls]
+    [isYouTubeSource, revealControls]
   );
 
   const changeQuality = useCallback(
     (option: QualityOption) => {
       if (option.status === 'processing') return;
+
+      if (isYouTubeSource) {
+        const yt = ytPlayerRef.current as
+          | (YTPlayerInstance & { setPlaybackQualityRange?: (min: string, max: string) => void })
+          | null;
+        if (yt) {
+          yt.setPlaybackQuality(option.id);
+          yt.setPlaybackQualityRange?.(option.id, option.id);
+          setActiveYtQualityId(option.id);
+          if (option.id !== 'auto') {
+            setDetectedResolution(option.label);
+          }
+        }
+        setActivePanel(null);
+        revealControls();
+        return;
+      }
+
       const video = videoRef.current;
       if (!video) return;
 
       if (typeof option.hlsLevel === 'number' && hlsRef.current) {
         hlsRef.current.currentLevel = option.hlsLevel;
         setActiveHlsQualityId(option.id);
-        setActivePopover(null);
+        setActivePanel(null);
         revealControls();
         return;
       }
@@ -778,66 +1256,103 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
         setSelectedSourceUrl(option.url);
       }
 
-      setActivePopover(null);
+      setActivePanel(null);
       revealControls();
     },
-    [revealControls, selectedSourceUrl]
+    [isYouTubeSource, revealControls, selectedSourceUrl]
   );
 
   const switchServer = useCallback(
     (srv: OrderedServerItem) => {
       const video = videoRef.current;
+      const activeTime = isYouTubeSource
+        ? ytPlayerRef.current?.getCurrentTime?.() || 0
+        : video?.currentTime || 0;
       setActiveServerId(srv.id);
-      if (video && srv.url !== selectedSourceUrl) {
-        pendingSeekRef.current = video.currentTime;
-        resumeAutoplayRef.current = !video.paused;
-        setSelectedSourceUrl(srv.url);
-      } else if (!video && srv.url !== selectedSourceUrl) {
+      if (srv.url !== selectedSourceUrl) {
+        pendingSeekRef.current = activeTime;
+        resumeAutoplayRef.current = isYouTubeSource ? true : Boolean(video && !video.paused);
         setSelectedSourceUrl(srv.url);
       }
-      setActivePopover(null);
+      setActivePanel(null);
       revealControls();
     },
-    [revealControls, selectedSourceUrl]
+    [isYouTubeSource, revealControls, selectedSourceUrl]
   );
 
-  const handleSelectEpisode = useCallback((index: number) => {
-    if (index < 0 || index >= episodesList.length) return;
-    setActiveEpisodeIndex(index);
-    setActivePopover(null);
-    setIsEnded(false);
-    resumeAutoplayRef.current = true;
-  }, [episodesList.length]);
+  const handleSelectEpisode = useCallback(
+    (index: number) => {
+      if (index < 0 || index >= episodesList.length) return;
+      setActiveEpisodeIndex(index);
+      setActivePanel(null);
+      setIsEnded(false);
+      resumeAutoplayRef.current = true;
+    },
+    [episodesList.length]
+  );
 
   const handleRetry = useCallback(() => {
     hasFatalErrorRef.current = false;
     setErrorMessage(null);
+    setYtEmbedBlocked(false);
     setIsOffline(!navigator.onLine);
     setIsLoading(true);
     setRetryToken((prev) => prev + 1);
   }, []);
 
   const handleClosePlayer = useCallback(() => {
-    const video = videoRef.current;
-    if (video) {
-      persistProgress(video.currentTime, video.duration || 0);
-      video.pause();
+    if (isYouTubeSource && ytPlayerRef.current) {
+      const now = ytPlayerRef.current.getCurrentTime?.() || 0;
+      const total = ytPlayerRef.current.getDuration?.() || 0;
+      persistProgress(now, total);
+      try {
+        ytPlayerRef.current.stopVideo?.();
+      } catch {
+        // Ignore stop cleanup errors
+      }
+    } else {
+      const video = videoRef.current;
+      if (video) {
+        persistProgress(video.currentTime, video.duration || 0);
+        video.pause();
+      }
+    }
+
+    if (screen.orientation && 'unlock' in screen.orientation) {
+      try {
+        screen.orientation.unlock();
+      } catch {
+        // Ignore unlock errors
+      }
+    }
+    if (document.fullscreenElement && document.exitFullscreen) {
+      document.exitFullscreen().catch(() => {});
     }
     onClose();
-  }, [onClose, persistProgress]);
+  }, [isYouTubeSource, onClose, persistProgress]);
 
   const resumeSavedProgress = useCallback(() => {
+    if (resumePrompt === null) return;
+    if (isYouTubeSource && ytPlayerRef.current) {
+      ytPlayerRef.current.seekTo(resumePrompt, true);
+      setCurrentTime(resumePrompt);
+      setResumePrompt(null);
+      ytPlayerRef.current.playVideo();
+      setIsPlaying(true);
+      revealControls();
+      return;
+    }
+
     const video = videoRef.current;
-    if (resumePrompt !== null && video) {
+    if (video) {
       video.currentTime = resumePrompt;
       setCurrentTime(resumePrompt);
       setResumePrompt(null);
       video.play().then(() => setIsPlaying(true)).catch(() => {});
       revealControls();
     }
-  }, [resumePrompt, revealControls]);
+  }, [isYouTubeSource, resumePrompt, revealControls]);
 
-  // Subtitle file loader (.srt / .vtt)
   const handleSubtitleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -862,7 +1377,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
     }
   };
 
-  // Keyboard shortcuts for desktop playback control
+  // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
@@ -906,9 +1421,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
         const fsEl =
           document.fullscreenElement ||
           (document as unknown as { webkitFullscreenElement?: Element }).webkitFullscreenElement;
-        if (activePopover) {
+        if (activePanel) {
           e.preventDefault();
-          setActivePopover(null);
+          setActivePanel(null);
+        } else if (isLandscapeMode) {
+          e.preventDefault();
+          setIsLandscapeMode(false);
         } else if (!fsEl) {
           e.preventDefault();
           handleClosePlayer();
@@ -919,9 +1437,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [
-    activePopover,
+    activePanel,
     handleClosePlayer,
     handleVolumeChange,
+    isLandscapeMode,
     isMuted,
     revealControls,
     skipBackward,
@@ -932,17 +1451,19 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
     volume,
   ]);
 
-  // Video viewport tap/click gesture handler (Touch double-tap seek vs desktop click play)
+  // Viewport tap/double-tap gesture handler (respects 90° landscape rotation)
   const handleViewportPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (activePopover) {
-      setActivePopover(null);
+    if (activePanel) {
+      setActivePanel(null);
       return;
     }
 
     if (errorMessage || isEnded) return;
 
     const rect = e.currentTarget.getBoundingClientRect();
-    const relX = (e.clientX - rect.left) / rect.width;
+    const relX = isLandscapeMode
+      ? (e.clientY - rect.top) / rect.height
+      : (e.clientX - rect.left) / rect.width;
     const side: 'left' | 'right' | 'center' =
       relX < 0.35 ? 'left' : relX > 0.65 ? 'right' : 'center';
 
@@ -959,11 +1480,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
           tapTimerRef.current = null;
         }
         lastTapRef.current = { time: 0, side: 'center' };
-        if (side === 'right') {
-          skipForward();
-        } else {
-          skipBackward();
-        }
+        if (side === 'right') skipForward();
+        else skipBackward();
         return;
       }
 
@@ -982,12 +1500,16 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
       if (e.detail === 2) {
         toggleFullscreen();
       } else {
-        togglePlay();
+        setShowControls((prev) => {
+          const next = !prev;
+          if (next) scheduleControlsHide();
+          return next;
+        });
       }
     }
   };
 
-  // Intro & Subtitle computed values
+  // Intro & subtitles computed values
   const introStart = activeEpisode?.introStart ?? media.introStart;
   const introEnd = activeEpisode?.introEnd ?? media.introEnd;
   const canSkipIntro =
@@ -1008,10 +1530,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
   const orderedServers = useMemo<OrderedServerItem[]>(() => {
     const rawList: Array<Omit<OrderedServerItem, 'orderNumber'>> = [];
     const seenUrls = new Set<string>();
-
     const normalizeUrlKey = (u: string) => u.trim().split('?')[0];
 
-    // 1. Add real local multi-engine streams when playing an uploaded server file
     if (serverStreamData?.exists && serverStreamData.servers.length > 0) {
       for (const srv of serverStreamData.servers) {
         const key = normalizeUrlKey(srv.url);
@@ -1028,7 +1548,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
               ? 'HLS تكيفي'
               : serverStreamData.sourceHeight
               ? `${serverStreamData.sourceHeight}p`
-              : media.videoQuality || 'أصلي',
+              : media.videoQuality
+              ? formatQualityLabel(media.videoQuality)
+              : 'أصلي',
           qualityRank: srv.format === 'hls' ? 1400 : serverStreamData.sourceHeight || 1080,
           isDefault: srv.isDefault,
           engineType: srv.format === 'hls' ? 'hls-adaptive' : 'direct-mp4',
@@ -1036,7 +1558,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
       }
     }
 
-    // 2. Append any custom/configured playback sources cleanly ordered (Default first, then highest quality)
     const sortedCustom = [...availableCustomSources]
       .filter((s) => Boolean(s?.url))
       .sort((a, b) => {
@@ -1050,34 +1571,35 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
       const key = normalizeUrlKey(src.url);
       if (!key || seenUrls.has(key)) return;
       seenUrls.add(key);
-      const isHls = src.format === 'hls' || isHlsSource(src.url);
+      const isYt = src.format === 'youtube' || isYouTubeUrl(src.url);
+      const isHls = !isYt && (src.format === 'hls' || isHlsSource(src.url));
       rawList.push({
         id: `custom-${idx}`,
-        shortLabel: src.label || `سيرفر ${rawList.length + 1}`,
-        label: src.label || `المصدر ${rawList.length + 1}`,
+        shortLabel: src.label ? formatQualityLabel(src.label) : isYt ? 'YouTube' : `سيرفر ${rawList.length + 1}`,
+        label: src.label ? formatQualityLabel(src.label) : isYt ? 'مشغل يوتيوب' : `المصدر ${rawList.length + 1}`,
         url: src.url,
-        format: isHls ? 'hls' : src.format === 'webm' ? 'webm' : 'mp4',
-        qualityLabel: src.label || 'HD',
+        format: isYt ? 'youtube' : isHls ? 'hls' : src.format === 'webm' ? 'webm' : 'mp4',
+        qualityLabel: src.label ? formatQualityLabel(src.label) : isYt ? '1080p' : 'HD',
         qualityRank: getQualityRank(src.label),
         isDefault: Boolean(src.isDefault) && rawList.length === 0,
-        engineType: 'custom-source',
+        engineType: isYt ? 'youtube-embed' : 'custom-source',
       });
     });
 
-    // 3. Fallback baseVideoUrl if not yet represented
     const baseKey = normalizeUrlKey(baseVideoUrl || '');
     if (baseKey && !seenUrls.has(baseKey)) {
-      const isHls = isHlsSource(baseVideoUrl);
+      const isYt = isYouTubeUrl(baseVideoUrl);
+      const isHls = !isYt && isHlsSource(baseVideoUrl);
       rawList.unshift({
         id: 'server-primary',
-        shortLabel: isHls ? 'البث التكيفي HLS' : 'السيرفر الرئيسي',
-        label: isHls ? 'المشغل الرئيسي (HLS)' : 'المشغل الرئيسي (MP4)',
+        shortLabel: isYt ? 'YouTube' : isHls ? 'HLS' : 'الرئيسي',
+        label: isYt ? 'مشغل يوتيوب' : isHls ? 'البث التكيفي HLS' : 'المشغل الرئيسي',
         url: baseVideoUrl,
-        format: isHls ? 'hls' : 'mp4',
-        qualityLabel: media.videoQuality || 'الأصلية',
+        format: isYt ? 'youtube' : isHls ? 'hls' : 'mp4',
+        qualityLabel: media.videoQuality ? formatQualityLabel(media.videoQuality) : 'الأصلية',
         qualityRank: getQualityRank(media.videoQuality),
         isDefault: true,
-        engineType: isHls ? 'hls-adaptive' : 'custom-source',
+        engineType: isYt ? 'youtube-embed' : isHls ? 'hls-adaptive' : 'custom-source',
       });
     }
 
@@ -1095,9 +1617,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
   }, [activeServerId, orderedServers, selectedSourceUrl]);
 
   const effectiveQualityOptions = useMemo<QualityOption[]>(() => {
+    if (isYouTubeSource) {
+      return ytQualityOptions.length > 0 ? ytQualityOptions : YOUTUBE_PRESET_QUALITIES;
+    }
+
     if (isHlsSource(selectedSourceUrl)) {
       if (hlsQualityOptions.length > 0) return hlsQualityOptions;
-      return [{ id: 'auto', label: 'تلقائي (Auto)', hlsLevel: -1, status: 'ready', rank: 9999 }];
+      return [{ id: 'auto', label: 'تلقائي', hlsLevel: -1, status: 'ready', rank: 9999 }];
     }
 
     if (
@@ -1109,7 +1635,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
       return [...serverStreamData.qualities]
         .map((q) => ({
           id: q.id,
-          label: q.label,
+          label: formatQualityLabel(q.label),
           url: q.url,
           status: q.status,
           rank: q.height || 900,
@@ -1121,7 +1647,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
       return [...availableCustomSources]
         .map((src, index) => ({
           id: `src-${index}`,
-          label: src.label,
+          label: formatQualityLabel(src.label),
           url: src.url,
           status: 'ready' as const,
           rank: getQualityRank(src.label),
@@ -1132,7 +1658,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
     return [
       {
         id: 'source',
-        label: detectedResolution || media.videoQuality || 'الجودة الأصلية',
+        label:
+          detectedResolution ||
+          (media.videoQuality ? formatQualityLabel(media.videoQuality) : 'الأصلية'),
         url: selectedSourceUrl,
         status: 'ready',
         rank: getQualityRank(detectedResolution || media.videoQuality),
@@ -1142,26 +1670,28 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
     availableCustomSources,
     detectedResolution,
     hlsQualityOptions,
+    isYouTubeSource,
     media.videoQuality,
     resolvedActiveServer?.engineType,
     selectedSourceUrl,
     serverStreamData,
+    ytQualityOptions,
   ]);
 
   const activeQualityId = useMemo(() => {
-    if (isHlsSource(selectedSourceUrl)) {
-      return activeHlsQualityId;
-    }
+    if (isYouTubeSource) return activeYtQualityId;
+    if (isHlsSource(selectedSourceUrl)) return activeHlsQualityId;
     const matched = effectiveQualityOptions.find((q) => q.url && q.url === selectedSourceUrl);
     return matched?.id || effectiveQualityOptions[0]?.id || 'source';
-  }, [activeHlsQualityId, effectiveQualityOptions, selectedSourceUrl]);
+  }, [activeHlsQualityId, activeYtQualityId, effectiveQualityOptions, isYouTubeSource, selectedSourceUrl]);
 
   const activeQualityLabel = useMemo(() => {
     const matched = effectiveQualityOptions.find((q) => q.id === activeQualityId);
     if (matched?.id === 'auto' && detectedResolution) {
-      return `تلقائي (${detectedResolution})`;
+      return detectedResolution;
     }
-    return matched?.label || detectedResolution || media.videoQuality || 'الجودة الأصلية';
+    const raw = matched?.label || detectedResolution || media.videoQuality;
+    return raw ? formatQualityLabel(raw) : '1080p';
   }, [activeQualityId, detectedResolution, effectiveQualityOptions, media.videoQuality]);
 
   const showNextEpisodePrompt =
@@ -1170,11 +1700,63 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
   const progressPercent = duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0;
   const bufferedPercent = duration > 0 ? Math.min(100, (bufferedTime / duration) * 100) : 0;
 
+  // Timeline scrub pointer ratio helper supporting both normal & 90° rotated landscape coordinates
+  const getTimelineRatio = useCallback(
+    (clientX: number, clientY: number, rect: DOMRect) => {
+      const raw = isLandscapeMode
+        ? (clientY - rect.top) / rect.height
+        : (clientX - rect.left) / rect.width;
+      return Math.max(0, Math.min(1, raw));
+    },
+    [isLandscapeMode]
+  );
+
+  const activeStageWidth =
+    stageSize.width > 0
+      ? stageSize.width
+      : isLandscapeMode
+      ? viewportSize.height
+      : viewportSize.width;
+  const activeStageHeight =
+    stageSize.height > 0
+      ? stageSize.height
+      : isLandscapeMode
+      ? viewportSize.width
+      : viewportSize.height;
+  const ytTargetAspect = 16 / 9;
+  let ytFittedWidth = activeStageWidth;
+  let ytFittedHeight = activeStageWidth / ytTargetAspect;
+  if (ytFittedHeight > activeStageHeight) {
+    ytFittedHeight = activeStageHeight;
+    ytFittedWidth = activeStageHeight * ytTargetAspect;
+  }
+
   return (
     <div
       ref={containerRef}
       dir="rtl"
-      className={`fixed inset-0 z-50 bg-black flex flex-col justify-between overflow-hidden select-none font-sans ${
+      style={
+        isLandscapeMode
+          ? {
+              position: 'fixed',
+              top: '50%',
+              left: '50%',
+              width: `${viewportSize.height}px`,
+              height: `${viewportSize.width}px`,
+              transform: 'translate(-50%, -50%) rotate(90deg)',
+              transformOrigin: 'center center',
+            }
+          : {
+              position: 'fixed',
+              top: '50%',
+              left: '50%',
+              width: '100%',
+              height: '100%',
+              transform: 'translate(-50%, -50%) rotate(0deg)',
+              transformOrigin: 'center center',
+            }
+      }
+      className={`z-50 bg-black overflow-hidden select-none font-sans transition-[transform,width,height] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${
         !showControls && isPlaying && !errorMessage && !isEnded ? 'cursor-none' : ''
       }`}
       onMouseMove={revealControls}
@@ -1189,150 +1771,210 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
         className="hidden"
       />
 
-      {/* Top Cinema Control Bar + Ordered Servers & Qualities Strip */}
+      {/* 1. Minimal Top Bar */}
       <AnimatePresence>
         {(showControls || errorMessage || isEnded) && (
           <motion.header
-            initial={{ opacity: 0, y: -10 }}
+            initial={{ opacity: 0, y: -12 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-            className="absolute top-0 inset-x-0 z-30 flex flex-col gap-2 px-3 py-2.5 sm:px-5 sm:py-3.5 bg-gradient-to-b from-black/95 via-black/80 to-transparent"
+            exit={{ opacity: 0, y: -12 }}
+            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+            onPointerUp={(e) => e.stopPropagation()}
+            className="absolute top-0 inset-x-0 z-30 flex items-center justify-between gap-3 px-3 sm:px-6 pt-3 pb-8 bg-gradient-to-b from-black/85 via-black/45 to-transparent pointer-events-none"
           >
-            {/* Row 1: Close + Title & Quick Controls */}
-            <div className="flex items-center justify-between gap-2">
-              {/* Right slot in RTL: Close & Title */}
-              <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
-                <button
-                  type="button"
-                  onClick={handleClosePlayer}
-                  aria-label="العودة"
-                  className="min-w-[44px] min-h-[44px] rounded-xl bg-zinc-900/85 hover:bg-zinc-800 active:scale-95 text-white flex items-center justify-center backdrop-blur-md transition-all border border-white/10 cursor-pointer shrink-0"
-                >
-                  <ArrowRight className="w-5 h-5" />
-                </button>
+            {/* Right slot (RTL start): Back + Clean Unboxed Title */}
+            <div className="flex items-center gap-3 min-w-0 flex-1 pointer-events-auto">
+              <button
+                type="button"
+                onClick={handleClosePlayer}
+                aria-label="العودة"
+                className="w-10 h-10 min-w-[40px] min-h-[40px] rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-white flex items-center justify-center backdrop-blur-md transition-all cursor-pointer shrink-0"
+              >
+                <ArrowRight className="w-5 h-5" />
+              </button>
 
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <h2 className="text-white font-black text-xs sm:text-base md:text-lg truncate">
-                      {media.titleAr || media.title}
-                    </h2>
-                    {activeEpisode && (
-                      <span className="shrink-0 text-[11px] sm:text-xs font-bold text-amber-400">
-                        م{activeEpisode.seasonNumber} · ح{activeEpisode.episodeNumber}
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-[11px] sm:text-xs text-zinc-400 truncate">
-                    {activeEpisode
-                      ? activeEpisode.title
-                      : `${media.year}${media.duration ? ` · ${media.duration}` : ''}`}
-                  </p>
-                </div>
+              <div className="min-w-0">
+                <h2 className="text-white font-bold text-sm sm:text-base truncate leading-snug">
+                  {media.titleAr || media.title}
+                </h2>
+                <p className="text-[11px] sm:text-xs text-zinc-300/80 truncate leading-tight">
+                  {activeEpisode
+                    ? `الموسم ${activeEpisode.seasonNumber} · الحلقة ${activeEpisode.episodeNumber}${
+                        activeEpisode.title ? ` — ${activeEpisode.title}` : ''
+                      }`
+                    : `${media.year}${media.duration ? ` · ${media.duration}` : ''}`}
+                </p>
               </div>
+            </div>
 
-              {/* Left slot in RTL: Quick Settings & Series Controls */}
-              <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 relative">
-                {nextEpisode && (
-                  <button
-                    type="button"
-                    onClick={() => handleSelectEpisode(activeEpisodeIndex + 1)}
-                    className="hidden sm:flex items-center gap-1.5 min-h-[44px] px-3 rounded-xl bg-amber-400/15 hover:bg-amber-400/25 active:scale-95 border border-amber-400/35 text-amber-300 text-xs font-bold backdrop-blur-md transition-all cursor-pointer"
-                  >
-                    <FastForward className="w-4 h-4" />
-                    <span>الحلقة التالية</span>
-                  </button>
-                )}
-
-                {episodesList.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setActivePopover((prev) => (prev === 'episodes' ? null : 'episodes'))
-                    }
-                    aria-label="قائمة الحلقات"
-                    className={`min-w-[44px] min-h-[44px] px-2.5 sm:px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 backdrop-blur-md transition-all active:scale-95 cursor-pointer ${
-                      activePopover === 'episodes'
-                        ? 'bg-amber-400 text-black border-amber-400'
-                        : 'bg-zinc-900/85 hover:bg-zinc-800 text-zinc-200 border-white/10'
-                    }`}
-                  >
-                    <ListVideo className="w-4 h-4" />
-                    <span className="hidden md:inline">الحلقات</span>
-                  </button>
-                )}
-
-                {/* Subtitles Button */}
+            {/* Left slot (RTL end): Minimal Utility Buttons + Clean Popovers */}
+            <div className="flex items-center gap-2 shrink-0 relative pointer-events-auto">
+              {episodesList.length > 1 && (
                 <button
                   type="button"
                   onClick={() =>
-                    setActivePopover((prev) => (prev === 'subtitles' ? null : 'subtitles'))
+                    setActivePanel((prev) => (prev === 'episodes' ? null : 'episodes'))
                   }
-                  aria-label="إعدادات الترجمة"
-                  className={`min-w-[44px] min-h-[44px] px-2.5 sm:px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 backdrop-blur-md transition-all active:scale-95 cursor-pointer ${
-                    activePopover === 'subtitles'
-                      ? 'bg-amber-400 text-black border-amber-400'
-                      : subtitlesEnabled && subtitleCues.length > 0
-                      ? 'bg-amber-400/15 text-amber-300 border-amber-400/35 hover:bg-amber-400/25'
-                      : 'bg-zinc-900/85 hover:bg-zinc-800 text-zinc-200 border-white/10'
+                  aria-label="الحلقات"
+                  className={`h-10 px-3 rounded-full text-xs font-semibold flex items-center gap-1.5 backdrop-blur-md transition-all active:scale-95 cursor-pointer ${
+                    activePanel === 'episodes'
+                      ? 'bg-[#F7C600] text-black'
+                      : 'bg-white/10 hover:bg-white/20 text-white'
                   }`}
                 >
-                  <Captions className="w-4 h-4" />
-                  <span className="hidden sm:inline">الترجمة</span>
+                  <ListVideo className="w-4 h-4" />
+                  <span className="hidden sm:inline">الحلقات</span>
                 </button>
+              )}
 
-                {/* Speed Button */}
-                <button
-                  type="button"
-                  onClick={() => setActivePopover((prev) => (prev === 'speed' ? null : 'speed'))}
-                  aria-label="سرعة التشغيل"
-                  className={`min-w-[44px] min-h-[44px] px-2.5 sm:px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 backdrop-blur-md transition-all active:scale-95 cursor-pointer tabular-nums ${
-                    activePopover === 'speed'
-                      ? 'bg-amber-400 text-black border-amber-400'
-                      : 'bg-zinc-900/85 hover:bg-zinc-800 text-zinc-200 border-white/10'
-                  }`}
-                >
-                  <Gauge className="w-4 h-4 text-amber-400" />
-                  <span>{playbackSpeed}x</span>
-                </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setActivePanel((prev) => (prev === 'quality' ? null : 'quality'))
+                }
+                aria-label="الجودة"
+                className={`h-10 px-3 rounded-full text-xs font-semibold flex items-center gap-1.5 backdrop-blur-md transition-all active:scale-95 cursor-pointer ${
+                  activePanel === 'quality'
+                    ? 'bg-[#F7C600] text-black'
+                    : 'bg-white/10 hover:bg-white/20 text-white'
+                }`}
+              >
+                <SlidersHorizontal className="w-4 h-4" />
+                <span className="tabular-nums">{activeQualityLabel}</span>
+              </button>
 
-                {/* Quality Button */}
-                <button
-                  type="button"
-                  onClick={() => setActivePopover((prev) => (prev === 'quality' ? null : 'quality'))}
-                  aria-label="جودة الفيديو"
-                  className={`min-w-[44px] min-h-[44px] px-2.5 sm:px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 backdrop-blur-md transition-all active:scale-95 cursor-pointer ${
-                    activePopover === 'quality'
-                      ? 'bg-amber-400 text-black border-amber-400'
-                      : 'bg-zinc-900/85 hover:bg-zinc-800 text-zinc-200 border-white/10'
-                  }`}
-                >
-                  <SlidersHorizontal className="w-4 h-4 text-amber-400" />
-                  <span className="hidden sm:inline">{activeQualityLabel}</span>
-                </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setActivePanel((prev) => (prev === 'settings' ? null : 'settings'))
+                }
+                aria-label="إعدادات المشغل"
+                className={`w-10 h-10 min-w-[40px] min-h-[40px] rounded-full flex items-center justify-center backdrop-blur-md transition-all active:scale-95 cursor-pointer ${
+                  activePanel === 'settings'
+                    ? 'bg-[#F7C600] text-black'
+                    : 'bg-white/10 hover:bg-white/20 text-white'
+                }`}
+              >
+                <Settings className="w-4.5 h-4.5" />
+              </button>
 
-                {/* Popover Panels */}
-                <AnimatePresence>
-                  {activePopover === 'speed' && (
-                    <motion.div
-                      initial={{ opacity: 0, y: -6, scale: 0.97 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: -6, scale: 0.97 }}
-                      transition={{ duration: 0.15 }}
-                      className="absolute top-full left-0 mt-2 w-44 max-w-[calc(100vw-1.5rem)] bg-zinc-950/95 backdrop-blur-xl border border-white/15 rounded-2xl p-2 shadow-2xl z-50"
+              {/* Popover Panels */}
+              <AnimatePresence>
+                {activePanel === 'quality' && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -6, scale: 0.96 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -6, scale: 0.96 }}
+                    transition={{ duration: 0.16 }}
+                    className="absolute top-full left-0 mt-2.5 w-56 max-w-[calc(100vw-2rem)] bg-zinc-950/95 backdrop-blur-xl border border-white/10 rounded-2xl p-2 shadow-2xl z-50"
+                  >
+                    <p className="text-[11px] font-bold text-zinc-400 px-3 py-1.5">
+                      جودة الفيديو
+                    </p>
+                    <div
+                      className={`space-y-1 overflow-y-auto ${
+                        isLandscapeMode ? 'max-h-[calc(100vw-8.5rem)]' : 'max-h-60'
+                      }`}
                     >
-                      <div className="text-[11px] text-zinc-400 font-bold px-2.5 py-1.5 border-b border-white/10 mb-1">
-                        سرعة التشغيل
-                      </div>
+                      {effectiveQualityOptions.map((opt) => {
+                        const isProcessingOpt = opt.status === 'processing';
+                        const isActiveOpt = activeQualityId === opt.id && !isProcessingOpt;
+                        return (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            disabled={isProcessingOpt}
+                            onClick={() => changeQuality(opt)}
+                            className={`w-full min-h-[40px] px-3 rounded-xl text-xs font-semibold flex items-center justify-between transition-colors ${
+                              isProcessingOpt
+                                ? 'text-zinc-500 cursor-wait'
+                                : isActiveOpt
+                                ? 'bg-[#F7C600] text-black cursor-pointer'
+                                : 'text-zinc-200 hover:bg-white/10 cursor-pointer'
+                            }`}
+                          >
+                            <span className="flex items-center gap-2">
+                              {isProcessingOpt && (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin text-[#F7C600]" />
+                              )}
+                              <span>
+                                {opt.id === 'auto' && detectedResolution
+                                  ? `تلقائي (${detectedResolution})`
+                                  : isProcessingOpt
+                                  ? `${opt.label} (جارٍ التجهيز)`
+                                  : opt.label}
+                              </span>
+                            </span>
+                            {isActiveOpt && <Check className="w-4 h-4" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </motion.div>
+                )}
+
+                {activePanel === 'settings' && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -6, scale: 0.96 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -6, scale: 0.96 }}
+                    transition={{ duration: 0.16 }}
+                    className={`absolute top-full left-0 mt-2.5 w-72 sm:w-80 max-w-[calc(100vw-2rem)] overflow-y-auto bg-zinc-950/95 backdrop-blur-xl border border-white/10 rounded-2xl p-3 shadow-2xl z-50 space-y-3 ${
+                      isLandscapeMode ? 'max-h-[calc(100vw-5.5rem)]' : 'max-h-[65dvh]'
+                    }`}
+                  >
+                    {/* Segmented Settings Tabs */}
+                    <div className="grid grid-cols-3 gap-1 p-1 bg-white/5 rounded-xl">
+                      <button
+                        type="button"
+                        onClick={() => setSettingsTab('speed')}
+                        className={`py-2 px-2 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer ${
+                          settingsTab === 'speed'
+                            ? 'bg-[#F7C600] text-black'
+                            : 'text-zinc-300 hover:text-white'
+                        }`}
+                      >
+                        <Gauge className="w-3.5 h-3.5" />
+                        <span>السرعة</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setSettingsTab('subtitles')}
+                        className={`py-2 px-2 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer ${
+                          settingsTab === 'subtitles'
+                            ? 'bg-[#F7C600] text-black'
+                            : 'text-zinc-300 hover:text-white'
+                        }`}
+                      >
+                        <Captions className="w-3.5 h-3.5" />
+                        <span>الترجمة</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setSettingsTab('servers')}
+                        className={`py-2 px-2 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer ${
+                          settingsTab === 'servers'
+                            ? 'bg-[#F7C600] text-black'
+                            : 'text-zinc-300 hover:text-white'
+                        }`}
+                      >
+                        <Server className="w-3.5 h-3.5" />
+                        <span>السيرفرات</span>
+                      </button>
+                    </div>
+
+                    {settingsTab === 'speed' && (
                       <div className="space-y-1">
                         {SPEED_OPTIONS.map((speed) => (
                           <button
                             key={speed}
                             type="button"
                             onClick={() => changeSpeed(speed)}
-                            className={`w-full min-h-[40px] px-3 rounded-xl text-xs font-bold flex items-center justify-between transition-colors cursor-pointer ${
+                            className={`w-full min-h-[40px] px-3 rounded-xl text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${
                               playbackSpeed === speed
-                                ? 'bg-amber-400 text-black'
+                                ? 'bg-[#F7C600] text-black'
                                 : 'text-zinc-200 hover:bg-white/10'
                             }`}
                           >
@@ -1343,188 +1985,153 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
                           </button>
                         ))}
                       </div>
-                    </motion.div>
-                  )}
+                    )}
 
-                  {activePopover === 'quality' && (
-                    <motion.div
-                      initial={{ opacity: 0, y: -6, scale: 0.97 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: -6, scale: 0.97 }}
-                      transition={{ duration: 0.15 }}
-                      className="absolute top-full left-0 mt-2 w-60 max-w-[calc(100vw-1.5rem)] bg-zinc-950/95 backdrop-blur-xl border border-white/15 rounded-2xl p-2 shadow-2xl z-50"
-                    >
-                      <div className="text-[11px] text-zinc-400 font-bold px-2.5 py-1.5 border-b border-white/10 mb-1">
-                        جودة الفيديو المتاحة
+                    {settingsTab === 'subtitles' && (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-semibold text-white">عرض الترجمة</span>
+                          <button
+                            type="button"
+                            onClick={() => setSubtitlesEnabled((prev) => !prev)}
+                            className={`px-3 min-h-[34px] rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                              subtitlesEnabled
+                                ? 'bg-[#F7C600] text-black'
+                                : 'bg-zinc-800 text-zinc-300'
+                            }`}
+                          >
+                            {subtitlesEnabled ? 'مفعلة' : 'متوقفة'}
+                          </button>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          className="w-full min-h-[42px] px-3 rounded-xl bg-white/5 hover:bg-white/10 border border-dashed border-white/20 text-[#F7C600] text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                        >
+                          <Upload className="w-4 h-4" />
+                          <span>اختيار ملف ترجمة (SRT / VTT)</span>
+                        </button>
+
+                        {subtitleFileName && (
+                          <div className="flex items-center justify-between gap-2 bg-white/5 rounded-xl px-3 py-2">
+                            <div className="min-w-0">
+                              <p className="text-[11px] font-semibold text-white truncate">
+                                {subtitleFileName}
+                              </p>
+                              <p className="text-[10px] text-zinc-400 tabular-nums">
+                                {subtitleCues.length} سطر
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSubtitleCues([]);
+                                setSubtitleFileName(null);
+                                setSubtitleError(null);
+                              }}
+                              aria-label="إزالة ملف الترجمة"
+                              className="min-w-[34px] min-h-[34px] rounded-lg bg-red-500/15 hover:bg-red-500/25 text-red-400 flex items-center justify-center cursor-pointer"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        )}
+
+                        {subtitleError && (
+                          <p className="text-[11px] text-red-400">{subtitleError}</p>
+                        )}
+
+                        <div className="space-y-1.5">
+                          <span className="text-[11px] text-zinc-400 font-semibold block">
+                            حجم الخط
+                          </span>
+                          <div className="grid grid-cols-4 gap-1.5">
+                            {SUBTITLE_SIZES.map((sz) => (
+                              <button
+                                key={sz.id}
+                                type="button"
+                                onClick={() => setSubtitleSize(sz.id)}
+                                className={`min-h-[36px] rounded-lg text-xs font-semibold cursor-pointer ${
+                                  subtitleSize === sz.id
+                                    ? 'bg-[#F7C600] text-black'
+                                    : 'bg-white/5 text-zinc-300 hover:bg-white/10'
+                                }`}
+                              >
+                                {sz.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <span className="text-[11px] text-zinc-400 font-semibold block">
+                            لون الخط
+                          </span>
+                          <div className="grid grid-cols-2 gap-1.5">
+                            {SUBTITLE_COLORS.map((col) => (
+                              <button
+                                key={col.id}
+                                type="button"
+                                onClick={() => setSubtitleColor(col.value)}
+                                className={`min-h-[36px] px-2.5 rounded-lg text-xs font-semibold flex items-center gap-2 cursor-pointer ${
+                                  subtitleColor === col.value
+                                    ? 'bg-white/15 border border-[#F7C600] text-white'
+                                    : 'bg-white/5 text-zinc-300 hover:bg-white/10'
+                                }`}
+                              >
+                                <span
+                                  className="w-3 h-3 rounded-full shrink-0"
+                                  style={{ backgroundColor: col.value }}
+                                />
+                                <span>{col.label}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
                       </div>
-                      <div className="space-y-1 max-h-60 overflow-y-auto">
-                        {effectiveQualityOptions.map((opt) => {
-                          const isProcessingOpt = opt.status === 'processing';
-                          const isActiveOpt = activeQualityId === opt.id && !isProcessingOpt;
+                    )}
+
+                    {settingsTab === 'servers' && (
+                      <div className="space-y-1 max-h-56 overflow-y-auto">
+                        {orderedServers.map((srv) => {
+                          const isActiveSrv = resolvedActiveServer?.id === srv.id;
                           return (
                             <button
-                              key={opt.id}
+                              key={srv.id}
                               type="button"
-                              disabled={isProcessingOpt}
-                              onClick={() => changeQuality(opt)}
-                              className={`w-full min-h-[40px] px-3 rounded-xl text-xs font-bold flex items-center justify-between transition-colors ${
-                                isProcessingOpt
-                                  ? 'text-zinc-500 bg-zinc-900/50 cursor-wait'
-                                  : isActiveOpt
-                                  ? 'bg-amber-400 text-black cursor-pointer'
-                                  : 'text-zinc-200 hover:bg-white/10 cursor-pointer'
+                              onClick={() => switchServer(srv)}
+                              className={`w-full min-h-[40px] px-3 rounded-xl text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${
+                                isActiveSrv
+                                  ? 'bg-[#F7C600] text-black'
+                                  : 'text-zinc-200 hover:bg-white/10'
                               }`}
                             >
-                              <span className="flex items-center gap-2">
-                                {isProcessingOpt && (
-                                  <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" />
-                                )}
-                                <span>
-                                  {opt.id === 'auto' && detectedResolution
-                                    ? `تلقائي (${detectedResolution})`
-                                    : opt.id === 'source' && detectedResolution
-                                    ? `${detectedResolution} (المصدر الفعلي)`
-                                    : isProcessingOpt
-                                    ? `${opt.label} (جارٍ التجهيز...)`
-                                    : opt.label}
-                                </span>
+                              <span className="truncate">
+                                سيرفر {srv.orderNumber}: {srv.shortLabel}
                               </span>
-                              {isActiveOpt && <Check className="w-4 h-4" />}
+                              {isActiveSrv && <Check className="w-4 h-4 shrink-0" />}
                             </button>
                           );
                         })}
                       </div>
-                      {effectiveQualityOptions.length === 1 && !serverStreamData?.processing && (
-                        <p className="text-[11px] text-zinc-500 px-2.5 pt-2 mt-1 border-t border-white/10 leading-relaxed">
-                          تتوفر جودة المصدر الفعلي فقط لهذا الملف.
-                        </p>
-                      )}
-                    </motion.div>
-                  )}
-
-                {activePopover === 'subtitles' && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -6, scale: 0.97 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: -6, scale: 0.97 }}
-                    transition={{ duration: 0.15 }}
-                    className="absolute top-full left-0 mt-2 w-72 sm:w-80 max-w-[calc(100vw-1.5rem)] max-h-[72vh] overflow-y-auto bg-zinc-950/95 backdrop-blur-xl border border-white/15 rounded-2xl p-3 shadow-2xl z-50 space-y-3.5"
-                  >
-                    <div className="flex items-center justify-between border-b border-white/10 pb-2">
-                      <span className="text-xs font-bold text-white">إعدادات الترجمة</span>
-                      <button
-                        type="button"
-                        onClick={() => setSubtitlesEnabled((prev) => !prev)}
-                        className={`px-3 min-h-[34px] rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                          subtitlesEnabled
-                            ? 'bg-amber-400 text-black'
-                            : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
-                        }`}
-                      >
-                        {subtitlesEnabled ? 'مفعلة' : 'متوقفة'}
-                      </button>
-                    </div>
-
-                    {/* Upload external SRT/VTT */}
-                    <div className="space-y-2">
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        className="w-full min-h-[44px] px-3 rounded-xl bg-white/5 hover:bg-white/10 border border-dashed border-amber-400/40 text-amber-300 text-xs font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer"
-                      >
-                        <Upload className="w-4 h-4" />
-                        <span>اختيار ملف ترجمة (SRT / VTT)</span>
-                      </button>
-
-                      {subtitleFileName && (
-                        <div className="flex items-center justify-between gap-2 bg-zinc-900 rounded-xl px-2.5 py-2 border border-white/10">
-                          <div className="min-w-0">
-                            <p className="text-[11px] font-bold text-white truncate">
-                              {subtitleFileName}
-                            </p>
-                            <p className="text-[10px] text-zinc-400 tabular-nums">
-                              {subtitleCues.length} سطر ترجمة جاهز
-                            </p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSubtitleCues([]);
-                              setSubtitleFileName(null);
-                              setSubtitleError(null);
-                            }}
-                            aria-label="إزالة ملف الترجمة"
-                            className="min-w-[36px] min-h-[36px] rounded-lg bg-red-500/15 hover:bg-red-500/25 text-red-400 flex items-center justify-center cursor-pointer"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      )}
-
-                      {subtitleError && (
-                        <p className="text-[11px] text-red-400 leading-relaxed">{subtitleError}</p>
-                      )}
-                    </div>
-
-                    {/* Font Size */}
-                    <div className="space-y-1.5">
-                      <span className="text-[11px] text-zinc-400 font-bold block">حجم الخط</span>
-                      <div className="grid grid-cols-4 gap-1.5">
-                        {SUBTITLE_SIZES.map((sz) => (
-                          <button
-                            key={sz.id}
-                            type="button"
-                            onClick={() => setSubtitleSize(sz.id)}
-                            className={`min-h-[38px] rounded-xl text-xs font-bold transition-colors cursor-pointer ${
-                              subtitleSize === sz.id
-                                ? 'bg-amber-400 text-black'
-                                : 'bg-zinc-900 text-zinc-300 hover:bg-zinc-800 border border-white/10'
-                            }`}
-                          >
-                            {sz.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Text Color */}
-                    <div className="space-y-1.5">
-                      <span className="text-[11px] text-zinc-400 font-bold block">لون الترجمة</span>
-                      <div className="grid grid-cols-2 gap-1.5">
-                        {SUBTITLE_COLORS.map((col) => (
-                          <button
-                            key={col.id}
-                            type="button"
-                            onClick={() => setSubtitleColor(col.value)}
-                            className={`min-h-[38px] px-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer ${
-                              subtitleColor === col.value
-                                ? 'bg-white/15 border border-amber-400 text-white'
-                                : 'bg-zinc-900 border border-white/10 text-zinc-300 hover:bg-zinc-800'
-                            }`}
-                          >
-                            <span
-                              className="w-3.5 h-3.5 rounded-full border border-white/30 shrink-0"
-                              style={{ backgroundColor: col.value }}
-                            />
-                            <span>{col.label}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
+                    )}
                   </motion.div>
                 )}
 
-                {activePopover === 'episodes' && episodesList.length > 0 && (
+                {activePanel === 'episodes' && episodesList.length > 0 && (
                   <motion.div
-                    initial={{ opacity: 0, y: -6, scale: 0.97 }}
+                    initial={{ opacity: 0, y: -6, scale: 0.96 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: -6, scale: 0.97 }}
-                    transition={{ duration: 0.15 }}
-                    className="absolute top-full left-0 mt-2 w-72 sm:w-80 max-w-[calc(100vw-1.5rem)] max-h-[65vh] overflow-y-auto bg-zinc-950/95 backdrop-blur-xl border border-white/15 rounded-2xl p-2 shadow-2xl z-50"
+                    exit={{ opacity: 0, y: -6, scale: 0.96 }}
+                    transition={{ duration: 0.16 }}
+                    className={`absolute top-full left-0 mt-2.5 w-72 sm:w-80 max-w-[calc(100vw-2rem)] overflow-y-auto bg-zinc-950/95 backdrop-blur-xl border border-white/10 rounded-2xl p-2 shadow-2xl z-50 ${
+                      isLandscapeMode ? 'max-h-[calc(100vw-5.5rem)]' : 'max-h-[60dvh]'
+                    }`}
                   >
-                    <div className="text-[11px] text-zinc-400 font-bold px-2.5 py-1.5 border-b border-white/10 mb-1.5">
-                      الحلقات المتوفرة ({episodesList.length})
-                    </div>
+                    <p className="text-[11px] font-bold text-zinc-400 px-3 py-1.5">
+                      الحلقات ({episodesList.length})
+                    </p>
                     <div className="space-y-1">
                       {episodesList.map((ep, idx) => {
                         const isActive = idx === activeEpisodeIndex;
@@ -1533,10 +2140,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
                             key={ep.id}
                             type="button"
                             onClick={() => handleSelectEpisode(idx)}
-                            className={`w-full min-h-[48px] px-3 py-2 rounded-xl text-right flex items-center justify-between gap-2 transition-colors cursor-pointer ${
+                            className={`w-full min-h-[46px] px-3 py-2 rounded-xl text-right flex items-center justify-between gap-2 transition-colors cursor-pointer ${
                               isActive
-                                ? 'bg-amber-400 text-black'
-                                : 'bg-zinc-900/70 hover:bg-white/10 text-zinc-200'
+                                ? 'bg-[#F7C600] text-black'
+                                : 'bg-white/5 hover:bg-white/10 text-zinc-200'
                             }`}
                           >
                             <div className="min-w-0">
@@ -1560,192 +2167,114 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
                 )}
               </AnimatePresence>
             </div>
-            </div>
-
-            {/* Row 2: Ordered Servers / Players & Qualities Top Strip */}
-            {(orderedServers.length > 0 || effectiveQualityOptions.length > 0) && (
-              <div
-                onPointerUp={(e) => e.stopPropagation()}
-                className="rounded-2xl bg-zinc-950/80 border border-white/10 backdrop-blur-md px-2.5 py-1.5 sm:px-3.5 sm:py-2 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2 shadow-xl"
-              >
-                {/* Servers / Players Ordered List (المشغلات) */}
-                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-                  <span className="flex items-center gap-1 text-[11px] font-bold text-zinc-400 shrink-0 pl-1">
-                    <Server className="w-3.5 h-3.5 text-amber-400" />
-                    <span>المشغلات:</span>
-                  </span>
-                  {orderedServers.map((srv) => {
-                    const isActive = resolvedActiveServer?.id === srv.id;
-                    return (
-                      <button
-                        key={srv.id}
-                        type="button"
-                        onClick={() => switchServer(srv)}
-                        className={`shrink-0 min-h-[34px] px-2.5 sm:px-3 rounded-xl text-[11px] sm:text-xs flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer ${
-                          isActive
-                            ? 'bg-amber-400 text-black font-black shadow-[0_0_12px_rgba(250,204,21,0.35)]'
-                            : 'bg-white/5 hover:bg-white/15 text-zinc-200 font-bold border border-white/10'
-                        }`}
-                      >
-                        <span
-                          className={`px-1.5 py-0.5 rounded-md text-[10px] font-black ${
-                            isActive
-                              ? 'bg-black/20 text-black'
-                              : 'bg-amber-400/15 text-amber-300'
-                          }`}
-                        >
-                          مشغل {srv.orderNumber}
-                        </span>
-                        <span className="whitespace-nowrap">{srv.shortLabel}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* Qualities Ordered List (الجودات) */}
-                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-                  <span className="flex items-center gap-1 text-[11px] font-bold text-zinc-400 shrink-0 pl-1">
-                    <SlidersHorizontal className="w-3.5 h-3.5 text-amber-400" />
-                    <span>الجودات:</span>
-                  </span>
-                  {effectiveQualityOptions.map((opt) => {
-                    const isProcessingOpt = opt.status === 'processing';
-                    const isActive = activeQualityId === opt.id && !isProcessingOpt;
-                    const displayLabel =
-                      opt.id === 'auto' && detectedResolution
-                        ? `تلقائي (${detectedResolution})`
-                        : opt.id === 'source' && detectedResolution
-                        ? detectedResolution
-                        : opt.label;
-                    return (
-                      <button
-                        key={opt.id}
-                        type="button"
-                        disabled={isProcessingOpt}
-                        onClick={() => changeQuality(opt)}
-                        title={
-                          isProcessingOpt
-                            ? 'جارٍ تحويل هذه الجودة في الخلفية...'
-                            : `تشغيل بجودة ${displayLabel}`
-                        }
-                        className={`shrink-0 min-h-[34px] px-2.5 rounded-xl text-[11px] sm:text-xs font-bold flex items-center gap-1 transition-all ${
-                          isProcessingOpt
-                            ? 'bg-zinc-900/75 text-zinc-500 border border-white/5 cursor-wait'
-                            : isActive
-                            ? 'bg-amber-400 text-black font-black shadow-[0_0_10px_rgba(250,204,21,0.3)] active:scale-95 cursor-pointer'
-                            : 'bg-zinc-900/90 hover:bg-white/15 text-zinc-200 border border-white/10 active:scale-95 cursor-pointer'
-                        }`}
-                      >
-                        {isProcessingOpt && (
-                          <Loader2 className="w-3 h-3 animate-spin text-amber-400" />
-                        )}
-                        <span className="whitespace-nowrap">{displayLabel}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
           </motion.header>
         )}
       </AnimatePresence>
 
-      {/* Main Cinema Video Stage */}
+      {/* 2. Centered Video Stage (Zero Stretching, Cropping, or Corner Collapse) */}
       <div
-        className="relative flex-1 w-full h-full flex items-center justify-center bg-black"
+        ref={stageRef}
+        className="absolute inset-0 w-full h-full flex items-center justify-center bg-black overflow-hidden"
         onPointerUp={handleViewportPointerUp}
       >
-        <video
-          ref={videoRef}
-          className="w-full h-full max-h-screen object-contain"
-          playsInline
-          preload="metadata"
-          poster={activeEpisode?.thumbnailUrl || media.bannerUrl || media.posterUrl}
-          onLoadStart={() => {
-            if (!hasFatalErrorRef.current) setIsLoading(true);
-          }}
-          onLoadedMetadata={() => {
-            const video = videoRef.current;
-            if (!video || hasFatalErrorRef.current) return;
+        {isYouTubeSource ? (
+          <div
+            className="relative shrink-0 bg-black overflow-hidden"
+            style={{
+              width: `${Math.max(1, Math.round(ytFittedWidth))}px`,
+              height: `${Math.max(1, Math.round(ytFittedHeight))}px`,
+            }}
+          >
+            <div ref={ytHostRef} className="absolute inset-0 w-full h-full pointer-events-none" />
+          </div>
+        ) : (
+          <video
+            ref={videoRef}
+            controlsList="nodownload"
+            className="w-full h-full max-w-full max-h-full object-contain block"
+            playsInline
+            preload="metadata"
+            poster={activeEpisode?.thumbnailUrl || media.bannerUrl || media.posterUrl}
+            onLoadStart={() => {
+              if (!hasFatalErrorRef.current) setIsLoading(true);
+            }}
+            onLoadedMetadata={() => {
+              const video = videoRef.current;
+              if (!video || hasFatalErrorRef.current) return;
 
-            setDuration(video.duration || 0);
-            if (video.videoHeight) {
-              setDetectedResolution(`${video.videoHeight}p`);
-            }
-
-            if (pendingSeekRef.current !== null) {
-              video.currentTime = pendingSeekRef.current;
-              pendingSeekRef.current = null;
-            }
-
-            if (resumeAutoplayRef.current || video.currentTime === 0) {
-              resumeAutoplayRef.current = false;
-              video.play().then(() => setIsPlaying(true)).catch(() => {});
-            }
-          }}
-          onCanPlay={() => {
-            setIsLoading(false);
-          }}
-          onLoadedData={() => {
-            setIsLoading(false);
-          }}
-          onWaiting={() => {
-            if (!hasFatalErrorRef.current) setIsLoading(true);
-          }}
-          onPlaying={() => {
-            setIsLoading(false);
-            setIsPlaying(true);
-            setIsEnded(false);
-          }}
-          onPlay={() => {
-            setIsPlaying(true);
-            setIsEnded(false);
-          }}
-          onPause={() => {
-            setIsPlaying(false);
-          }}
-          onTimeUpdate={handleTimeUpdate}
-          onEnded={() => {
-            const video = videoRef.current;
-            setIsPlaying(false);
-            setIsLoading(false);
-            if (!hasFatalErrorRef.current) {
-              setIsEnded(true);
-              if (video) {
-                persistProgress(video.duration || currentTime, video.duration || duration);
+              setDuration(video.duration || 0);
+              if (video.videoHeight) {
+                setDetectedResolution(`${video.videoHeight}p`);
               }
-            }
-          }}
-          onError={() => {
-            if (hasFatalErrorRef.current) return;
-            hasFatalErrorRef.current = true;
-            setIsLoading(false);
-            setIsPlaying(false);
 
-            const code = videoRef.current?.error?.code;
-            if (!navigator.onLine) {
-              setErrorMessage('انقطع الاتصال بالإنترنت. تحقق من الشبكة ثم اضغط إعادة المحاولة.');
-            } else if (code === 2) {
-              setErrorMessage('تعذر تنزيل الفيديو بسبب خطأ في الشبكة.');
-            } else if (code === 3) {
-              setErrorMessage('تعذر فك ترميز الفيديو. قد يكون الملف تالفاً أو بترميز غير مدعوم.');
-            } else if (code === 4) {
-              setErrorMessage('رابط الفيديو غير صالح أو صيغة الفيديو غير مدعومة في هذا المتصفح.');
-            } else {
-              setErrorMessage('تعذر تشغيل ملف الفيديو أو أنه لم يعد متوفراً.');
-            }
-          }}
-        />
+              if (pendingSeekRef.current !== null) {
+                video.currentTime = pendingSeekRef.current;
+                pendingSeekRef.current = null;
+              }
 
-        {/* Live Subtitle Overlay */}
+              if (resumeAutoplayRef.current || video.currentTime === 0) {
+                resumeAutoplayRef.current = false;
+                video.play().then(() => setIsPlaying(true)).catch(() => {});
+              }
+            }}
+            onCanPlay={() => setIsLoading(false)}
+            onLoadedData={() => setIsLoading(false)}
+            onWaiting={() => {
+              if (!hasFatalErrorRef.current) setIsLoading(true);
+            }}
+            onPlaying={() => {
+              setIsLoading(false);
+              setIsPlaying(true);
+              setIsEnded(false);
+            }}
+            onPlay={() => {
+              setIsPlaying(true);
+              setIsEnded(false);
+            }}
+            onPause={() => setIsPlaying(false)}
+            onTimeUpdate={handleTimeUpdate}
+            onEnded={() => {
+              const video = videoRef.current;
+              setIsPlaying(false);
+              setIsLoading(false);
+              if (!hasFatalErrorRef.current) {
+                setIsEnded(true);
+                if (video) {
+                  persistProgress(video.duration || currentTime, video.duration || duration);
+                }
+              }
+            }}
+            onError={() => {
+              if (hasFatalErrorRef.current) return;
+              hasFatalErrorRef.current = true;
+              setIsLoading(false);
+              setIsPlaying(false);
+
+              const code = videoRef.current?.error?.code;
+              if (!navigator.onLine) {
+                setErrorMessage('انقطع الاتصال بالإنترنت. تحقق من الشبكة ثم اضغط إعادة المحاولة.');
+              } else if (code === 2) {
+                setErrorMessage('تعذر تحميل البث بسبب خطأ في الشبكة.');
+              } else if (code === 3) {
+                setErrorMessage('تعذر فك ترميز الفيديو. قد يكون الملف غير مدعوم.');
+              } else if (code === 4) {
+                setErrorMessage('رابط الفيديو غير صالح أو غير مدعوم في هذا المتصفح.');
+              } else {
+                setErrorMessage('تعذر تشغيل الفيديو أو أنه لم يعد متوفراً.');
+              }
+            }}
+          />
+        )}
+
+        {/* Subtitles Overlay */}
         {activeSubtitleText && !errorMessage && !isEnded && (
           <div
-            className={`absolute inset-x-4 z-20 pointer-events-none flex justify-center transition-all duration-300 ease-out ${
-              showControls ? 'bottom-28 sm:bottom-28' : 'bottom-6 sm:bottom-10'
+            className={`absolute inset-x-4 z-20 pointer-events-none flex justify-center transition-all duration-200 ${
+              showControls ? 'bottom-28 sm:bottom-32' : 'bottom-6 sm:bottom-10'
             }`}
           >
             <div
-              className={`max-w-3xl px-3.5 py-1.5 sm:px-5 sm:py-2 rounded-xl bg-black/75 backdrop-blur-sm shadow-2xl border border-white/10 text-center font-bold whitespace-pre-line leading-relaxed ${subtitleSizeClass}`}
+              className={`max-w-3xl px-3.5 py-1.5 sm:px-5 sm:py-2 rounded-lg bg-black/75 backdrop-blur-sm text-center font-bold whitespace-pre-line leading-relaxed ${subtitleSizeClass}`}
               style={{ color: subtitleColor, textShadow: '0 2px 6px rgba(0,0,0,0.95)' }}
             >
               {activeSubtitleText}
@@ -1753,15 +2282,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
           </div>
         )}
 
-        {/* Seek +/- 10s Feedback Indicator */}
+        {/* Double-Tap Seek Feedback */}
         <AnimatePresence>
           {seekFeedback && (
             <motion.div
               initial={{ opacity: 0, scale: 0.85 }}
               animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              transition={{ duration: 0.18 }}
-              className={`absolute top-1/2 -translate-y-1/2 z-20 pointer-events-none flex flex-col items-center justify-center bg-black/70 backdrop-blur-md border border-amber-400/40 rounded-full w-20 h-20 text-amber-400 shadow-2xl ${
+              exit={{ opacity: 0, scale: 0.92 }}
+              transition={{ duration: 0.16 }}
+              className={`absolute top-1/2 -translate-y-1/2 z-20 pointer-events-none flex flex-col items-center justify-center bg-black/70 backdrop-blur-md rounded-full w-20 h-20 text-[#F7C600] ${
                 seekFeedback === 'forward' ? 'right-8 sm:right-16' : 'left-8 sm:left-16'
               }`}
             >
@@ -1777,61 +2306,54 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
           )}
         </AnimatePresence>
 
-        {/* Loading / Buffering Overlay */}
+        {/* Minimal Loading Indicator */}
         {isLoading && !errorMessage && !isEnded && (
-          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/55 backdrop-blur-[2px] pointer-events-none px-6 text-center">
-            <div className="w-12 h-12 sm:w-14 sm:h-14 border-4 border-amber-400/25 border-t-amber-400 rounded-full animate-spin mb-3" />
-            <p className="text-amber-300 text-xs sm:text-sm font-bold">
-              جارٍ تجهيز البث — {media.titleAr || media.title}
-            </p>
-            <p className="text-[11px] text-zinc-400 mt-1">
-              يتم تحميل الفيديو تدريجياً لتشغيل أسرع دون استهلاك كامل للبيانات
-            </p>
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/45 pointer-events-none">
+            <div className="w-11 h-11 sm:w-12 sm:h-12 border-[3px] border-white/20 border-t-[#F7C600] rounded-full animate-spin" />
           </div>
         )}
 
-        {/* Resume Playback Prompt */}
+        {/* Resume Watch Prompt */}
         <AnimatePresence>
           {resumePrompt !== null && !errorMessage && !isEnded && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              onPointerUp={(e) => e.stopPropagation()}
-              className="absolute top-20 left-1/2 -translate-x-1/2 z-40 bg-zinc-950/95 border border-amber-400/45 rounded-2xl p-3 px-4 shadow-2xl backdrop-blur-xl flex flex-wrap sm:flex-nowrap items-center gap-3 text-xs sm:text-sm w-[92vw] sm:w-auto max-w-lg"
-            >
-              <Clock className="w-4 h-4 text-amber-400 shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-white font-bold">
-                  توقفت سابقاً عند{' '}
-                  <span className="text-amber-400 tabular-nums">
-                    {formatClockTime(resumePrompt)}
-                  </span>
-                </p>
-                <p className="text-[11px] text-zinc-400">استكمل المشاهدة من نفس اللحظة</p>
-              </div>
-              <div className="flex items-center gap-1.5 shrink-0">
+            <div className="absolute top-16 sm:top-20 inset-x-0 z-40 flex justify-center px-4 pointer-events-none">
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                onPointerUp={(e) => e.stopPropagation()}
+                className="pointer-events-auto bg-zinc-950/90 border border-white/15 rounded-2xl p-2.5 px-3.5 shadow-2xl backdrop-blur-xl flex items-center gap-3 text-xs w-full sm:w-auto max-w-md"
+              >
+                <Clock className="w-4 h-4 text-[#F7C600] shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-white font-semibold truncate">
+                    متابعة من{' '}
+                    <span className="text-[#F7C600] tabular-nums">
+                      {formatClockTime(resumePrompt)}
+                    </span>
+                  </p>
+                </div>
                 <button
                   type="button"
                   onClick={resumeSavedProgress}
-                  className="min-h-[38px] px-3 bg-amber-400 hover:bg-amber-300 text-black text-xs font-bold rounded-xl transition-colors cursor-pointer"
+                  className="min-h-[34px] px-3 bg-[#F7C600] hover:bg-amber-300 text-black font-bold rounded-xl transition-colors cursor-pointer shrink-0"
                 >
                   استكمال
                 </button>
                 <button
                   type="button"
                   onClick={() => setResumePrompt(null)}
-                  aria-label="إغلاق تنبيه الاستكمال"
-                  className="min-w-[38px] min-h-[38px] rounded-xl text-zinc-400 hover:text-white hover:bg-white/10 flex items-center justify-center cursor-pointer"
+                  aria-label="إغلاق"
+                  className="min-w-[34px] min-h-[34px] rounded-xl text-zinc-400 hover:text-white flex items-center justify-center cursor-pointer shrink-0"
                 >
                   <X className="w-4 h-4" />
                 </button>
-              </div>
-            </motion.div>
+              </motion.div>
+            </div>
           )}
         </AnimatePresence>
 
-        {/* Skip Intro Button (only rendered when intro boundaries exist) */}
+        {/* Skip Intro Button */}
         <AnimatePresence>
           {canSkipIntro && !errorMessage && !isEnded && (
             <motion.button
@@ -1841,7 +2363,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
               exit={{ opacity: 0, x: -12 }}
               onPointerUp={(e) => e.stopPropagation()}
               onClick={() => handleSeek(introEnd as number)}
-              className="absolute bottom-28 sm:bottom-32 left-4 sm:left-6 z-30 min-h-[44px] px-4 py-2 rounded-xl bg-zinc-950/90 hover:bg-amber-400 text-white hover:text-black border border-amber-400/50 text-xs sm:text-sm font-bold flex items-center gap-2 backdrop-blur-md shadow-2xl transition-all active:scale-95 cursor-pointer"
+              className="absolute bottom-24 sm:bottom-28 left-4 sm:left-6 z-30 min-h-[40px] px-4 rounded-full bg-white/15 hover:bg-[#F7C600] text-white hover:text-black backdrop-blur-md text-xs font-bold flex items-center gap-2 transition-all active:scale-95 cursor-pointer"
             >
               <FastForward className="w-4 h-4" />
               <span>تخطي المقدمة</span>
@@ -1849,7 +2371,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
           )}
         </AnimatePresence>
 
-        {/* Floating Next Episode Prompt near End of Episode */}
+        {/* Next Episode Prompt */}
         <AnimatePresence>
           {showNextEpisodePrompt && nextEpisode && (
             <motion.button
@@ -1859,71 +2381,105 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
               exit={{ opacity: 0, x: 12 }}
               onPointerUp={(e) => e.stopPropagation()}
               onClick={() => handleSelectEpisode(activeEpisodeIndex + 1)}
-              className="absolute bottom-28 sm:bottom-32 right-4 sm:right-6 z-30 min-h-[44px] px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs sm:text-sm font-black flex items-center gap-2 shadow-2xl transition-all active:scale-95 cursor-pointer"
+              className="absolute bottom-24 sm:bottom-28 right-4 sm:right-6 z-30 min-h-[40px] px-4 rounded-full bg-[#F7C600] hover:bg-amber-300 text-black text-xs font-black flex items-center gap-2 shadow-xl transition-all active:scale-95 cursor-pointer"
             >
               <FastForward className="w-4 h-4" />
-              <span>الحلقة التالية: ح{nextEpisode.episodeNumber}</span>
+              <span>الحلقة التالية</span>
             </motion.button>
           )}
         </AnimatePresence>
 
-        {/* Center Play/Pause Button (smooth fade in/out with HUD) */}
+        {/* Center Minimal Transport Controls: Rewind 10s / Play-Pause / Forward 10s */}
         <AnimatePresence>
           {!isLoading && !errorMessage && !isEnded && showControls && (
-            <motion.button
-              key="center-play-btn"
-              type="button"
-              initial={{ opacity: 0, scale: 0.88 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              whileTap={{ scale: 0.9 }}
-              transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
-              onPointerUp={(e) => e.stopPropagation()}
-              onClick={(e) => {
-                e.stopPropagation();
-                togglePlay();
-              }}
-              aria-label={isPlaying ? 'إيقاف مؤقت' : 'تشغيل'}
-              className="absolute z-20 w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-black/65 hover:bg-amber-400 text-white hover:text-black border border-amber-400/45 flex items-center justify-center backdrop-blur-md transition-colors shadow-[0_0_30px_rgba(0,0,0,0.65)] cursor-pointer"
-            >
-              {isPlaying ? (
-                <Pause className="w-8 h-8 sm:w-9 sm:h-9 fill-current" />
-              ) : (
-                <Play className="w-8 h-8 sm:w-9 sm:h-9 fill-current ml-0.5" />
-              )}
-            </motion.button>
+            <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
+              <motion.div
+                key="center-transport"
+                initial={{ opacity: 0, scale: 0.94 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.94 }}
+                transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                dir="ltr"
+                onPointerUp={(e) => e.stopPropagation()}
+                className="pointer-events-auto flex items-center justify-center gap-6 sm:gap-10"
+              >
+                <button
+                  type="button"
+                  onClick={skipBackward}
+                  aria-label="تأخير 10 ثوانٍ"
+                  className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-black/50 hover:bg-white/15 active:scale-90 text-white flex items-center justify-center backdrop-blur-md transition-all relative cursor-pointer"
+                >
+                  <RotateCcw className="w-5 h-5 sm:w-6 sm:h-6" />
+                  <span className="absolute text-[9px] font-mono font-bold mt-0.5">10</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={togglePlay}
+                  aria-label={isPlaying ? 'إيقاف مؤقت' : 'تشغيل'}
+                  className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-black/60 hover:bg-[#F7C600] active:scale-92 text-white hover:text-black border border-white/20 hover:border-[#F7C600] flex items-center justify-center backdrop-blur-md transition-all shadow-2xl cursor-pointer"
+                >
+                  {isPlaying ? (
+                    <Pause className="w-7 h-7 sm:w-9 sm:h-9 fill-current" />
+                  ) : (
+                    <Play className="w-7 h-7 sm:w-9 sm:h-9 fill-current ml-0.5" />
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={skipForward}
+                  aria-label="تقديم 10 ثوانٍ"
+                  className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-black/50 hover:bg-white/15 active:scale-90 text-white flex items-center justify-center backdrop-blur-md transition-all relative cursor-pointer"
+                >
+                  <RotateCw className="w-5 h-5 sm:w-6 sm:h-6" />
+                  <span className="absolute text-[9px] font-mono font-bold mt-0.5">10</span>
+                </button>
+              </motion.div>
+            </div>
           )}
         </AnimatePresence>
 
-        {/* Offline Banner while already buffered */}
+        {/* Offline Banner */}
         {isOffline && !errorMessage && (
-          <div className="absolute top-20 right-4 z-30 px-3 py-1.5 rounded-xl bg-red-950/90 border border-red-500/40 text-red-200 text-xs font-bold flex items-center gap-2 backdrop-blur-md">
+          <div className="absolute top-16 right-4 z-30 px-3 py-1.5 rounded-full bg-red-950/90 border border-red-500/40 text-red-200 text-xs font-semibold flex items-center gap-2 backdrop-blur-md">
             <WifiOff className="w-4 h-4 shrink-0" />
             <span>انقطع الاتصال بالإنترنت</span>
           </div>
         )}
 
-        {/* Error Screen (never leaves blank black screen & stops retry loops) */}
+        {/* Error Screen */}
         {errorMessage && (
           <div
             onPointerUp={(e) => e.stopPropagation()}
             className="absolute inset-0 z-40 bg-black/92 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center"
           >
-            <div className="max-w-md w-full bg-zinc-950/90 border border-white/10 rounded-3xl p-6 sm:p-7 shadow-2xl">
-              <div className="w-14 h-14 rounded-2xl bg-red-500/15 border border-red-500/30 text-red-400 flex items-center justify-center mx-auto mb-4">
-                {isOffline ? <WifiOff className="w-7 h-7" /> : <AlertCircle className="w-7 h-7" />}
+            <div className="max-w-md w-full bg-zinc-950/90 border border-white/10 rounded-3xl p-6 shadow-2xl">
+              <div className="w-12 h-12 rounded-2xl bg-red-500/15 text-red-400 flex items-center justify-center mx-auto mb-4">
+                {isOffline ? <WifiOff className="w-6 h-6" /> : <AlertCircle className="w-6 h-6" />}
               </div>
-              <h3 className="text-white font-black text-base sm:text-lg mb-2">
+              <h3 className="text-white font-bold text-base sm:text-lg mb-2">
                 {isOffline ? 'لا يوجد اتصال بالإنترنت' : 'تعذر تشغيل الفيديو'}
               </h3>
               <p className="text-zinc-400 text-xs sm:text-sm mb-6 leading-relaxed">
                 {errorMessage}
               </p>
               <div className="flex flex-col sm:flex-row gap-2.5">
+                {ytEmbedBlocked && getYouTubeCanonicalUrl(selectedSourceUrl) && (
+                  <a
+                    href={getYouTubeCanonicalUrl(selectedSourceUrl) || '#'}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 min-h-[44px] px-4 bg-red-600 hover:bg-red-500 text-white font-bold text-xs sm:text-sm rounded-xl flex items-center justify-center gap-2 transition-all"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    <span>فتح في يوتيوب</span>
+                  </a>
+                )}
                 <button
                   type="button"
                   onClick={handleRetry}
-                  className="flex-1 min-h-[46px] px-4 bg-amber-400 hover:bg-amber-300 text-black font-black text-xs sm:text-sm rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer"
+                  className="flex-1 min-h-[44px] px-4 bg-[#F7C600] hover:bg-amber-300 text-black font-bold text-xs sm:text-sm rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer"
                 >
                   <RefreshCw className="w-4 h-4" />
                   <span>إعادة المحاولة</span>
@@ -1931,16 +2487,16 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
                 <button
                   type="button"
                   onClick={handleClosePlayer}
-                  className="flex-1 min-h-[46px] px-4 bg-zinc-900 hover:bg-zinc-800 text-zinc-200 font-bold text-xs sm:text-sm rounded-xl border border-white/10 transition-all cursor-pointer"
+                  className="flex-1 min-h-[44px] px-4 bg-white/10 hover:bg-white/15 text-white font-semibold text-xs sm:text-sm rounded-xl transition-all cursor-pointer"
                 >
-                  العودة للموقع
+                  إغلاق
                 </button>
               </div>
             </div>
           </div>
         )}
 
-        {/* Cinema End-of-Playback Screen */}
+        {/* End of Playback Screen */}
         {isEnded && !errorMessage && (
           <motion.div
             initial={{ opacity: 0 }}
@@ -1948,51 +2504,60 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
             onPointerUp={(e) => e.stopPropagation()}
             className="absolute inset-0 z-40 bg-black/90 backdrop-blur-md flex items-center justify-center p-5"
           >
-            <div className="max-w-lg w-full bg-zinc-950/95 border border-white/10 rounded-3xl p-6 sm:p-8 text-center shadow-2xl space-y-5">
-              <div className="w-14 h-14 rounded-2xl bg-amber-400/15 border border-amber-400/35 text-amber-400 flex items-center justify-center mx-auto">
-                <Film className="w-7 h-7" />
+            <div className="max-w-md w-full bg-zinc-950/95 border border-white/10 rounded-3xl p-6 text-center shadow-2xl space-y-5">
+              <div className="w-12 h-12 rounded-2xl bg-[#F7C600]/15 text-[#F7C600] flex items-center justify-center mx-auto">
+                <Film className="w-6 h-6" />
               </div>
 
               <div>
-                <p className="text-xs font-bold text-amber-400 mb-1">
-                  {nextEpisode ? 'انتهت الحلقة الحالية' : 'نهاية العرض السينمائي'}
+                <p className="text-xs font-bold text-[#F7C600] mb-1">
+                  {nextEpisode ? 'انتهت الحلقة' : 'انتهى العرض'}
                 </p>
-                <h3 className="text-lg sm:text-2xl font-black text-white">
+                <h3 className="text-lg sm:text-xl font-black text-white">
                   {media.titleAr || media.title}
                 </h3>
                 {activeEpisode && (
-                  <p className="text-xs sm:text-sm text-zinc-400 mt-1">
+                  <p className="text-xs text-zinc-400 mt-1">
                     الموسم {activeEpisode.seasonNumber} · الحلقة {activeEpisode.episodeNumber}:{' '}
                     {activeEpisode.title}
                   </p>
                 )}
               </div>
 
-              <div className="flex flex-col sm:flex-row gap-2.5 pt-1">
+              <div className="flex flex-col sm:flex-row gap-2.5">
                 {nextEpisode && (
                   <button
                     type="button"
                     onClick={() => handleSelectEpisode(activeEpisodeIndex + 1)}
-                    className="flex-1 min-h-[48px] px-4 bg-amber-400 hover:bg-amber-300 text-black font-black text-xs sm:text-sm rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer"
+                    className="flex-1 min-h-[44px] px-4 bg-[#F7C600] hover:bg-amber-300 text-black font-bold text-xs sm:text-sm rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer"
                   >
                     <FastForward className="w-4 h-4" />
-                    <span>تشغيل الحلقة التالية (ح{nextEpisode.episodeNumber})</span>
+                    <span>الحلقة التالية</span>
                   </button>
                 )}
 
                 <button
                   type="button"
                   onClick={() => {
+                    if (isYouTubeSource) {
+                      const yt = ytPlayerRef.current;
+                      if (!yt) return;
+                      setIsEnded(false);
+                      yt.seekTo(0, true);
+                      yt.playVideo();
+                      setIsPlaying(true);
+                      return;
+                    }
                     const video = videoRef.current;
                     if (!video) return;
                     setIsEnded(false);
                     video.currentTime = 0;
                     video.play().then(() => setIsPlaying(true)).catch(() => {});
                   }}
-                  className={`flex-1 min-h-[48px] px-4 font-bold text-xs sm:text-sm rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer ${
+                  className={`flex-1 min-h-[44px] px-4 font-bold text-xs sm:text-sm rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer ${
                     nextEpisode
-                      ? 'bg-zinc-900 hover:bg-zinc-800 text-white border border-white/10'
-                      : 'bg-amber-400 hover:bg-amber-300 text-black font-black'
+                      ? 'bg-white/10 hover:bg-white/15 text-white'
+                      : 'bg-[#F7C600] hover:bg-amber-300 text-black'
                   }`}
                 >
                   <RotateCcw className="w-4 h-4" />
@@ -2002,7 +2567,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
                 <button
                   type="button"
                   onClick={handleClosePlayer}
-                  className="min-h-[48px] px-4 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 font-bold text-xs sm:text-sm rounded-xl border border-white/10 transition-all cursor-pointer"
+                  className="min-h-[44px] px-4 bg-white/10 hover:bg-white/15 text-zinc-200 font-semibold text-xs sm:text-sm rounded-xl transition-all cursor-pointer"
                 >
                   إغلاق
                 </button>
@@ -2012,21 +2577,21 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
         )}
       </div>
 
-      {/* Bottom Cinema Control Bar */}
+      {/* 3. Clean Minimal Bottom Dock (Strictly Non-Overlapping Controls Row) */}
       <AnimatePresence>
         {(showControls || errorMessage) && !isEnded && (
           <motion.footer
-            initial={{ opacity: 0, y: 10 }}
+            initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 10 }}
-            transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+            exit={{ opacity: 0, y: 12 }}
+            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
             onPointerUp={(e) => e.stopPropagation()}
-            className="absolute bottom-0 inset-x-0 z-30 px-3 pb-3 pt-10 sm:px-5 sm:pb-4 bg-gradient-to-t from-black/95 via-black/80 to-transparent"
+            dir="ltr"
+            className="absolute bottom-0 inset-x-0 z-30 px-3 sm:px-6 pt-8 pb-3 sm:pb-5 bg-gradient-to-t from-black/90 via-black/55 to-transparent"
           >
-            {/* Interactive Progress Scrubber Bar with Subtle Golden Glow on Hover/Scrub */}
+            {/* Playback Timeline Scrubber */}
             <div
-              className="relative group w-full h-9 flex items-center mb-1.5"
-              dir="ltr"
+              className="relative group w-full h-7 flex items-center touch-none cursor-pointer"
               onMouseEnter={() => {
                 setIsProgressHovered(true);
                 revealControls();
@@ -2034,8 +2599,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
               onMouseMove={(e) => {
                 setIsProgressHovered(true);
                 if (!duration) return;
-                const rect = e.currentTarget.getBoundingClientRect();
-                const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+                const ratio = getTimelineRatio(
+                  e.clientX,
+                  e.clientY,
+                  e.currentTarget.getBoundingClientRect()
+                );
                 setHoverSeek({ time: ratio * duration, percent: ratio * 100 });
               }}
               onMouseLeave={() => {
@@ -2043,71 +2611,49 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
                 setHoverSeek(null);
                 scheduleControlsHide();
               }}
-              onTouchStart={(e) => {
+              onPointerDown={(e) => {
+                if (!duration) return;
                 setIsScrubbing(true);
                 revealControls();
-                if (!duration || !e.touches[0]) return;
-                const rect = e.currentTarget.getBoundingClientRect();
-                const ratio = Math.max(
-                  0,
-                  Math.min(1, (e.touches[0].clientX - rect.left) / rect.width)
+                e.currentTarget.setPointerCapture?.(e.pointerId);
+                const ratio = getTimelineRatio(
+                  e.clientX,
+                  e.clientY,
+                  e.currentTarget.getBoundingClientRect()
                 );
                 setHoverSeek({ time: ratio * duration, percent: ratio * 100 });
+                handleSeek(ratio * duration);
               }}
-              onTouchMove={(e) => {
-                if (!duration || !e.touches[0]) return;
-                const rect = e.currentTarget.getBoundingClientRect();
-                const ratio = Math.max(
-                  0,
-                  Math.min(1, (e.touches[0].clientX - rect.left) / rect.width)
+              onPointerMove={(e) => {
+                if (!isScrubbing || !duration) return;
+                const ratio = getTimelineRatio(
+                  e.clientX,
+                  e.clientY,
+                  e.currentTarget.getBoundingClientRect()
                 );
                 setHoverSeek({ time: ratio * duration, percent: ratio * 100 });
+                handleSeek(ratio * duration);
               }}
-              onTouchEnd={() => {
+              onPointerUp={(e) => {
+                e.stopPropagation();
                 setIsScrubbing(false);
                 setHoverSeek(null);
                 scheduleControlsHide();
               }}
             >
-              {/* Soft Golden Ambient Glow Behind Progress Track on Hover/Scrub */}
-              <div
-                aria-hidden="true"
-                className={`pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 h-5 rounded-full transition-opacity duration-300 ease-out ${
-                  isProgressHovered || isScrubbing ? 'opacity-100' : 'opacity-0'
-                }`}
-              >
-                <div
-                  className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-amber-500/20 via-amber-400/35 to-amber-300/25 blur-md transition-all duration-150"
-                  style={{
-                    width: `${Math.max(
-                      10,
-                      hoverSeek ? hoverSeek.percent : progressPercent
-                    )}%`,
-                  }}
-                />
-                <div
-                  className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-16 h-6 rounded-full bg-amber-400/35 blur-lg transition-all duration-100"
-                  style={{
-                    left: `${hoverSeek ? hoverSeek.percent : progressPercent}%`,
-                  }}
-                />
-              </div>
-
               {hoverSeek && (
                 <div
-                  className="hidden sm:block absolute -top-7 -translate-x-1/2 px-2 py-0.5 rounded-md bg-zinc-900/95 border border-amber-400/30 text-amber-300 text-[11px] font-mono font-bold tabular-nums pointer-events-none shadow-lg"
+                  className="absolute -top-7 -translate-x-1/2 px-2 py-0.5 rounded-md bg-zinc-900/95 text-white text-[11px] font-mono font-semibold tabular-nums pointer-events-none shadow-lg"
                   style={{ left: `${hoverSeek.percent}%` }}
                 >
                   {formatClockTime(hoverSeek.time)}
                 </div>
               )}
 
-              {/* Visual Track & Buffered/Played Fill */}
+              {/* Visual Track */}
               <div
-                className={`relative w-full bg-white/20 rounded-full overflow-hidden pointer-events-none transition-all duration-200 ${
-                  isProgressHovered || isScrubbing
-                    ? 'h-2 shadow-[0_0_16px_rgba(251,191,36,0.3)]'
-                    : 'h-1.5'
+                className={`relative w-full bg-white/25 rounded-full overflow-hidden pointer-events-none transition-all duration-150 ${
+                  isProgressHovered || isScrubbing ? 'h-1.5' : 'h-1'
                 }`}
               >
                 <div
@@ -2115,53 +2661,47 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
                   style={{ width: `${bufferedPercent}%` }}
                 />
                 <div
-                  className="absolute inset-y-0 left-0 bg-gradient-to-r from-amber-500 to-amber-300 rounded-full"
+                  className="absolute inset-y-0 left-0 bg-[#F7C600] rounded-full"
                   style={{ width: `${progressPercent}%` }}
                 />
               </div>
 
               <input
                 type="range"
-                aria-label="شريط تقدم الفيديو"
-                dir="ltr"
+                aria-label="شريط التقديم"
                 min={0}
                 max={duration || 100}
                 step={0.1}
                 value={currentTime}
-                onMouseDown={() => setIsScrubbing(true)}
-                onMouseUp={() => {
-                  setIsScrubbing(false);
-                  scheduleControlsHide();
-                }}
                 onChange={(e) => handleSeek(parseFloat(e.target.value))}
-                className="absolute inset-0 z-10 w-full h-9 opacity-0 cursor-pointer"
+                className="sr-only"
               />
 
-              {/* Visible Gold Thumb Handle */}
+              {/* Circular Gold Scrubber Thumb */}
               <div
-                className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full bg-amber-400 pointer-events-none transition-all duration-150 ${
+                className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 rounded-full bg-[#F7C600] pointer-events-none transition-all duration-150 ${
                   isProgressHovered || isScrubbing
-                    ? 'scale-110 shadow-[0_0_16px_rgba(251,191,36,0.9)]'
-                    : 'shadow-[0_0_10px_rgba(250,204,21,0.65)]'
+                    ? 'w-4 h-4 shadow-[0_0_12px_rgba(247,198,0,0.85)]'
+                    : 'w-3 h-3 shadow-[0_0_8px_rgba(247,198,0,0.5)]'
                 }`}
                 style={{ left: `${progressPercent}%` }}
               />
             </div>
 
-            {/* Control Buttons Row */}
-            <div className="flex items-center justify-between gap-2 text-white" dir="ltr">
-              {/* Left Playback Controls */}
-              <div className="flex items-center gap-1 sm:gap-2 min-w-0">
+            {/* Control Row: Clean Left Playback + Center-Left Time + Right Screen Actions */}
+            <div className="flex items-center justify-between gap-2 sm:gap-4 mt-1 text-white">
+              {/* Playback & Volume & Timestamp Cluster */}
+              <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0">
                 <button
                   type="button"
                   onClick={togglePlay}
                   aria-label={isPlaying ? 'إيقاف مؤقت' : 'تشغيل'}
-                  className="min-w-[44px] min-h-[44px] rounded-xl flex items-center justify-center text-white hover:text-amber-400 hover:bg-white/10 active:scale-95 transition-all cursor-pointer"
+                  className="w-10 h-10 min-w-[40px] min-h-[40px] rounded-full flex items-center justify-center text-white hover:bg-white/10 active:scale-90 transition-all cursor-pointer shrink-0"
                 >
                   {isPlaying ? (
-                    <Pause className="w-5 h-5 sm:w-6 sm:h-6" />
+                    <Pause className="w-5 h-5 fill-current" />
                   ) : (
-                    <Play className="w-5 h-5 sm:w-6 sm:h-6 fill-current" />
+                    <Play className="w-5 h-5 fill-current ml-0.5" />
                   )}
                 </button>
 
@@ -2169,29 +2709,29 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
                   type="button"
                   onClick={skipBackward}
                   aria-label="تأخير 10 ثوانٍ"
-                  className="min-w-[44px] min-h-[44px] rounded-xl flex items-center justify-center text-zinc-200 hover:text-amber-400 hover:bg-white/10 active:scale-95 transition-all relative cursor-pointer"
+                  className="hidden sm:flex w-10 h-10 min-w-[40px] min-h-[40px] rounded-full items-center justify-center text-zinc-200 hover:text-white hover:bg-white/10 active:scale-90 transition-all relative cursor-pointer shrink-0"
                 >
-                  <RotateCcw className="w-5 h-5" />
-                  <span className="absolute text-[9px] font-mono font-bold">10</span>
+                  <RotateCcw className="w-4.5 h-4.5" />
+                  <span className="absolute text-[8px] font-mono font-bold mt-0.5">10</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={skipForward}
                   aria-label="تقديم 10 ثوانٍ"
-                  className="min-w-[44px] min-h-[44px] rounded-xl flex items-center justify-center text-zinc-200 hover:text-amber-400 hover:bg-white/10 active:scale-95 transition-all relative cursor-pointer"
+                  className="hidden sm:flex w-10 h-10 min-w-[40px] min-h-[40px] rounded-full items-center justify-center text-zinc-200 hover:text-white hover:bg-white/10 active:scale-90 transition-all relative cursor-pointer shrink-0"
                 >
-                  <RotateCw className="w-5 h-5" />
-                  <span className="absolute text-[9px] font-mono font-bold">10</span>
+                  <RotateCw className="w-4.5 h-4.5" />
+                  <span className="absolute text-[8px] font-mono font-bold mt-0.5">10</span>
                 </button>
 
-                {/* Volume Control (Mute on mobile + slider on sm+) */}
-                <div className="flex items-center gap-1.5 group/vol">
+                {/* Volume Control */}
+                <div className="flex items-center gap-1.5 shrink-0">
                   <button
                     type="button"
                     onClick={toggleMute}
                     aria-label={isMuted ? 'إلغاء كتم الصوت' : 'كتم الصوت'}
-                    className="min-w-[44px] min-h-[44px] rounded-xl flex items-center justify-center text-zinc-200 hover:text-amber-400 hover:bg-white/10 active:scale-95 transition-all cursor-pointer"
+                    className="w-10 h-10 min-w-[40px] min-h-[40px] rounded-full flex items-center justify-center text-zinc-200 hover:text-white hover:bg-white/10 active:scale-90 transition-all cursor-pointer"
                   >
                     {isMuted || volume === 0 ? (
                       <VolumeX className="w-5 h-5 text-red-400" />
@@ -2202,51 +2742,54 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
                   <input
                     type="range"
                     aria-label="مستوى الصوت"
-                    dir="ltr"
                     min={0}
                     max={1}
                     step={0.05}
                     value={isMuted ? 0 : volume}
                     onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
-                    className="hidden sm:block w-20 h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-amber-400"
+                    className="hidden md:block w-20 h-1 bg-white/25 rounded-lg appearance-none cursor-pointer accent-[#F7C600]"
                   />
                 </div>
 
-                {/* Current / Total Time */}
-                <div className="flex items-center gap-1 font-mono text-[11px] sm:text-xs text-zinc-300 px-1.5 tabular-nums shrink-0">
-                  <span className="text-amber-400 font-bold">{formatClockTime(currentTime)}</span>
+                {/* Separated Clean Timestamp */}
+                <div className="flex items-center gap-1 font-mono text-xs tabular-nums whitespace-nowrap pl-1 sm:pl-2 shrink-0">
+                  <span className="text-white font-semibold">{formatClockTime(currentTime)}</span>
                   <span className="text-zinc-500">/</span>
-                  <span>{formatClockTime(duration)}</span>
+                  <span className="text-zinc-400">{formatClockTime(duration)}</span>
                 </div>
               </div>
 
-              {/* Right Fullscreen & Quality Badge */}
-              <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-                {nextEpisode && (
-                  <button
-                    type="button"
-                    onClick={() => handleSelectEpisode(activeEpisodeIndex + 1)}
-                    aria-label="الحلقة التالية"
-                    className="sm:hidden min-w-[44px] min-h-[44px] rounded-xl flex items-center justify-center text-amber-400 hover:bg-white/10 active:scale-95 transition-all cursor-pointer"
-                  >
-                    <FastForward className="w-5 h-5" />
-                  </button>
-                )}
-
-                <span className="hidden md:inline text-xs font-bold text-amber-300 px-2">
-                  {activeQualityLabel}
-                </span>
+              {/* Right Cluster: Dedicated Landscape Rotation & Dedicated Fullscreen */}
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={toggleLandscapeOrientation}
+                  aria-label={isLandscapeMode ? 'الوضع العمودي' : 'تدوير للوضع الأفقي'}
+                  title={isLandscapeMode ? 'العودة للوضع العمودي' : 'تدوير الشاشة أفقياً'}
+                  className={`w-10 h-10 min-w-[40px] min-h-[40px] rounded-full flex items-center justify-center transition-all active:scale-90 cursor-pointer ${
+                    isLandscapeMode
+                      ? 'bg-[#F7C600] text-black shadow-lg'
+                      : 'bg-white/10 hover:bg-white/20 text-white'
+                  }`}
+                >
+                  <RotateCw className="w-4.5 h-4.5" />
+                </button>
 
                 <button
                   type="button"
                   onClick={toggleFullscreen}
                   aria-label={isFullscreen ? 'إنهاء ملء الشاشة' : 'ملء الشاشة'}
-                  className="min-w-[44px] min-h-[44px] rounded-xl flex items-center justify-center text-zinc-100 hover:text-amber-400 hover:bg-white/10 active:scale-95 transition-all cursor-pointer"
+                  title={isFullscreen ? 'إنهاء ملء الشاشة' : 'ملء الشاشة'}
+                  className={`w-10 h-10 min-w-[40px] min-h-[40px] rounded-full flex items-center justify-center transition-all active:scale-90 cursor-pointer ${
+                    isFullscreen
+                      ? 'bg-[#F7C600] text-black shadow-lg'
+                      : 'bg-white/10 hover:bg-white/20 text-white'
+                  }`}
                 >
                   {isFullscreen ? (
-                    <Minimize className="w-5 h-5" />
+                    <Minimize className="w-4.5 h-4.5" />
                   ) : (
-                    <Maximize className="w-5 h-5" />
+                    <Maximize className="w-4.5 h-4.5" />
                   )}
                 </button>
               </div>

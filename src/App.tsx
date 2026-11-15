@@ -68,6 +68,16 @@ import {
   AlertCircle,
   RefreshCw,
   X,
+  Star,
+  Flame,
+  Film,
+  Tv,
+  Heart,
+  LayoutGrid,
+  Clapperboard,
+  ArrowLeft,
+  ArrowRight,
+  Plus,
 } from 'lucide-react';
 
 export default function App() {
@@ -370,6 +380,11 @@ export default function App() {
 
   const handleBottomTabSelect = useCallback(
     (tab: BottomNavTab) => {
+      if (tab === 'settings') {
+        setIsSideMenuOpen(true);
+        return;
+      }
+
       if (tab === 'profile') {
         if (!authUser) {
           handleOpenLogin();
@@ -616,13 +631,37 @@ export default function App() {
         <div className="absolute -top-24 -left-24 w-[440px] h-[440px] rounded-full bg-[#F7C600]/[0.07] blur-[110px]" />
         <div className="absolute bottom-8 -right-24 w-[460px] h-[460px] rounded-full bg-[#F7C600]/[0.08] blur-[120px]" />
         <div className="absolute top-[14%] -inset-x-[20%] h-[58%] rounded-[50%] bg-gradient-to-br from-white/[0.025] via-transparent to-[#F7C600]/[0.03] -rotate-12" />
+        <svg
+          viewBox="0 0 1200 220"
+          preserveAspectRatio="none"
+          className="absolute bottom-10 md:bottom-0 inset-x-0 w-full h-36 opacity-50"
+        >
+          <defs>
+            <linearGradient id="gfBottomWave" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#F7C600" stopOpacity="0.04" />
+              <stop offset="35%" stopColor="#F7C600" stopOpacity="0.22" />
+              <stop offset="70%" stopColor="#F7C600" stopOpacity="0.16" />
+              <stop offset="100%" stopColor="#F7C600" stopOpacity="0.03" />
+            </linearGradient>
+          </defs>
+          <path
+            d="M0,145 C240,65 520,185 840,95 C1000,50 1120,90 1200,120 L1200,220 L0,220 Z"
+            fill="url(#gfBottomWave)"
+          />
+        </svg>
       </div>
       {/* Top Cinema Header */}
       <TopHeader
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         onOpenSideMenu={() => setIsSideMenuOpen(true)}
-        onOpenGoogleLogin={handleOpenLogin}
+        onOpenGoogleLogin={() => {
+          if (authUser) {
+            setIsUserProfileOpen(true);
+          } else {
+            handleOpenLogin();
+          }
+        }}
         googleUser={authUser}
         activeTab={activeTab}
         bottomNavTab={bottomNavTab}
@@ -833,8 +872,8 @@ export default function App() {
               </div>
             ) : (
               <>
-                {/* 1. Large Cinematic Hero Banner (Admin Banners + Featured Items) */}
-                {heroSlides.length > 0 && siteSettings?.homeSections?.showHeroBanner !== false && (
+                {/* 1. Hero Banner (Featured Slides OR Curved Gold Welcome Card) */}
+                {siteSettings?.homeSections?.showHeroBanner !== false && (
                   <HeroBanner
                     slides={heroSlides}
                     onPlayMedia={(item) => handleStartPlay(item)}
@@ -851,8 +890,80 @@ export default function App() {
                   onViewHistory={() => handleBottomTabSelect('history')}
                 />
 
-                {/* 4. Compact Surprise Pick Bar */}
-                {siteSettings?.homeSections?.showQuickExplore !== false && (
+                {/* 3. Main Categories 4-Card Row Matching Mockup */}
+                <section aria-label={t('الأقسام الرئيسية', 'Main Categories')} className="space-y-3.5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <Star className="w-5 h-5 fill-[#F7C600] text-[#F7C600] shrink-0" />
+                      <span className="h-4 w-[2px] rounded-full bg-white/35" aria-hidden="true" />
+                      <h2 className="text-base sm:text-xl font-black text-white tracking-tight">
+                        {t('الأقسام الرئيسية', 'Main Categories')}
+                      </h2>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleBottomTabSelect('categories')}
+                      className="inline-flex items-center gap-1.5 text-[11px] sm:text-xs font-bold text-zinc-200 hover:text-white bg-[#17171c] hover:bg-[#1f1f27] px-3 py-1.5 rounded-full border border-white/10 hover:border-[#F7C600]/45 transition-all cursor-pointer shrink-0"
+                    >
+                      <span>{t('عرض الكل', 'View All')}</span>
+                      {dir === 'ltr' ? (
+                        <ArrowRight className="w-3.5 h-3.5 text-[#F7C600]" />
+                      ) : (
+                        <ArrowLeft className="w-3.5 h-3.5 text-[#F7C600]" />
+                      )}
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-4 gap-2 sm:gap-3.5">
+                    {[
+                      {
+                        id: 'movies',
+                        label: t('الأفلام', 'Movies'),
+                        icon: Film,
+                        onClick: () => handleTopTabSelect('movies'),
+                      },
+                      {
+                        id: 'series',
+                        label: t('المسلسلات', 'Series'),
+                        icon: Tv,
+                        onClick: () => handleTopTabSelect('series'),
+                      },
+                      {
+                        id: 'favorites',
+                        label: t('المفضلة', 'Favorites'),
+                        icon: Heart,
+                        onClick: () => handleBottomTabSelect('favorites'),
+                      },
+                      {
+                        id: 'categories',
+                        label: t('التصنيفات', 'Categories'),
+                        icon: LayoutGrid,
+                        onClick: () => handleBottomTabSelect('categories'),
+                      },
+                    ].map((cat) => {
+                      const CatIcon = cat.icon;
+                      return (
+                        <motion.button
+                          key={cat.id}
+                          whileHover={{ y: -2 }}
+                          whileTap={{ scale: 0.96 }}
+                          type="button"
+                          onClick={cat.onClick}
+                          className="group relative flex flex-col items-center justify-center gap-2 py-4 sm:py-6 px-1.5 sm:px-3 rounded-2xl bg-gradient-to-b from-[#17171e] via-[#111116] to-[#15120a] border border-white/[0.08] border-b-[#F7C600]/65 shadow-[0_10px_24px_-12px_rgba(247,198,0,0.45),inset_0_-12px_20px_-14px_rgba(247,198,0,0.28)] hover:border-[#F7C600]/75 transition-all cursor-pointer"
+                        >
+                          <CatIcon className="w-5 h-5 sm:w-7 sm:h-7 text-zinc-200 group-hover:text-[#F7C600] transition-colors shrink-0" />
+                          <span className="text-[11px] sm:text-sm font-bold text-zinc-100 group-hover:text-white whitespace-nowrap truncate max-w-full">
+                            {cat.label}
+                          </span>
+                        </motion.button>
+                      );
+                    })}
+                  </div>
+                </section>
+
+                {/* 4. Compact Surprise Pick Bar (shown when library has titles) */}
+                {mediaItems.length > 0 && siteSettings?.homeSections?.showQuickExplore !== false && (
                   <SurprisePickBar
                     mediaItems={mediaItems}
                     onPlayMedia={(item) => handleStartPlay(item)}
@@ -860,34 +971,53 @@ export default function App() {
                   />
                 )}
 
-                {/* Empty Library State */}
+                {/* Empty Library State inside Most Watched Mockup Card */}
                 {mediaItems.length === 0 && (
-                  <EmptyCinemaState
-                    titleStart={t('مكتبتك', 'Your Library is')}
-                    titleHighlight={t('فارغة', 'Empty')}
-                    titleEnd={t('حالياً', 'Right Now')}
-                    subtitle={
-                      isDeveloperUser
-                        ? t(
-                            'يمكنك إضافة أول فيلم أو مسلسل إلى المنصة من لوحة التحكم الإدارية',
-                            'You can publish your first movie or series from the Admin Dashboard'
-                          )
-                        : t(
-                            'ستجد هنا أحدث الأفلام والمسلسلات فور إضافتها على GoldenFlix',
-                            'Latest movies and series will appear here as soon as they are published'
-                          )
-                    }
-                    ctaLabel={
-                      isDeveloperUser
-                        ? t('فتح لوحة التحكم ورفع المحتوى', 'Open Admin Dashboard & Upload')
-                        : t('استكشاف التصنيفات', 'Explore Categories')
-                    }
-                    onCtaClick={
-                      isDeveloperUser
-                        ? handleOpenDeveloperSuite
-                        : () => handleBottomTabSelect('categories')
-                    }
-                  />
+                  <section aria-label={t('الأكثر مشاهدة', 'Most Watched')} className="space-y-3.5">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <Flame className="w-5 h-5 fill-[#F7C600] text-[#F7C600] shrink-0" />
+                        <span className="h-4 w-[2px] rounded-full bg-white/35" aria-hidden="true" />
+                        <h2 className="text-base sm:text-xl font-black text-white tracking-tight">
+                          {t('الأكثر مشاهدة', 'Most Watched')}
+                        </h2>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleBottomTabSelect('categories')}
+                        className="inline-flex items-center gap-1.5 text-[11px] sm:text-xs font-bold text-zinc-200 hover:text-white bg-[#17171c] hover:bg-[#1f1f27] px-3 py-1.5 rounded-full border border-white/10 hover:border-[#F7C600]/45 transition-all cursor-pointer shrink-0"
+                      >
+                        <span>{t('عرض الكل', 'View All')}</span>
+                        {dir === 'ltr' ? (
+                          <ArrowRight className="w-3.5 h-3.5 text-[#F7C600]" />
+                        ) : (
+                          <ArrowLeft className="w-3.5 h-3.5 text-[#F7C600]" />
+                        )}
+                      </button>
+                    </div>
+
+                    <div className="w-full rounded-3xl bg-[#101014]/95 border border-white/[0.08] py-12 sm:py-16 px-6 flex flex-col items-center justify-center text-center shadow-[0_20px_50px_rgba(0,0,0,0.65)]">
+                      <Clapperboard className="w-12 h-12 sm:w-14 sm:h-14 text-zinc-600/85 mb-3" />
+                      <h3 className="text-sm sm:text-base font-bold text-zinc-300">
+                        {t('لا توجد محتويات حالياً', 'No content available right now')}
+                      </h3>
+                      <p className="text-xs text-zinc-500 mt-1">
+                        {t('يمكنك العودة لاحقاً', 'Please check back later')}
+                      </p>
+
+                      {isDeveloperUser && (
+                        <button
+                          type="button"
+                          onClick={handleOpenDeveloperSuite}
+                          className="mt-5 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#F7C600] hover:bg-[#ffd52e] text-black text-xs font-black shadow-[0_8px_20px_rgba(247,198,0,0.3)] transition-all cursor-pointer"
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span>{t('فتح لوحة التحكم ورفع المحتوى', 'Open Admin Dashboard & Upload')}</span>
+                        </button>
+                      )}
+                    </div>
+                  </section>
                 )}
 
                 {/* 5. Latest Movies Section */}
@@ -994,17 +1124,22 @@ export default function App() {
             >
               {t('التصنيفات', 'Categories')}
             </button>
+            <button
+              type="button"
+              onClick={() => setIsSideMenuOpen(true)}
+              className="hover:text-amber-400 transition-colors cursor-pointer"
+            >
+              {t('الإعدادات', 'Settings')}
+            </button>
           </div>
         </div>
       </footer>
 
-      {/* Mobile Bottom Navigation: الرئيسية · الأفلام · المسلسلات · حسابي/دخول */}
+      {/* Mobile Bottom Navigation: الرئيسية · المسلسلات · المفضلة · الإعدادات */}
       <BottomNavigation
         currentTab={bottomNavTab}
         onSelectTab={handleBottomTabSelect}
-        user={authUser}
-        isProfileOpen={isUserProfileOpen}
-        isAuthOpen={isAuthModalOpen}
+        isSettingsOpen={isSideMenuOpen}
       />
 
       {/* Side Menu Drawer */}
@@ -1038,7 +1173,7 @@ export default function App() {
         onOpenEmailSettings={handleOpenEmailSettings}
       />
 
-      {/* User Profile Modal ("حسابي") */}
+      {/* User Profile Modal */}
       <UserProfileModal
         isOpen={isUserProfileOpen}
         onClose={() => setIsUserProfileOpen(false)}
@@ -1047,6 +1182,8 @@ export default function App() {
         onUserUpdated={(u) => setAuthUser(u)}
         favoritesCount={favorites.length}
         historyCount={history.length}
+        onOpenFavorites={() => handleBottomTabSelect('favorites')}
+        onOpenHistory={() => handleBottomTabSelect('history')}
       />
 
       {/* Video Player Modal / Fullscreen */}

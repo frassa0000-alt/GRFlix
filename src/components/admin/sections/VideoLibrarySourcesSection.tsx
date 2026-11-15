@@ -33,6 +33,7 @@ import {
   SiteFileEntry,
   VideoSourceOption,
 } from '../../../types';
+import { extractYouTubeVideoId, getYouTubeEmbedUrl, isYouTubeUrl } from '../../../utils/youtube';
 
 interface VideoLibrarySourcesSectionProps {
   mode: 'video_library' | 'playback_links';
@@ -62,8 +63,8 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
   const [sources, setSources] = useState<VideoSourceOption[]>([]);
   const [newLabel, setNewLabel] = useState<string>('السيرفر الأساسي');
   const [newUrl, setNewUrl] = useState<string>('');
-  const [newFormat, setNewFormat] = useState<'mp4' | 'hls' | 'webm'>('mp4');
-  const [newQuality, setNewQuality] = useState<string>('1080p Full HD');
+  const [newFormat, setNewFormat] = useState<'mp4' | 'hls' | 'webm' | 'youtube'>('mp4');
+  const [newQuality, setNewQuality] = useState<string>('1080p');
   const [testResults, setTestResults] = useState<Record<string, StreamTestResult>>({});
   const [testingUrlKey, setTestingUrlKey] = useState<string | null>(null);
   const [isSavingLinks, setIsSavingLinks] = useState<boolean>(false);
@@ -105,8 +106,12 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
                 id: 'primary',
                 label: `المصدر الرئيسي (${selectedMedia.videoQuality || 'HD'})`,
                 url: selectedMedia.videoUrl,
-                format: selectedMedia.videoUrl.includes('.m3u8') ? 'hls' : 'mp4',
-                quality: selectedMedia.videoQuality || '1080p Full HD',
+                format: isYouTubeUrl(selectedMedia.videoUrl)
+                  ? 'youtube'
+                  : selectedMedia.videoUrl.includes('.m3u8')
+                  ? 'hls'
+                  : 'mp4',
+                quality: selectedMedia.videoQuality || '1080p',
                 isDefault: true,
               },
             ]
@@ -222,6 +227,19 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
   const handleRunTestUrl = async (key: string, url: string) => {
     setTestingUrlKey(key);
     try {
+      const ytId = extractYouTubeVideoId(url);
+      if (ytId) {
+        setTestResults((prev) => ({
+          ...prev,
+          [key]: {
+            ok: true,
+            status: 200,
+            format: `YouTube (${ytId})`,
+            supportsRange: true,
+          },
+        }));
+        return;
+      }
       const result = await testStreamUrl(token, url);
       setTestResults((prev) => ({ ...prev, [key]: result }));
     } catch (err: any) {
@@ -261,11 +279,13 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
   const handleAddSource = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newUrl.trim()) return;
+    const trimmed = newUrl.trim();
+    const effectiveFormat = isYouTubeUrl(trimmed) ? 'youtube' : newFormat;
     const item: VideoSourceOption = {
       id: `src-${Date.now()}`,
       label: newLabel.trim() || `سيرفر ${sources.length + 1}`,
-      url: newUrl.trim(),
-      format: newFormat,
+      url: trimmed,
+      format: effectiveFormat,
       quality: newQuality,
       isDefault: sources.length === 0,
     };
@@ -593,7 +613,15 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
                 </button>
               </div>
               <div className="bg-black aspect-video flex items-center justify-center">
-                {/\.(png|jpe?g|webp|gif|svg)$/i.test(previewSrc) ? (
+                {isYouTubeUrl(previewSrc) ? (
+                  <iframe
+                    src={getYouTubeEmbedUrl(previewSrc, { autoplay: true }) || ''}
+                    title="YouTube Preview"
+                    className="w-full h-full border-0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowFullScreen
+                  />
+                ) : /\.(png|jpe?g|webp|gif|svg)$/i.test(previewSrc) ? (
                   <img src={previewSrc} alt="Preview" className="max-w-full max-h-full object-contain" />
                 ) : (
                   <video src={previewSrc} controls autoPlay className="w-full h-full object-contain" />
@@ -673,8 +701,14 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
                 dir="ltr"
                 required
                 value={newUrl}
-                onChange={(e) => setNewUrl(e.target.value)}
-                placeholder="https://... أو /uploads/videos/..."
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setNewUrl(val);
+                  if (isYouTubeUrl(val)) {
+                    setNewFormat('youtube');
+                  }
+                }}
+                placeholder="https://youtube.com/watch?v=... أو /uploads/videos/..."
                 className="sm:col-span-5 bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono"
               />
               <select
@@ -685,6 +719,7 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
                 <option value="mp4">MP4</option>
                 <option value="hls">HLS (.m3u8)</option>
                 <option value="webm">WebM</option>
+                <option value="youtube">YouTube</option>
               </select>
               <input
                 type="text"

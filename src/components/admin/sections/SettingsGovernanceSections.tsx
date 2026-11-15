@@ -428,7 +428,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
                   className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white"
                 >
                   <option value="auto">تلقائي (Auto)</option>
-                  <option value="1080p">1080p Full HD</option>
+                  <option value="1080p">1080p</option>
                   <option value="720p">720p HD</option>
                 </select>
               </div>

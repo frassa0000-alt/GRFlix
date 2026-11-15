@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Play, Info, ChevronLeft, ChevronRight, Star } from 'lucide-react';
 import { MediaItem } from '../../types';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { formatQualityLabel } from '../../utils/quality';
 
 export interface HeroSlideItem {
   id: string;
@@ -26,6 +27,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
 }) => {
   const { dir, t, getMediaTitle, translateGenre } = useLanguage();
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [welcomeIndex, setWelcomeIndex] = useState(0);
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
@@ -42,8 +44,153 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
     return () => clearInterval(interval);
   }, [slides.length]);
 
+  const welcomeSlides = [
+    {
+      prefixAr: 'مرحباً بك في',
+      prefixEn: 'Welcome to',
+      brand: 'GoldenFlix',
+      subtitleAr: 'استمتع بمشاهدة أفضل الأفلام والمسلسلات',
+      subtitleEn: 'Enjoy watching the finest movies and series',
+    },
+    {
+      prefixAr: 'مكتبة سينمائية في',
+      prefixEn: 'Cinema Library on',
+      brand: 'GoldenFlix',
+      subtitleAr: 'جودة عالية وتشغيل فوري من أي جهاز',
+      subtitleEn: 'High quality instant streaming across every screen',
+    },
+    {
+      prefixAr: 'تجربة مشاهدة فاخرة مع',
+      prefixEn: 'Luxury Streaming with',
+      brand: 'GoldenFlix',
+      subtitleAr: 'تصفح أحدث الإصدارات والعروض الحصرية',
+      subtitleEn: 'Browse latest releases and exclusive premieres',
+    },
+    {
+      prefixAr: 'كل ما تحبه على',
+      prefixEn: 'Everything You Love on',
+      brand: 'GoldenFlix',
+      subtitleAr: 'أفلام، مسلسلات، ومفضلاتك في مكان واحد',
+      subtitleEn: 'Movies, series, and favorites all in one place',
+    },
+  ];
+
+  useEffect(() => {
+    if (slides && slides.length > 0) return;
+    const timer = setInterval(() => {
+      setWelcomeIndex((prev) => (prev + 1) % welcomeSlides.length);
+    }, 5500);
+    return () => clearInterval(timer);
+  }, [slides?.length, welcomeSlides.length]);
+
   if (!slides || slides.length === 0) {
-    return null;
+    const activeWelcome = welcomeSlides[welcomeIndex] || welcomeSlides[0];
+    return (
+      <section
+        aria-label={t('مرحباً بك في GoldenFlix', 'Welcome to GoldenFlix')}
+        className="relative w-full h-[185px] sm:h-[220px] md:h-[245px] overflow-hidden rounded-[22px] border border-[#F7C600]/20 bg-[#0d0d11] shadow-[0_22px_55px_rgba(0,0,0,0.8)] select-none"
+      >
+        {/* Curved Metallic Golden Ribbons Backdrop Matching Reference Visual */}
+        <svg
+          viewBox="0 0 800 320"
+          preserveAspectRatio="none"
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 w-full h-full"
+        >
+          <defs>
+            <linearGradient id="gfGoldSweepA" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#F7C600" stopOpacity="0.88" />
+              <stop offset="55%" stopColor="#8c6800" stopOpacity="0.28" />
+              <stop offset="100%" stopColor="#0d0d11" stopOpacity="0" />
+            </linearGradient>
+            <linearGradient id="gfGoldSweepB" x1="100%" y1="100%" x2="0%" y2="0%">
+              <stop offset="0%" stopColor="#F7C600" stopOpacity="0.92" />
+              <stop offset="48%" stopColor="#a37a00" stopOpacity="0.24" />
+              <stop offset="100%" stopColor="#0d0d11" stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          <path
+            d="M0,0 L280,0 C175,90 95,155 0,210 Z"
+            fill="url(#gfGoldSweepA)"
+          />
+          <path
+            d="M800,320 L480,320 C610,230 710,155 800,80 Z"
+            fill="url(#gfGoldSweepB)"
+          />
+          <path
+            d="M120,0 C240,120 510,210 800,190 L800,260 C490,265 230,170 40,0 Z"
+            fill="#F7C600"
+            fillOpacity="0.06"
+          />
+        </svg>
+
+        <div className="relative z-10 h-full px-5 sm:px-9 md:px-12 flex items-center justify-between gap-4">
+          {/* Welcome Text Block */}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={`welcome-${welcomeIndex}`}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+              className={`min-w-0 flex-1 space-y-1 sm:space-y-1.5 ${
+                dir === 'ltr' ? 'text-left' : 'text-right'
+              }`}
+            >
+              <p className="text-lg sm:text-2xl md:text-3xl font-bold text-white/95 leading-snug">
+                {dir === 'ltr' ? activeWelcome.prefixEn : activeWelcome.prefixAr}
+              </p>
+              <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tight leading-none">
+                <span className="text-white">Golden</span>
+                <span className="text-[#F7C600]">Flix</span>
+              </h1>
+              <p className="text-[11px] sm:text-sm text-zinc-300 font-medium pt-0.5 line-clamp-1">
+                {dir === 'ltr' ? activeWelcome.subtitleEn : activeWelcome.subtitleAr}
+              </p>
+            </motion.div>
+          </AnimatePresence>
+
+          {/* Glowing Large Golden Play Triangle Visual */}
+          <div className="shrink-0 flex items-center justify-center pl-1 sm:pl-4">
+            <div className="relative w-16 h-16 sm:w-24 sm:h-24 flex items-center justify-center">
+              <div className="absolute inset-0 rounded-full bg-[#F7C600]/20 blur-xl" />
+              <svg
+                viewBox="0 0 64 64"
+                className="relative w-14 h-14 sm:w-20 sm:h-20 drop-shadow-[0_10px_24px_rgba(247,198,0,0.45)]"
+              >
+                <defs>
+                  <linearGradient id="gfPlayTriangle" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="#ffe55c" />
+                    <stop offset="100%" stopColor="#f5b800" />
+                  </linearGradient>
+                </defs>
+                <path
+                  d="M16 11.5C16 8.8 18.9 7.1 21.3 8.5L51.5 26.2C53.8 27.6 53.8 30.9 51.5 32.3L21.3 50C18.9 51.4 16 49.7 16 47V11.5Z"
+                  fill="url(#gfPlayTriangle)"
+                />
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        {/* 4 Centered Pagination Dots */}
+        <div className="absolute bottom-3 inset-x-0 flex items-center justify-center gap-2 z-20">
+          {welcomeSlides.map((_, idx) => (
+            <button
+              key={idx}
+              type="button"
+              onClick={() => setWelcomeIndex(idx)}
+              aria-label={t(`الشريحة ${idx + 1}`, `Slide ${idx + 1}`)}
+              className={`h-2 rounded-full transition-all duration-300 cursor-pointer ${
+                idx === welcomeIndex
+                  ? 'w-2 bg-[#F7C600] shadow-[0_0_10px_rgba(247,198,0,0.85)]'
+                  : 'w-2 bg-white/25 hover:bg-white/55'
+              }`}
+            />
+          ))}
+        </div>
+      </section>
+    );
   }
 
   const currentSlide = slides[currentIndex] || slides[0];
@@ -172,7 +319,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
               {linkedMedia?.videoQuality && (
                 <>
                   <span className="text-amber-400 font-black tracking-wide uppercase">
-                    {linkedMedia.videoQuality}
+                    {formatQualityLabel(linkedMedia.videoQuality)}
                   </span>
                   <span className="text-white/30" aria-hidden="true">·</span>
                 </>

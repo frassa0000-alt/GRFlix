@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { Play, Star, Heart, EyeOff } from 'lucide-react';
 import { MediaItem } from '../../types';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { formatQualityLabel } from '../../utils/quality';
 
 export interface MediaCardProps {
   media?: MediaItem;
@@ -125,7 +126,7 @@ export const MediaCard: React.FC<MediaCardProps> = ({
           <div className="flex items-center gap-1 flex-wrap">
             {currentItem.videoQuality ? (
               <span className="bg-amber-400 text-black font-black text-[10px] px-1.5 py-0.5 rounded-md shadow-sm uppercase">
-                {currentItem.videoQuality}
+                {formatQualityLabel(currentItem.videoQuality)}
               </span>
             ) : null}
             {isHiddenItem && (
