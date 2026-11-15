@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { MediaItem, MediaType } from '../../types';
 import { MediaCard } from '../cards/MediaCard';
+import { EmptyCinemaState } from '../common/EmptyCinemaState';
 import { Heart, Film, Sparkles, Tv } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
 
@@ -9,6 +10,7 @@ interface FavoritesViewProps {
   mediaItems: MediaItem[];
   onSelectMedia: (item: MediaItem) => void;
   onToggleFavorite: (id: string) => void;
+  onBrowseContent?: () => void;
 }
 
 export const FavoritesView: React.FC<FavoritesViewProps> = ({
@@ -16,6 +18,7 @@ export const FavoritesView: React.FC<FavoritesViewProps> = ({
   mediaItems,
   onSelectMedia,
   onToggleFavorite,
+  onBrowseContent,
 }) => {
   const { t } = useLanguage();
   const [selectedType, setSelectedType] = useState<MediaType | 'all'>('all');
@@ -30,38 +33,41 @@ export const FavoritesView: React.FC<FavoritesViewProps> = ({
   }, [favoriteMedia, selectedType]);
 
   return (
-    <div className="px-3.5 sm:px-6 py-4 space-y-5 animate-fade-in">
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3">
-        <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
-            <Heart className="w-5 h-5 fill-amber-400/20" />
+    <div className="px-1 sm:px-2 py-2 space-y-5 animate-fade-in">
+      {/* Header when items exist */}
+      {favoriteMedia.length > 0 && (
+        <div className="flex items-center justify-between border-b border-white/[0.08] pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-full bg-[#F7C600]/12 border border-[#F7C600]/30 flex items-center justify-center text-[#F7C600]">
+              <Heart className="w-4.5 h-4.5 fill-[#F7C600]/20" />
+            </div>
+            <div>
+              <h2 className="text-base font-black text-white">
+                {t('قائمتي المفضلة', 'My Favorites')}
+              </h2>
+              <p className="text-[11px] text-zinc-400">
+                {t(
+                  'الأعمال السينمائية التي قمت بإضافتها للمفضلة',
+                  'Movies and series you bookmarked'
+                )}
+              </p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-base font-black text-white">
-              {t('قائمتي المفضلة', 'My Favorites')}
-            </h2>
-            <p className="text-[11px] text-zinc-400">
-              {t(
-                'الأعمال السينمائية التي قمت بإضافتها للمفضلة',
-                'Movies and series you bookmarked'
-              )}
-            </p>
-          </div>
+          <span className="text-xs font-bold text-[#F7C600] tabular-nums">
+            {favoriteMedia.length} {t('في المفضلة', 'saved')}
+          </span>
         </div>
-        <span className="text-xs font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-full border border-amber-500/20">
-          {favoriteMedia.length} {t('في المفضلة', 'saved')}
-        </span>
-      </div>
+      )}
 
       {/* Filter Tabs */}
       {favoriteMedia.length > 0 && (
-        <div className="grid grid-cols-3 gap-1.5 p-1 bg-zinc-900/90 rounded-2xl border border-zinc-800">
+        <div className="grid grid-cols-3 gap-1.5 p-1 bg-[#121217] rounded-full border border-white/[0.08]">
           <button
+            type="button"
             onClick={() => setSelectedType('all')}
-            className={`py-2 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+            className={`py-2 px-3 rounded-full text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
               selectedType === 'all'
-                ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-black shadow-md shadow-amber-500/20 font-black'
+                ? 'bg-[#F7C600] text-black shadow-md shadow-[#F7C600]/20 font-black'
                 : 'text-zinc-400 hover:text-white'
             }`}
           >
@@ -71,10 +77,11 @@ export const FavoritesView: React.FC<FavoritesViewProps> = ({
             </span>
           </button>
           <button
+            type="button"
             onClick={() => setSelectedType('movie')}
-            className={`py-2 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+            className={`py-2 px-3 rounded-full text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
               selectedType === 'movie'
-                ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-black shadow-md shadow-amber-500/20 font-black'
+                ? 'bg-[#F7C600] text-black shadow-md shadow-[#F7C600]/20 font-black'
                 : 'text-zinc-400 hover:text-white'
             }`}
           >
@@ -82,10 +89,11 @@ export const FavoritesView: React.FC<FavoritesViewProps> = ({
             <span>{t('أفلام', 'Movies')}</span>
           </button>
           <button
+            type="button"
             onClick={() => setSelectedType('series')}
-            className={`py-2 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+            className={`py-2 px-3 rounded-full text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
               selectedType === 'series'
-                ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-black shadow-md shadow-amber-500/20 font-black'
+                ? 'bg-[#F7C600] text-black shadow-md shadow-[#F7C600]/20 font-black'
                 : 'text-zinc-400 hover:text-white'
             }`}
           >
@@ -95,43 +103,40 @@ export const FavoritesView: React.FC<FavoritesViewProps> = ({
         </div>
       )}
 
-      {/* Empty State */}
+      {/* Empty State matching 3D Cinema Box Reference */}
       {favoriteMedia.length === 0 ? (
-        <div className="py-20 text-center rounded-3xl bg-zinc-900/40 border border-zinc-800/60 p-6 space-y-3">
-          <div className="w-16 h-16 rounded-full bg-zinc-800/80 border border-zinc-700/60 flex items-center justify-center mx-auto text-zinc-500">
-            <Heart className="w-8 h-8" />
-          </div>
-          <p className="text-sm font-bold text-white">
-            {t('قائمة المفضلة فارغة حالياً', 'Your favorites list is empty')}
-          </p>
-          <p className="text-xs text-zinc-400 max-w-xs mx-auto">
-            {t(
-              'اضغط على أيقونة القلب على أي بوستر فيلم أو مسلسل لإضافته إلى قائمتك والوصول إليه بسرعة',
-              'Tap the heart icon on any poster to bookmark it for quick access.'
-            )}
-          </p>
-        </div>
+        <EmptyCinemaState
+          titleStart={t('مكتبتك', 'Your Library is')}
+          titleHighlight={t('فارغة', 'Empty')}
+          titleEnd={t('حالياً', 'Right Now')}
+          subtitle={t(
+            'ستجد هنا أفلامك ومسلسلاتك المفضلة بعد إضافتها',
+            'Your favorite movies and series will appear here once added'
+          )}
+          ctaLabel={t('تصفح المحتوى', 'Browse Content')}
+          onCtaClick={onBrowseContent}
+        />
       ) : filteredFavorites.length === 0 ? (
-        <div className="py-16 text-center rounded-3xl bg-zinc-900/40 border border-zinc-800/60 p-6 space-y-2">
-          <p className="text-sm font-bold text-white">
-            {t('لا توجد أعمال في هذا القسم ضمن المفضلة', 'No favorites in this filter')}
-          </p>
-          <p className="text-xs text-zinc-400">
-            {t('اختر تصنيفاً آخر أو تصفح الكل', 'Choose another filter or view all.')}
-          </p>
-        </div>
+        <EmptyCinemaState
+          titleStart={t('لا توجد أعمال', 'No Items in')}
+          titleHighlight={t('مطابقة', 'This Filter')}
+          titleEnd=""
+          subtitle={t('اختر تصنيفاً آخر أو تصفح المحتوى المتاح', 'Try another filter or browse available titles')}
+          ctaLabel={t('عرض الكل', 'Show All')}
+          onCtaClick={() => setSelectedType('all')}
+          showHeartAccent={false}
+        />
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
           {filteredFavorites.map((item) => (
-            <div key={item.id} className="w-full flex justify-center">
-              <MediaCard
-                media={item}
-                inGrid={true}
-                onClick={() => onSelectMedia(item)}
-                isFavorite={true}
-                onToggleFavorite={() => onToggleFavorite(item.id)}
-              />
-            </div>
+            <MediaCard
+              key={item.id}
+              item={item}
+              inGrid={true}
+              onSelect={() => onSelectMedia(item)}
+              isFavorite={true}
+              onToggleFavorite={() => onToggleFavorite(item.id)}
+            />
           ))}
         </div>
       )}

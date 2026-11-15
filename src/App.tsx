@@ -60,11 +60,10 @@ import { CategoriesView } from './components/views/CategoriesView';
 import { HistoryView } from './components/views/HistoryView';
 import { FavoritesView } from './components/views/FavoritesView';
 import { MediaCard } from './components/cards/MediaCard';
+import { EmptyCinemaState } from './components/common/EmptyCinemaState';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  Film,
   Search,
-  Sparkles,
   CheckCircle2,
   AlertCircle,
   RefreshCw,
@@ -610,8 +609,14 @@ export default function App() {
   return (
     <div
       dir={dir}
-      className="min-h-screen w-full bg-[#070709] text-zinc-100 flex flex-col overflow-x-hidden selection:bg-amber-400 selection:text-black"
+      className="relative min-h-screen w-full bg-[#070709] text-zinc-100 flex flex-col overflow-x-hidden selection:bg-[#F7C600] selection:text-black"
     >
+      {/* Subtle Curved Obsidian & Golden Wave Backdrop Matching Reference Visual */}
+      <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden" aria-hidden="true">
+        <div className="absolute -top-24 -left-24 w-[440px] h-[440px] rounded-full bg-[#F7C600]/[0.07] blur-[110px]" />
+        <div className="absolute bottom-8 -right-24 w-[460px] h-[460px] rounded-full bg-[#F7C600]/[0.08] blur-[120px]" />
+        <div className="absolute top-[14%] -inset-x-[20%] h-[58%] rounded-[50%] bg-gradient-to-br from-white/[0.025] via-transparent to-[#F7C600]/[0.03] -rotate-12" />
+      </div>
       {/* Top Cinema Header */}
       <TopHeader
         searchQuery={searchQuery}
@@ -716,6 +721,7 @@ export default function App() {
             mediaItems={mediaItems}
             onPlay={handleStartPlay}
             onRefreshHistory={refreshData}
+            onBrowseContent={() => handleTopTabSelect('home')}
           />
         ) : bottomNavTab === 'favorites' ? (
           /* D. Favorites View */
@@ -724,6 +730,7 @@ export default function App() {
             mediaItems={mediaItems}
             onSelectMedia={(item) => setSelectedMedia(item)}
             onToggleFavorite={handleToggleFav}
+            onBrowseContent={() => handleTopTabSelect('home')}
           />
         ) : activeTab !== 'home' ? (
           /* E. Top/Mobile Category Tab Filtered View */
@@ -773,12 +780,18 @@ export default function App() {
                 </div>
 
                 {tabFilteredItems.length === 0 ? (
-                  <div className="py-20 text-center text-zinc-500 bg-zinc-900/30 rounded-2xl border border-white/[0.06]">
-                    <Film className="w-12 h-12 mx-auto mb-2 text-zinc-600" />
-                    <p className="text-sm font-bold text-zinc-300">
-                      {t('لا توجد أعمال منشورة في هذا القسم حالياً', 'No titles published in this section yet')}
-                    </p>
-                  </div>
+                  <EmptyCinemaState
+                    titleStart={t('مكتبتك', 'This Section is')}
+                    titleHighlight={t('فارغة', 'Empty')}
+                    titleEnd={t('حالياً', 'Right Now')}
+                    subtitle={t(
+                      'لا توجد أعمال منشورة في هذا القسم حالياً، يمكنك تصفح باقي المحتوى المتاح',
+                      'No titles are published in this section yet. Browse other available titles'
+                    )}
+                    ctaLabel={t('تصفح المحتوى', 'Browse Content')}
+                    onCtaClick={() => handleTopTabSelect('home')}
+                    showHeartAccent={false}
+                  />
                 ) : (
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
                     {tabFilteredItems.map((item) => (
@@ -849,36 +862,32 @@ export default function App() {
 
                 {/* Empty Library State */}
                 {mediaItems.length === 0 && (
-                  <div className="text-center py-16 bg-zinc-900/40 rounded-2xl border border-white/[0.08] p-8 my-6">
-                    <div className="w-16 h-16 rounded-full bg-amber-400/10 text-amber-400 flex items-center justify-center mx-auto mb-4 border border-amber-400/25">
-                      <Sparkles className="w-8 h-8" />
-                    </div>
-                    <h3 className="text-lg font-black text-white mb-2">
-                      {t('مكتبة الأفلام فارغة حالياً', 'The Cinema Library is Empty')}
-                    </h3>
-                    <p className="text-xs text-zinc-400 max-w-sm mx-auto mb-5 leading-relaxed">
-                      {isDeveloperUser
+                  <EmptyCinemaState
+                    titleStart={t('مكتبتك', 'Your Library is')}
+                    titleHighlight={t('فارغة', 'Empty')}
+                    titleEnd={t('حالياً', 'Right Now')}
+                    subtitle={
+                      isDeveloperUser
                         ? t(
-                            'يمكنك إضافة أول فيلم أو مسلسل إلى المنصة من لوحة التحكم الإدارية.',
-                            'You can publish your first movie or series from the Admin Dashboard.'
+                            'يمكنك إضافة أول فيلم أو مسلسل إلى المنصة من لوحة التحكم الإدارية',
+                            'You can publish your first movie or series from the Admin Dashboard'
                           )
                         : t(
-                            'ستتوفر أحدث الأفلام والمسلسلات قريباً على منصة GoldenFlix.',
-                            'New movies and series will be available soon on GoldenFlix.'
-                          )}
-                    </p>
-                    {isDeveloperUser && (
-                      <button
-                        type="button"
-                        onClick={handleOpenDeveloperSuite}
-                        className="min-h-[44px] inline-flex items-center gap-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-black font-black px-5 py-2.5 rounded-xl text-xs transition-all shadow-lg shadow-amber-500/20 cursor-pointer"
-                      >
-                        <span>
-                          {t('فتح لوحة التحكم ورفع المحتوى', 'Open Admin Dashboard & Upload')}
-                        </span>
-                      </button>
-                    )}
-                  </div>
+                            'ستجد هنا أحدث الأفلام والمسلسلات فور إضافتها على GoldenFlix',
+                            'Latest movies and series will appear here as soon as they are published'
+                          )
+                    }
+                    ctaLabel={
+                      isDeveloperUser
+                        ? t('فتح لوحة التحكم ورفع المحتوى', 'Open Admin Dashboard & Upload')
+                        : t('استكشاف التصنيفات', 'Explore Categories')
+                    }
+                    onCtaClick={
+                      isDeveloperUser
+                        ? handleOpenDeveloperSuite
+                        : () => handleBottomTabSelect('categories')
+                    }
+                  />
                 )}
 
                 {/* 5. Latest Movies Section */}
