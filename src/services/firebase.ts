@@ -34,15 +34,35 @@ import { AppUserProfile } from '../types';
 
 const EMAIL_LINK_STORAGE_KEY = 'goldenflix_firebase_email_for_signin';
 
+// Resolve optional Vercel/Vite environment overrides; fallback to firebase-applet-config.json
+const envVars = (typeof import.meta !== 'undefined' && (import.meta as any).env) || {};
+const hasCustomFirebaseEnv = Boolean(
+  envVars.VITE_FIREBASE_API_KEY &&
+    envVars.VITE_FIREBASE_AUTH_DOMAIN &&
+    envVars.VITE_FIREBASE_PROJECT_ID
+);
+
+export const activeFirebaseConfig = hasCustomFirebaseEnv
+  ? {
+      apiKey: String(envVars.VITE_FIREBASE_API_KEY).trim(),
+      authDomain: String(envVars.VITE_FIREBASE_AUTH_DOMAIN).trim(),
+      projectId: String(envVars.VITE_FIREBASE_PROJECT_ID).trim(),
+      storageBucket: String(envVars.VITE_FIREBASE_STORAGE_BUCKET || '').trim(),
+      messagingSenderId: String(envVars.VITE_FIREBASE_MESSAGING_SENDER_ID || '').trim(),
+      appId: String(envVars.VITE_FIREBASE_APP_ID || '').trim(),
+      firestoreDatabaseId: String(envVars.VITE_FIREBASE_DATABASE_ID || '').trim(),
+    }
+  : firebaseConfig;
+
 // Initialize Firebase App singleton
 export const firebaseApp = !getApps().length
   ? initializeApp({
-      apiKey: firebaseConfig.apiKey,
-      authDomain: firebaseConfig.authDomain,
-      projectId: firebaseConfig.projectId,
-      storageBucket: firebaseConfig.storageBucket,
-      messagingSenderId: firebaseConfig.messagingSenderId,
-      appId: firebaseConfig.appId,
+      apiKey: activeFirebaseConfig.apiKey,
+      authDomain: activeFirebaseConfig.authDomain,
+      projectId: activeFirebaseConfig.projectId,
+      storageBucket: activeFirebaseConfig.storageBucket,
+      messagingSenderId: activeFirebaseConfig.messagingSenderId,
+      appId: activeFirebaseConfig.appId,
     })
   : getApp();
 
@@ -50,8 +70,8 @@ export const auth = getAuth(firebaseApp);
 auth.useDeviceLanguage();
 
 // Initialize Firestore with specific database ID if provided
-export const db = firebaseConfig.firestoreDatabaseId
-  ? getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId)
+export const db = activeFirebaseConfig.firestoreDatabaseId
+  ? getFirestore(firebaseApp, activeFirebaseConfig.firestoreDatabaseId)
   : getFirestore(firebaseApp);
 
 // Initialize Firebase Storage
@@ -646,7 +666,7 @@ export function getFirebaseAuthErrorMessage(
       case 'auth/popup-blocked':
         return 'The browser blocked the sign-in popup. Please allow popups and try again.';
       case 'auth/unauthorized-domain':
-        return `Domain "${currentHost}" is not in Firebase Auth Authorized Domains. Add it in Firebase Console -> Authentication -> Settings -> Authorized domains.`;
+        return `Domain "${currentHost}" is not in Firebase Auth Authorized Domains for project "${activeFirebaseConfig.projectId}". Add it in Firebase Console -> Authentication -> Settings -> Authorized domains.`;
       case 'auth/account-exists-with-different-credential':
         return 'An account already exists with this email using another sign-in method.';
       case 'auth/requires-recent-login':
@@ -682,7 +702,7 @@ export function getFirebaseAuthErrorMessage(
     case 'auth/popup-blocked':
       return 'المتصفح منع فتح نافذة تسجيل الدخول. يرجى السماح بالنوافذ المنبثقة والمحاولة مجدداً.';
     case 'auth/unauthorized-domain':
-      return `النطاق الحالي (${currentHost}) غير مضاف في قائمة النطاقات المصرح بها في Firebase Auth. أضفه من Firebase Console -> Authentication -> Settings -> Authorized domains.`;
+      return `النطاق الحالي (${currentHost}) غير مضاف في قائمة النطاقات المصرح بها في مشروع Firebase (${activeFirebaseConfig.projectId}). أضفه من Firebase Console -> Authentication -> Settings -> Authorized domains.`;
     case 'auth/account-exists-with-different-credential':
       return 'هذا البريد مسجل بالفعل بطريقة دخول أخرى. جرب تسجيل الدخول بالطريقة المرتبطة بحسابك.';
     case 'auth/requires-recent-login':
