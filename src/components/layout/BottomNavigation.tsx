@@ -49,26 +49,28 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
             <motion.button
               key={tab.id}
               type="button"
-              whileTap={{ scale: 0.92 }}
+              whileTap={{ scale: 0.88 }}
+              transition={{ type: 'spring', stiffness: 500, damping: 26 }}
               onClick={() => onSelectTab(tab.id)}
-              className={`relative flex-1 min-h-[54px] flex flex-col items-center justify-center gap-1 rounded-xl transition-colors cursor-pointer ${
+              className={`relative flex-1 min-h-[54px] flex flex-col items-center justify-center gap-1 rounded-xl transition-colors duration-200 cursor-pointer ${
                 active ? 'text-[#F7C600]' : 'text-zinc-400 hover:text-zinc-200'
               }`}
             >
-              {active && (
-                <div
-                  aria-hidden="true"
-                  className="pointer-events-none absolute -top-2 inset-x-2 h-14 rounded-full bg-[#F7C600]/20 blur-md"
-                />
-              )}
-
               <motion.div
-                animate={active ? { y: -1, scale: 1.06 } : { y: 0, scale: 1 }}
-                transition={{ type: 'spring', stiffness: 420, damping: 28 }}
+                animate={
+                  active
+                    ? {
+                        y: -1.5,
+                        scale: 1.12,
+                        rotate: tab.id === 'settings' ? 25 : 0,
+                      }
+                    : { y: 0, scale: 1, rotate: 0 }
+                }
+                transition={{ type: 'spring', stiffness: 460, damping: 24 }}
                 className="relative z-10 flex items-center justify-center"
               >
                 <Icon
-                  className={`w-5 h-5 ${
+                  className={`w-5 h-5 transition-colors duration-200 ${
                     active
                       ? tab.id === 'settings'
                         ? 'stroke-[2.2] text-[#F7C600]'
@@ -78,17 +80,13 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
                 />
               </motion.div>
 
-              <span className="relative z-10 text-[11px] font-bold leading-none whitespace-nowrap">
+              <motion.span
+                animate={active ? { scale: 1.03 } : { scale: 1 }}
+                transition={{ duration: 0.18 }}
+                className="relative z-10 text-[11px] font-bold leading-none whitespace-nowrap"
+              >
                 {label}
-              </span>
-
-              {active && (
-                <motion.div
-                  layoutId="mobileBottomIndicator"
-                  transition={{ type: 'spring', stiffness: 420, damping: 32 }}
-                  className="absolute bottom-1 w-10 h-[3px] rounded-full bg-[#F7C600] shadow-[0_0_12px_rgba(247,198,0,0.95)]"
-                />
-              )}
+              </motion.span>
             </motion.button>
           );
         })}
