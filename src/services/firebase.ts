@@ -22,6 +22,7 @@ import {
 } from 'firebase/auth';
 import {
   getFirestore,
+  initializeFirestore,
   doc,
   getDoc,
   setDoc,
@@ -69,10 +70,23 @@ export const firebaseApp = !getApps().length
 export const auth = getAuth(firebaseApp);
 auth.useDeviceLanguage();
 
-// Initialize Firestore with specific database ID if provided
-export const db = activeFirebaseConfig.firestoreDatabaseId
-  ? getFirestore(firebaseApp, activeFirebaseConfig.firestoreDatabaseId)
-  : getFirestore(firebaseApp);
+// Initialize Firestore with long-polling transport for reliable connectivity in proxy/iframe environments
+function initFirestoreDb() {
+  const dbId = activeFirebaseConfig.firestoreDatabaseId || undefined;
+  try {
+    return initializeFirestore(
+      firebaseApp,
+      {
+        experimentalForceLongPolling: true,
+      },
+      dbId
+    );
+  } catch {
+    return dbId ? getFirestore(firebaseApp, dbId) : getFirestore(firebaseApp);
+  }
+}
+
+export const db = initFirestoreDb();
 
 // Initialize Firebase Storage
 export const storage = getStorage(firebaseApp);
@@ -99,13 +113,25 @@ export function getAuthActionCodeSettings(handleCodeInApp = false): ActionCodeSe
   };
 }
 
+export function isFirestoreConnectivityError(err: unknown): boolean {
+  const code = typeof err === 'object' && err !== null ? String((err as any).code || '') : '';
+  const msg = (err instanceof Error ? err.message : String(err || '')).toLowerCase();
+  return (
+    code === 'unavailable' ||
+    code === 'deadline-exceeded' ||
+    msg.includes('client is offline') ||
+    msg.includes('unavailable') ||
+    msg.includes('could not reach cloud firestore backend')
+  );
+}
+
 // Validate Connection to Firestore on startup as required by Firebase integration guidelines
 async function testFirestoreConnection() {
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));
   } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.warn('Firestore offline connection check: please verify network connectivity.');
+    if (isFirestoreConnectivityError(error)) {
+      console.warn('Firestore offline connection check: operating with local cache/Auth fallback.');
     }
   }
 }
@@ -227,11 +253,12 @@ export async function getUserProfile(uid: string): Promise<Partial<AppUserProfil
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     if (
+      isFirestoreConnectivityError(err) ||
       msg.includes('permission') ||
       msg.includes('PERMISSION_DENIED') ||
       msg.includes('insufficient permissions')
     ) {
-      console.warn('Firestore profile read restricted (continuing with Firebase Auth profile):', msg);
+      console.warn('Firestore profile read fallback (continuing with Firebase Auth profile):', msg);
       return null;
     }
     handleFirestoreError(err, OperationType.GET, path);

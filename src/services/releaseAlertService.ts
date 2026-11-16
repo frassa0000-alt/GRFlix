@@ -8,7 +8,13 @@ import {
   setDoc,
   updateDoc,
 } from 'firebase/firestore';
-import { auth, db, handleFirestoreError, OperationType } from './firebase';
+import {
+  auth,
+  db,
+  handleFirestoreError,
+  isFirestoreConnectivityError,
+  OperationType,
+} from './firebase';
 import {
   MediaAlertSubscription,
   MediaItem,
@@ -188,7 +194,10 @@ export const syncAlertsAndNotificationsFromCloud = async (
       }
     });
   } catch (err) {
-    handleFirestoreError(err, OperationType.LIST, alertsPath);
+    if (!isFirestoreConnectivityError(err)) {
+      handleFirestoreError(err, OperationType.LIST, alertsPath);
+    }
+    console.warn('Firestore alerts sync offline fallback:', err);
   }
 
   const notifMap = new Map<string, UserReleaseNotification>();
@@ -208,7 +217,10 @@ export const syncAlertsAndNotificationsFromCloud = async (
       }
     });
   } catch (err) {
-    handleFirestoreError(err, OperationType.LIST, notifsPath);
+    if (!isFirestoreConnectivityError(err)) {
+      handleFirestoreError(err, OperationType.LIST, notifsPath);
+    }
+    console.warn('Firestore notifications sync offline fallback:', err);
   }
 
   const mergedAlerts = Array.from(alertMap.values()).sort(
