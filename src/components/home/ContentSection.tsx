@@ -25,7 +25,7 @@ interface ContentSectionProps {
   onToggleAlert?: (id: string) => void;
   history?: WatchProgress[];
   onViewAll?: () => void;
-  variant?: 'poster' | 'landscape';
+  variant?: 'poster' | 'landscape' | 'series_avatar';
 }
 
 export const ContentSection: React.FC<ContentSectionProps> = ({

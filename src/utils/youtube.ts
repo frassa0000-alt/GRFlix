@@ -4,6 +4,11 @@ export interface YouTubeOEmbedMetadata {
   authorName: string;
   thumbnailUrl: string;
   canonicalUrl: string;
+  description?: string;
+  keywords?: string[];
+  youtubeGenre?: string;
+  lengthSeconds?: number;
+  publishYear?: number;
 }
 
 const YOUTUBE_ID_REGEX = /^[a-zA-Z0-9_-]{11}$/;
@@ -161,7 +166,8 @@ export function getYouTubeEmbedUrl(
 }
 
 /**
- * Fetch public YouTube title, channel name, and thumbnail via CORS-enabled oEmbed API.
+ * Fetch public YouTube title, channel name, description, genre, keywords, duration, and thumbnail.
+ * Prefers local Express /api/youtube-meta endpoint and falls back cleanly to YouTube oEmbed.
  */
 export async function fetchYouTubeOEmbedMetadata(
   urlOrId: string
@@ -176,6 +182,42 @@ export async function fetchYouTubeOEmbedMetadata(
   const timeoutId = window.setTimeout(() => controller.abort(), 7000);
 
   try {
+    try {
+      const serverRes = await fetch(
+        `/api/youtube-meta?url=${encodeURIComponent(canonicalUrl)}`,
+        { signal: controller.signal }
+      );
+      if (serverRes.ok) {
+        const text = await serverRes.text();
+        if (text && !text.trim().startsWith('<')) {
+          const data = JSON.parse(text);
+          if (data && data.videoId) {
+            return {
+              videoId,
+              title: typeof data.title === 'string' ? data.title.trim() : '',
+              authorName: typeof data.authorName === 'string' ? data.authorName.trim() : '',
+              thumbnailUrl:
+                typeof data.thumbnailUrl === 'string' && data.thumbnailUrl.trim()
+                  ? data.thumbnailUrl.trim()
+                  : fallbackThumb,
+              canonicalUrl,
+              description:
+                typeof data.description === 'string' ? data.description.trim() : undefined,
+              keywords: Array.isArray(data.keywords) ? data.keywords : undefined,
+              youtubeGenre:
+                typeof data.youtubeGenre === 'string' ? data.youtubeGenre.trim() : undefined,
+              lengthSeconds:
+                typeof data.lengthSeconds === 'number' ? data.lengthSeconds : undefined,
+              publishYear:
+                typeof data.publishYear === 'number' ? data.publishYear : undefined,
+            };
+          }
+        }
+      }
+    } catch {
+      // Fallback to direct YouTube oEmbed
+    }
+
     const endpoint = `https://www.youtube.com/oembed?url=${encodeURIComponent(canonicalUrl)}&format=json`;
     const res = await fetch(endpoint, { signal: controller.signal });
     if (!res.ok) {

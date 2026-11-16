@@ -2790,6 +2790,176 @@ app.get('/api/site-settings', (_req: Request, res: Response) => {
   return res.json({ ...DEFAULT_SITE_SETTINGS, ...settings });
 });
 
+const extractServerYouTubeId = (raw?: string): string | null => {
+  if (!raw || typeof raw !== 'string') return null;
+  const trimmed = raw.trim();
+  if (/^[a-zA-Z0-9_-]{11}$/.test(trimmed)) return trimmed;
+  try {
+    const parsed = new URL(trimmed.startsWith('http') ? trimmed : `https://${trimmed}`);
+    const host = parsed.hostname.replace(/^www\./i, '').toLowerCase();
+    if (
+      host !== 'youtu.be' &&
+      host !== 'youtube.com' &&
+      host !== 'm.youtube.com' &&
+      host !== 'music.youtube.com' &&
+      host !== 'youtube-nocookie.com' &&
+      !host.endsWith('.youtube.com')
+    ) {
+      return null;
+    }
+    if (host === 'youtu.be') {
+      const seg = parsed.pathname.split('/').filter(Boolean)[0] || '';
+      return /^[a-zA-Z0-9_-]{11}$/.test(seg) ? seg : null;
+    }
+    const v = parsed.searchParams.get('v');
+    if (v && /^[a-zA-Z0-9_-]{11}$/.test(v)) return v;
+    const segments = parsed.pathname.split('/').filter(Boolean);
+    if (segments.length >= 2 && ['embed', 'shorts', 'live', 'v', 'e'].includes(segments[0])) {
+      return /^[a-zA-Z0-9_-]{11}$/.test(segments[1]) ? segments[1] : null;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+};
+
+const decodeHtmlEntities = (str: string): string =>
+  str
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&#x27;/g, "'")
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+    .trim();
+
+app.get('/api/youtube-meta', async (req: Request, res: Response) => {
+  const rawInput = String(req.query.url || req.query.v || '').trim();
+  const videoId = extractServerYouTubeId(rawInput);
+  if (!videoId) {
+    return res.status(400).json({ error: 'معرف فيديو يوتيوب غير صالح' });
+  }
+
+  const canonicalUrl = `https://www.youtube.com/watch?v=${videoId}`;
+  const fallbackThumb = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+
+  let title = '';
+  let authorName = '';
+  let description = '';
+  let keywords: string[] = [];
+  let youtubeGenre = '';
+  let lengthSeconds: number | undefined;
+  let publishYear: number | undefined;
+  let thumbnailUrl = fallbackThumb;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 5500);
+
+  try {
+    const [oembedRes, watchRes] = await Promise.allSettled([
+      fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(canonicalUrl)}&format=json`, {
+        signal: controller.signal,
+      }),
+      fetch(`${canonicalUrl}&hl=ar`, {
+        signal: controller.signal,
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          'Accept-Language': 'ar,en-US;q=0.9,en;q=0.8',
+        },
+      }),
+    ]);
+
+    if (oembedRes.status === 'fulfilled' && oembedRes.value.ok) {
+      const oembedJson: any = await oembedRes.value.json().catch(() => null);
+      if (oembedJson) {
+        title = typeof oembedJson.title === 'string' ? oembedJson.title.trim() : '';
+        authorName =
+          typeof oembedJson.author_name === 'string' ? oembedJson.author_name.trim() : '';
+        if (typeof oembedJson.thumbnail_url === 'string' && oembedJson.thumbnail_url.trim()) {
+          thumbnailUrl = oembedJson.thumbnail_url.trim();
+        }
+      }
+    }
+
+    if (watchRes.status === 'fulfilled' && watchRes.value.ok) {
+      const html = await watchRes.value.text();
+
+      if (!title) {
+        const ogTitle = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i);
+        const docTitle = html.match(/<title>([\s\S]*?)<\/title>/i);
+        const rawTitle = ogTitle?.[1] || docTitle?.[1]?.replace(/\s*-\s*YouTube\s*$/i, '') || '';
+        title = decodeHtmlEntities(rawTitle);
+      }
+
+      const descMatch =
+        html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i) ||
+        html.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i);
+      if (descMatch?.[1]) {
+        description = decodeHtmlEntities(descMatch[1]);
+      }
+
+      const kwMatch = html.match(/<meta[^>]+name=["']keywords["'][^>]+content=["']([^"']+)["']/i);
+      if (kwMatch?.[1]) {
+        keywords = decodeHtmlEntities(kwMatch[1])
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .slice(0, 20);
+      }
+
+      const genreMatch =
+        html.match(/<meta[^>]+itemprop=["']genre["'][^>]+content=["']([^"']+)["']/i) ||
+        html.match(/"category"\s*:\s*"([^"]+)"/i) ||
+        html.match(/"genre"\s*:\s*"([^"]+)"/i);
+      if (genreMatch?.[1]) {
+        youtubeGenre = decodeHtmlEntities(genreMatch[1]);
+      }
+
+      const lenMatch = html.match(/"lengthSeconds"\s*:\s*"(\d+)"/);
+      if (lenMatch?.[1]) {
+        const secs = Number(lenMatch[1]);
+        if (Number.isFinite(secs) && secs > 0) {
+          lengthSeconds = secs;
+        }
+      }
+
+      const pubMatch = html.match(/"publishDate"\s*:\s*"(\d{4})-\d{2}-\d{2}/);
+      if (pubMatch?.[1]) {
+        const yr = Number(pubMatch[1]);
+        if (Number.isFinite(yr) && yr >= 1980 && yr <= new Date().getFullYear() + 1) {
+          publishYear = yr;
+        }
+      }
+
+      if (!authorName) {
+        const channelMatch = html.match(/"ownerChannelName"\s*:\s*"([^"]+)"/);
+        if (channelMatch?.[1]) {
+          authorName = decodeHtmlEntities(channelMatch[1]);
+        }
+      }
+    }
+  } catch {
+    // Return whatever metadata we gathered gracefully
+  } finally {
+    clearTimeout(timer);
+  }
+
+  return res.json({
+    videoId,
+    title,
+    authorName,
+    description,
+    keywords,
+    youtubeGenre,
+    lengthSeconds,
+    publishYear,
+    thumbnailUrl,
+    canonicalUrl,
+  });
+});
+
 // --- ADMIN DASHBOARD REAL ANALYTICS, USERS, LIBRARY, URL TESTER & GOVERNANCE ---
 
 app.get('/api/admin/analytics', requireAdmin, (req: Request, res: Response) => {

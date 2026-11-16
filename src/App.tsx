@@ -1283,6 +1283,7 @@ export default function App() {
                           key={item.id}
                           item={item}
                           inGrid={true}
+                          variant={activeTab === 'series' ? 'series_avatar' : 'poster'}
                           onSelect={(m) => setSelectedMedia(m)}
                           isFavorite={favorites.includes(item.id)}
                           onToggleFavorite={handleToggleFav}
@@ -1514,7 +1515,7 @@ export default function App() {
                     onToggleAlert={handleToggleMediaAlert}
                     history={history}
                     onViewAll={() => handleTopTabSelect('series')}
-                    variant="poster"
+                    variant="series_avatar"
                   />
                 )}
 

@@ -18,7 +18,7 @@ export interface MediaCardProps {
   isAlertSubscribed?: boolean;
   onToggleAlert?: (id?: string) => void;
   watchProgress?: number | WatchProgress;
-  variant?: 'poster' | 'landscape';
+  variant?: 'poster' | 'landscape' | 'series_avatar';
   inGrid?: boolean;
   index?: number;
 }
@@ -62,6 +62,7 @@ export const MediaCard: React.FC<MediaCardProps> = ({
   };
 
   const isLandscape = variant === 'landscape';
+  const isSeriesAvatar = variant === 'series_avatar';
   const displayImage = isLandscape
     ? currentItem.bannerUrl || currentItem.posterUrl
     : currentItem.posterUrl || currentItem.bannerUrl;
@@ -97,6 +98,111 @@ export const MediaCard: React.FC<MediaCardProps> = ({
       : currentItem.type === 'series'
       ? t('مسلسل', 'Series')
       : t('أنمي', 'Anime');
+
+  if (isSeriesAvatar) {
+    const effectiveRating = getEffectiveMediaRating(currentItem);
+    return (
+      <motion.article
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.28, delay: Math.min(index * 0.03, 0.18), ease: [0.16, 1, 0.3, 1] }}
+        whileHover={{ y: -5 }}
+        whileTap={{ scale: 0.985 }}
+        onClick={handleClick}
+        className={`group relative flex flex-col flex-shrink-0 cursor-pointer select-none ${
+          inGrid ? 'w-full' : 'w-[140px] sm:w-[164px] md:w-[186px]'
+        }`}
+      >
+        {/* Clean Pure Series Artwork / Avatar Frame — zero badges or buttons on the image */}
+        <div
+          className={`relative w-full aspect-[2/3] rounded-[22px] overflow-hidden bg-zinc-950 transition-all duration-300 shadow-[0_14px_30px_rgba(0,0,0,0.75)] group-hover:shadow-[0_22px_45px_rgba(0,0,0,0.9),0_0_24px_rgba(251,191,36,0.22)] ${
+            isHiddenItem
+              ? 'ring-1 ring-amber-500/50 opacity-95'
+              : 'ring-1 ring-white/15 group-hover:ring-2 group-hover:ring-amber-400/80'
+          }`}
+        >
+          {!imageLoaded && !imageError && displayImage && (
+            <div className="absolute inset-0 bg-zinc-900 flex items-center justify-center">
+              <Play className="w-7 h-7 text-amber-500/20" />
+            </div>
+          )}
+
+          {imageError || !displayImage ? (
+            <div className="absolute inset-0 bg-gradient-to-br from-zinc-900 via-[#121218] to-amber-950/30 flex flex-col items-center justify-center p-4 text-center">
+              <Play className="w-8 h-8 text-amber-400/50 mb-1.5" />
+              <span className="text-xs text-zinc-300 font-bold line-clamp-2">
+                {displayTitle}
+              </span>
+            </div>
+          ) : (
+            <img
+              src={displayImage}
+              alt={displayTitle}
+              loading="lazy"
+              referrerPolicy="no-referrer"
+              onLoad={() => setImageLoaded(true)}
+              onError={() => setImageError(true)}
+              className={`w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105 ${
+                imageLoaded ? 'opacity-100' : 'opacity-0'
+              }`}
+            />
+          )}
+
+          {/* Subtle luxury edge sheen on hover only */}
+          <div className="pointer-events-none absolute inset-0 rounded-[22px] ring-1 ring-inset ring-white/10 group-hover:ring-amber-300/35 transition-all" />
+
+          {/* Clean Hover Play Orb */}
+          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-250 pointer-events-none bg-black/20">
+            <div className="w-11 h-11 rounded-full bg-gradient-to-br from-amber-300 to-amber-500 text-black flex items-center justify-center shadow-[0_0_24px_rgba(251,191,36,0.55)] transform scale-75 group-hover:scale-100 transition-transform duration-300">
+              <Play className="w-4.5 h-4.5 fill-current ml-0.5" />
+            </div>
+          </div>
+        </div>
+
+        {/* Clean Title & Minimal Metadata Beneath Image */}
+        <div className="pt-2.5 px-1 text-center">
+          <h3 className="font-black text-white text-xs sm:text-sm truncate group-hover:text-amber-400 transition-colors">
+            {displayTitle}
+          </h3>
+          <div className="flex items-center justify-center gap-1.5 text-[11px] text-zinc-400 mt-0.5 truncate tabular-nums">
+            <span className="truncate">{categoryName}</span>
+            {currentItem.year ? (
+              <>
+                <span aria-hidden="true">·</span>
+                <span>{currentItem.year}</span>
+              </>
+            ) : null}
+            <span aria-hidden="true">·</span>
+            <span className="inline-flex items-center gap-0.5 text-amber-400 font-bold">
+              <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
+              {effectiveRating.toFixed(1)}
+            </span>
+          </div>
+
+          {watchedPercent > 0 && (
+            <div className="mt-2">
+              <div
+                className="w-full h-1 rounded-full bg-white/10 overflow-hidden"
+                role="progressbar"
+                aria-valuenow={watchedPercent}
+                aria-valuemin={0}
+                aria-valuemax={100}
+              >
+                <div
+                  className={`h-full rounded-full transition-all duration-300 ${
+                    watchedPercent >= 95
+                      ? 'bg-emerald-400'
+                      : 'bg-gradient-to-r from-amber-500 to-[#F7C600]'
+                  }`}
+                  style={{ width: `${watchedPercent}%` }}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      </motion.article>
+    );
+  }
 
   return (
     <motion.article

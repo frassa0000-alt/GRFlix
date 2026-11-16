@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   AlertCircle,
   CheckCircle2,
@@ -17,7 +17,7 @@ import {
   X,
   Youtube,
 } from 'lucide-react';
-import { CategoryItem, MediaItem, PersonItem, VideoSourceOption } from '../../../types';
+import { CategoryItem, MediaItem, MediaType, PersonItem, VideoSourceOption } from '../../../types';
 import {
   extractVideoDurationFromFile,
   formatAdminErrorMessage,
@@ -36,7 +36,9 @@ import {
   getYouTubeEmbedUrl,
   getYouTubeThumbnailUrl,
   isYouTubeUrl,
+  YouTubeOEmbedMetadata,
 } from '../../../utils/youtube';
+import { analyzeMediaFromLinkAndMeta } from '../../../utils/mediaLinkAnalyzer';
 
 interface QueueVideoTask {
   id: string;
@@ -85,6 +87,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
   const [bannerPreview, setBannerPreview] = useState<string>('');
 
   // Metadata fields
+  const [mediaType, setMediaType] = useState<MediaType>('movie');
   const [titleAr, setTitleAr] = useState<string>('');
   const [titleEn, setTitleEn] = useState<string>('');
   const [description, setDescription] = useState<string>('');
@@ -113,6 +116,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
   const [youtubeUrlInput, setYoutubeUrlInput] = useState<string>('');
   const [isFetchingYoutubeMeta, setIsFetchingYoutubeMeta] = useState<boolean>(false);
   const [youtubeMetaNote, setYoutubeMetaNote] = useState<string | null>(null);
+  const [linkAnalysisNote, setLinkAnalysisNote] = useState<string | null>(null);
   const [extraSources, setExtraSources] = useState<VideoSourceOption[]>([]);
   const [externalVideoUrl, setExternalVideoUrl] = useState<string>('');
 
@@ -133,6 +137,9 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
   const videoInputRef = useRef<HTMLInputElement>(null);
   const posterInputRef = useRef<HTMLInputElement>(null);
   const bannerInputRef = useRef<HTMLInputElement>(null);
+  const lastAnalyzedLinkRef = useRef<string>('');
+  const lastAutoTitleRef = useRef<string>('');
+  const lastAutoThumbRef = useRef<string>('');
 
   const genreChoices =
     categories.length > 0
@@ -262,6 +269,150 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
     setQueue((prev) => prev.filter((t) => t.id !== task.id));
   };
 
+  const GENRE_NAME_MAP: Record<string, string> = {
+    action: 'أكشن',
+    comedy: 'كوميديا',
+    drama: 'دراما',
+    horror: 'رعب',
+    'sci-fi': 'خيال علمي',
+    crime: 'جريمة',
+    anime: 'أنمي',
+    adventure: 'مغامرة',
+    romance: 'رومانسي',
+    documentary: 'وثائقي',
+    fantasy: 'فانتازيا',
+    history: 'تاريخي',
+    biography: 'سيرة ذاتية',
+  };
+
+  const TYPE_NAME_MAP: Record<MediaType, string> = {
+    movie: 'فيلم',
+    series: 'مسلسل',
+    anime: 'أنمي',
+  };
+
+  const applyLinkAnalysis = (
+    rawUrl: string,
+    meta?: Partial<YouTubeOEmbedMetadata> | null
+  ) => {
+    const cleanUrl = rawUrl.trim();
+    if (!cleanUrl) return;
+
+    const analyzed = analyzeMediaFromLinkAndMeta({
+      url: cleanUrl,
+      title: meta?.title || titleAr || titleEn,
+      description: meta?.description || description,
+      authorName: meta?.authorName,
+      keywords: meta?.keywords,
+      youtubeGenre: meta?.youtubeGenre,
+      lengthSeconds: meta?.lengthSeconds,
+      publishYear: meta?.publishYear,
+    });
+
+    setMediaType(analyzed.mediaType);
+
+    const availableSlugs = new Set(genreChoices.map((g) => g.slug));
+    const filteredGenres = analyzed.genres.filter((slug) => availableSlugs.has(slug));
+    const resolvedGenres =
+      filteredGenres.length > 0
+        ? filteredGenres
+        : analyzed.genres.length > 0
+        ? [analyzed.genres[0]]
+        : [genreChoices[0]?.slug || 'drama'];
+
+    setSelectedGenres(resolvedGenres);
+    setRating(analyzed.rating);
+
+    if (analyzed.year) {
+      setYear(analyzed.year);
+    }
+    if (analyzed.durationLabel) {
+      setDuration(analyzed.durationLabel);
+    }
+
+    if (meta?.title) {
+      if (!titleAr.trim() || titleAr.trim() === lastAutoTitleRef.current) {
+        setTitleAr(meta.title);
+      }
+      if (!titleEn.trim() || titleEn.trim() === lastAutoTitleRef.current) {
+        setTitleEn(meta.title);
+      }
+      lastAutoTitleRef.current = meta.title;
+    }
+
+    if (meta?.authorName && !director.trim()) {
+      setDirector(meta.authorName);
+    }
+
+    if (meta?.description && !description.trim()) {
+      setDescription(meta.description.slice(0, 500));
+    }
+
+    if (meta?.thumbnailUrl) {
+      if (!posterFile && (!posterUrl.trim() || posterUrl.trim() === lastAutoThumbRef.current)) {
+        setPosterUrl(meta.thumbnailUrl);
+      }
+      if (!bannerFile && (!bannerUrl.trim() || bannerUrl.trim() === lastAutoThumbRef.current)) {
+        setBannerUrl(meta.thumbnailUrl);
+      }
+      lastAutoThumbRef.current = meta.thumbnailUrl;
+    }
+
+    const genresArabic = resolvedGenres
+      .map((slug) => genreChoices.find((g) => g.slug === slug)?.nameAr || GENRE_LABELS_AR_LOOKUP(slug))
+      .join('، ');
+    const summaryText = `تم التحليل تلقائياً من الرابط: ${TYPE_NAME_MAP[analyzed.mediaType]} • التصنيف: ${genresArabic} • التقييم المقترح: ⭐ ${analyzed.rating.toFixed(1)}`;
+    setLinkAnalysisNote(summaryText);
+    if (meta?.title) {
+      setYoutubeMetaNote(`${meta.title} — ${summaryText}`);
+    } else {
+      setYoutubeMetaNote(summaryText);
+    }
+  };
+
+  const GENRE_LABELS_AR_LOOKUP = (slug: string) => GENRE_NAME_MAP[slug] || slug;
+
+  const analyzeUrlWithMetadata = async (rawUrl: string) => {
+    const cleanUrl = rawUrl.trim();
+    if (!cleanUrl) return;
+    const ytId = extractYouTubeVideoId(cleanUrl);
+    if (ytId) {
+      setIsFetchingYoutubeMeta(true);
+      try {
+        const meta = await fetchYouTubeOEmbedMetadata(cleanUrl);
+        applyLinkAnalysis(cleanUrl, meta);
+      } finally {
+        setIsFetchingYoutubeMeta(false);
+      }
+    } else {
+      applyLinkAnalysis(cleanUrl, null);
+    }
+  };
+
+  useEffect(() => {
+    const candidate =
+      uploadSourceMode === 'youtube'
+        ? youtubeUrlInput.trim()
+        : uploadSourceMode === 'external'
+        ? externalVideoUrl.trim()
+        : '';
+
+    if (!candidate) return;
+    const isYt = Boolean(extractYouTubeVideoId(candidate));
+    const isValidHttp = /^https?:\/\/.+/i.test(candidate);
+    if (!isYt && !isValidHttp) return;
+
+    const normalizedKey = isYt ? getYouTubeCanonicalUrl(candidate) || candidate : candidate;
+    if (normalizedKey === lastAnalyzedLinkRef.current) return;
+
+    const timer = window.setTimeout(() => {
+      lastAnalyzedLinkRef.current = normalizedKey;
+      void analyzeUrlWithMetadata(candidate);
+    }, 450);
+
+    return () => window.clearTimeout(timer);
+  }, [youtubeUrlInput, externalVideoUrl, uploadSourceMode]);
+
   const handleFetchYoutubeInfo = async () => {
     setErrorMsg(null);
     setYoutubeMetaNote(null);
@@ -271,30 +422,8 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
       return;
     }
 
-    setIsFetchingYoutubeMeta(true);
-    try {
-      const meta = await fetchYouTubeOEmbedMetadata(youtubeUrlInput);
-      if (meta) {
-        if (meta.title) {
-          if (!titleAr.trim()) setTitleAr(meta.title);
-          if (!titleEn.trim()) setTitleEn(meta.title);
-        }
-        if (meta.authorName && !director.trim()) {
-          setDirector(meta.authorName);
-        }
-        if (meta.thumbnailUrl) {
-          if (!posterFile && !posterUrl.trim()) setPosterUrl(meta.thumbnailUrl);
-          if (!bannerFile && !bannerUrl.trim()) setBannerUrl(meta.thumbnailUrl);
-        }
-        setYoutubeMetaNote(
-          meta.title
-            ? `تم جلب عنوان الفيديو والصورة المصغرة من يوتيوب بنجاح (${meta.title})`
-            : 'تم التحقق من معرف الفيديو وتجهيز الصورة المصغرة تلقائياً'
-        );
-      }
-    } finally {
-      setIsFetchingYoutubeMeta(false);
-    }
+    lastAnalyzedLinkRef.current = getYouTubeCanonicalUrl(youtubeUrlInput) || youtubeUrlInput.trim();
+    await analyzeUrlWithMetadata(youtubeUrlInput);
   };
 
   const handleSubmitAll = async (e: React.FormEvent) => {
@@ -376,7 +505,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
       if (uploadSourceMode === 'coming_soon') {
         const saved = await saveMovieToDatabases(
           {
-            type: 'movie',
+            type: mediaType,
             title: titleEn.trim() || titleAr.trim(),
             titleAr: titleAr.trim(),
             description: description.trim(),
@@ -398,6 +527,10 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
             isMostWatched,
             isComingSoon: true,
             sources: cleanExtraSources,
+            seasons:
+              mediaType === 'series'
+                ? [{ seasonNumber: 1, title: 'الموسم 1', episodes: [] }]
+                : undefined,
             storageType: 'external',
           },
           token
@@ -430,7 +563,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
 
         const saved = await saveMovieToDatabases(
           {
-            type: 'movie',
+            type: mediaType,
             title: titleEn.trim() || titleAr.trim(),
             titleAr: titleAr.trim(),
             description: description.trim(),
@@ -439,7 +572,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
             videoUrl: mainUrl,
             videoQuality,
             ageRating,
-            duration: duration.trim() || '120 دقيقة',
+            duration: duration.trim() || (mediaType === 'series' ? '45 دقيقة' : '120 دقيقة'),
             year: Number(year) || new Date().getFullYear(),
             rating: Number(rating) || generateRandomRating(),
             genres: selectedGenres,
@@ -454,6 +587,26 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
             introStart: introStart ? Number(introStart) : undefined,
             introEnd: introEnd ? Number(introEnd) : undefined,
             sources: allSources,
+            seasons:
+              mediaType === 'series'
+                ? [
+                    {
+                      seasonNumber: 1,
+                      title: 'الموسم 1',
+                      episodes: [
+                        {
+                          id: `ep-1-${Date.now()}`,
+                          episodeNumber: 1,
+                          title: 'الحلقة 1',
+                          duration: duration.trim() || '45 دقيقة',
+                          videoUrl: mainUrl,
+                          thumbnailUrl: finalPosterUrl,
+                          sources: allSources,
+                        },
+                      ],
+                    },
+                  ]
+                : undefined,
             storageType: isYt ? 'youtube' : 'server',
           },
           token
@@ -530,7 +683,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
 
           const saved = await saveMovieToDatabases(
             {
-              type: 'movie',
+              type: mediaType,
               title: itemTitleEn,
               titleAr: itemTitleAr,
               description: description.trim(),
@@ -553,6 +706,26 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
               introStart: introStart ? Number(introStart) : undefined,
               introEnd: introEnd ? Number(introEnd) : undefined,
               sources: allSources,
+              seasons:
+                mediaType === 'series'
+                  ? [
+                      {
+                        seasonNumber: 1,
+                        title: 'الموسم 1',
+                        episodes: [
+                          {
+                            id: `ep-1-${Date.now()}-${i}`,
+                            episodeNumber: 1,
+                            title: 'الحلقة 1',
+                            duration: task.duration || duration.trim() || '45 دقيقة',
+                            videoUrl,
+                            thumbnailUrl: finalPosterUrl,
+                            sources: allSources,
+                          },
+                        ],
+                      },
+                    ]
+                  : undefined,
               fileSizeBytes,
               storagePath,
               storageType,
@@ -977,32 +1150,52 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
         )}
 
         {uploadSourceMode === 'external' && (
-          <div className="space-y-1.5">
+          <div className="space-y-2.5">
             <label className="block text-xs font-black text-white">
               رابط بث مباشر (MP4 / HLS .m3u8 أو يوتيوب):
             </label>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap sm:flex-nowrap items-center gap-2">
               <input
                 type="url"
                 dir="ltr"
                 placeholder="https://cdn.example.com/movie/master.m3u8"
                 value={externalVideoUrl}
-                onChange={(e) => setExternalVideoUrl(e.target.value)}
-                className="flex-1 bg-zinc-950 border border-white/10 focus:border-amber-400 rounded-xl px-3 py-2.5 text-xs text-white font-mono focus:outline-none"
+                onChange={(e) => {
+                  setExternalVideoUrl(e.target.value);
+                  setLinkAnalysisNote(null);
+                }}
+                className="flex-1 min-w-[200px] bg-zinc-950 border border-white/10 focus:border-amber-400 rounded-xl px-3 py-2.5 text-xs text-white font-mono focus:outline-none"
               />
               {externalVideoUrl.trim() && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPreviewVideoSrc(externalVideoUrl.trim());
-                    setPreviewTitle(titleAr || 'معاينة الرابط');
-                  }}
-                  className="px-3.5 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 text-xs font-bold border border-white/10 cursor-pointer shrink-0"
-                >
-                  معاينة
-                </button>
+                <>
+                  <button
+                    type="button"
+                    disabled={isFetchingYoutubeMeta}
+                    onClick={() => {
+                      lastAnalyzedLinkRef.current = externalVideoUrl.trim();
+                      void analyzeUrlWithMetadata(externalVideoUrl);
+                    }}
+                    className="px-3.5 py-2.5 rounded-xl bg-amber-400/15 hover:bg-amber-400/25 text-amber-300 text-xs font-black border border-amber-400/35 flex items-center gap-1.5 cursor-pointer shrink-0"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>تحليل الرابط</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPreviewVideoSrc(externalVideoUrl.trim());
+                      setPreviewTitle(titleAr || 'معاينة الرابط');
+                    }}
+                    className="px-3.5 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 text-xs font-bold border border-white/10 cursor-pointer shrink-0"
+                  >
+                    معاينة
+                  </button>
+                </>
               )}
             </div>
+            {linkAnalysisNote && (
+              <p className="text-[11px] text-amber-300 font-semibold">{linkAnalysisNote}</p>
+            )}
           </div>
         )}
       </div>
@@ -1100,13 +1293,49 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
 
       {/* 3. Details, Genres, Cast & Director */}
       <div className="p-4 rounded-2xl bg-[#111116] border border-white/[0.08] space-y-4">
-        <h3 className="text-xs font-black text-amber-400 border-b border-white/[0.06] pb-2">
-          بيانات العمل والتصنيف وطاقم التمثيل
-        </h3>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.06] pb-2">
+          <h3 className="text-xs font-black text-amber-400">
+            بيانات العمل والتصنيف وطاقم التمثيل
+          </h3>
+          {linkAnalysisNote && (
+            <span className="text-[11px] font-bold text-amber-300 bg-amber-400/10 border border-amber-400/25 px-2.5 py-0.5 rounded-lg">
+              {linkAnalysisNote}
+            </span>
+          )}
+        </div>
+
+        {/* Media Type Selector (Movie / Series / Anime) */}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-xs font-bold text-zinc-300">نوع العمل (يتحدد تلقائياً حسب الرابط أو يدوياً):</span>
+          <div className="inline-flex items-center gap-1 p-1 rounded-xl bg-zinc-950 border border-white/10 text-xs font-bold">
+            {(
+              [
+                { id: 'movie', label: 'فيلم' },
+                { id: 'series', label: 'مسلسل' },
+                { id: 'anime', label: 'أنمي' },
+              ] as { id: MediaType; label: string }[]
+            ).map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => setMediaType(opt.id)}
+                className={`px-3 py-1 rounded-lg transition-colors cursor-pointer ${
+                  mediaType === opt.id
+                    ? 'bg-amber-400 text-black font-black'
+                    : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs font-bold text-zinc-300 mb-1">اسم الفيلم بالعربية *</label>
+            <label className="block text-xs font-bold text-zinc-300 mb-1">
+              {mediaType === 'series' ? 'اسم المسلسل بالعربية *' : 'اسم الفيلم بالعربية *'}
+            </label>
             <input
               type="text"
               value={titleAr}
@@ -1134,7 +1363,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
             rows={3}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="ملخص أحداث الفيلم..."
+            placeholder="ملخص أحداث العمل..."
             className="w-full bg-zinc-950 border border-white/10 focus:border-amber-400 rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
           />
         </div>
@@ -1187,7 +1416,17 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
             </select>
           </div>
           <div>
-            <label className="block text-[11px] font-bold text-zinc-400 mb-1">التقييم</label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-[11px] font-bold text-zinc-400">التقييم (تلقائي)</label>
+              <button
+                type="button"
+                onClick={() => setRating(generateRandomRating())}
+                className="text-[10px] font-bold text-amber-400 hover:text-amber-300 cursor-pointer"
+                title="توليد تقييم جديد"
+              >
+                تحديث
+              </button>
+            </div>
             <input
               type="number"
               step="0.1"
@@ -1202,7 +1441,9 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
 
         {/* Genres */}
         <div>
-          <label className="block text-xs font-bold text-zinc-300 mb-2">التصنيفات:</label>
+          <label className="block text-xs font-bold text-zinc-300 mb-2">
+            التصنيفات (يتم اختيارها تلقائياً حسب الرابط ويمكنك التعديل):
+          </label>
           <div className="flex flex-wrap gap-1.5">
             {genreChoices.map((g) => {
               const active = selectedGenres.includes(g.slug);
@@ -1466,8 +1707,8 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
             <Layers className="w-4 h-4" />
             <span>
               {uploadSourceMode === 'youtube'
-                ? 'ربط الفيلم من يوتيوب ونشره في الموقع'
-                : 'بدء الرفع وحفظ الفيلم في قاعدة البيانات'}
+                ? `ربط ${TYPE_NAME_MAP[mediaType]} من يوتيوب ونشره في الموقع`
+                : `بدء الرفع وحفظ ال${TYPE_NAME_MAP[mediaType]} في قاعدة البيانات`}
             </span>
           </>
         )}

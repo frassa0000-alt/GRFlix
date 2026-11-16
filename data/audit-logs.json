@@ -1,5 +1,21 @@
 [
   {
+    "id": "log-1794865293295-799",
+    "action": "تسجيل دخول لوحة التحكم",
+    "category": "auth",
+    "details": "دخول المشرف frassa.wwindows@gmail.com",
+    "adminEmail": "frassa.wwindows@gmail.com",
+    "createdAt": 1794865293295
+  },
+  {
+    "id": "log-1794864982266-3925",
+    "action": "تسجيل دخول لوحة التحكم",
+    "category": "auth",
+    "details": "دخول المشرف frassa.wwindows@gmail.com",
+    "adminEmail": "frassa.wwindows@gmail.com",
+    "createdAt": 1794864982266
+  },
+  {
     "id": "log-1794860101198-23459",
     "action": "حذف عمل نهائياً من الموقع بالكامل",
     "category": "media",
