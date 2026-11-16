@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { MediaItem, MediaType } from '../../types';
+import { MediaItem, MediaType, WatchProgress } from '../../types';
 import { MediaCard } from '../cards/MediaCard';
 import { EmptyCinemaState } from '../common/EmptyCinemaState';
 import { Heart, Film, Sparkles, Tv } from 'lucide-react';
@@ -10,6 +10,9 @@ interface FavoritesViewProps {
   mediaItems: MediaItem[];
   onSelectMedia: (item: MediaItem) => void;
   onToggleFavorite: (id: string) => void;
+  alertSubscribedIds?: string[];
+  onToggleAlert?: (id: string) => void;
+  history?: WatchProgress[];
   onBrowseContent?: () => void;
 }
 
@@ -18,6 +21,9 @@ export const FavoritesView: React.FC<FavoritesViewProps> = ({
   mediaItems,
   onSelectMedia,
   onToggleFavorite,
+  alertSubscribedIds = [],
+  onToggleAlert,
+  history = [],
   onBrowseContent,
 }) => {
   const { t } = useLanguage();
@@ -136,6 +142,9 @@ export const FavoritesView: React.FC<FavoritesViewProps> = ({
               onSelect={() => onSelectMedia(item)}
               isFavorite={true}
               onToggleFavorite={() => onToggleFavorite(item.id)}
+              isAlertSubscribed={alertSubscribedIds.includes(item.id)}
+              onToggleAlert={onToggleAlert ? () => onToggleAlert(item.id) : undefined}
+              watchProgress={history.find((h) => h.mediaId === item.id)}
             />
           ))}
         </div>

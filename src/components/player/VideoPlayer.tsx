@@ -176,6 +176,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
   const pendingSeekRef = useRef<number | null>(null);
   const resumeAutoplayRef = useRef<boolean>(false);
   const hasFatalErrorRef = useRef<boolean>(false);
+  const showControlsRef = useRef<boolean>(true);
+  const isPlayingRef = useRef<boolean>(false);
+  const revealedOnPointerDownRef = useRef<boolean>(false);
 
   // Flatten series episodes if available
   const episodesList = useMemo<FlattenedEpisode[]>(() => {
@@ -479,6 +482,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
     };
   }, []);
 
+  useEffect(() => {
+    showControlsRef.current = showControls;
+  }, [showControls]);
+
+  useEffect(() => {
+    isPlayingRef.current = isPlaying;
+  }, [isPlaying]);
+
   const clearControlsTimer = useCallback(() => {
     if (controlsTimerRef.current) {
       window.clearTimeout(controlsTimerRef.current);
@@ -486,34 +497,52 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
     }
   }, []);
 
+  const isPlayerCurrentlyPlaying = useCallback(() => {
+    if (!isPlayingRef.current) return false;
+    if (isYouTubeSource) {
+      return ytPlayerRef.current?.getPlayerState?.() === 1;
+    }
+    return Boolean(videoRef.current && !videoRef.current.paused);
+  }, [isYouTubeSource]);
+
   const scheduleControlsHide = useCallback(() => {
     clearControlsTimer();
+    if (
+      !isPlayerCurrentlyPlaying() ||
+      activePanel ||
+      errorMessage ||
+      isEnded ||
+      isScrubbing ||
+      isProgressHovered
+    ) {
+      return;
+    }
+
     controlsTimerRef.current = window.setTimeout(() => {
-      const playingNow = isYouTubeSource
-        ? ytPlayerRef.current?.getPlayerState?.() === 1
-        : Boolean(videoRef.current && !videoRef.current.paused);
       if (
-        playingNow &&
+        isPlayerCurrentlyPlaying() &&
         !activePanel &&
         !errorMessage &&
         !isEnded &&
         !isScrubbing &&
         !isProgressHovered
       ) {
+        showControlsRef.current = false;
         setShowControls(false);
       }
-    }, 3000);
+    }, 5000);
   }, [
     activePanel,
     clearControlsTimer,
     errorMessage,
     isEnded,
+    isPlayerCurrentlyPlaying,
     isProgressHovered,
     isScrubbing,
-    isYouTubeSource,
   ]);
 
   const revealControls = useCallback(() => {
+    showControlsRef.current = true;
     setShowControls(true);
     scheduleControlsHide();
   }, [scheduleControlsHide]);
@@ -528,6 +557,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
       isProgressHovered
     ) {
       clearControlsTimer();
+      showControlsRef.current = true;
       setShowControls(true);
     } else {
       scheduleControlsHide();
@@ -948,6 +978,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
         yt.seekTo(0, true);
         setIsEnded(false);
         yt.playVideo();
+        isPlayingRef.current = true;
         setIsPlaying(true);
         revealControls();
         return;
@@ -955,10 +986,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
       const state = yt.getPlayerState?.();
       if (state === 1) {
         yt.pauseVideo();
+        isPlayingRef.current = false;
         setIsPlaying(false);
         persistProgress(yt.getCurrentTime?.() || currentTime, yt.getDuration?.() || duration);
       } else {
         yt.playVideo();
+        isPlayingRef.current = true;
         setIsPlaying(true);
       }
       revealControls();
@@ -971,15 +1004,18 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
     if (isEnded) {
       video.currentTime = 0;
       setIsEnded(false);
+      isPlayingRef.current = true;
       video.play().then(() => setIsPlaying(true)).catch(() => {});
       revealControls();
       return;
     }
 
     if (video.paused) {
+      isPlayingRef.current = true;
       video.play().then(() => setIsPlaying(true)).catch(() => {});
     } else {
       video.pause();
+      isPlayingRef.current = false;
       setIsPlaying(false);
       persistProgress(video.currentTime, video.duration || 0);
     }
@@ -1451,10 +1487,35 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
     volume,
   ]);
 
-  // Viewport tap/double-tap gesture handler (respects 90° landscape rotation)
+  // Viewport pointer down/up gesture handler (respects 90° landscape rotation & pause lock)
+  const handleViewportPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (activePanel || errorMessage || isEnded) {
+      revealedOnPointerDownRef.current = false;
+      return;
+    }
+
+    if (!isPlayingRef.current) {
+      revealedOnPointerDownRef.current = true;
+      revealControls();
+      return;
+    }
+
+    if (!showControlsRef.current) {
+      revealedOnPointerDownRef.current = true;
+      revealControls();
+      return;
+    }
+
+    revealedOnPointerDownRef.current = false;
+    if (e.pointerType !== 'touch') {
+      scheduleControlsHide();
+    }
+  };
+
   const handleViewportPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
     if (activePanel) {
       setActivePanel(null);
+      revealControls();
       return;
     }
 
@@ -1489,23 +1550,48 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
       if (tapTimerRef.current) {
         window.clearTimeout(tapTimerRef.current);
       }
+
+      if (!isPlayingRef.current) {
+        revealControls();
+        return;
+      }
+
+      if (revealedOnPointerDownRef.current) {
+        revealedOnPointerDownRef.current = false;
+        revealControls();
+        return;
+      }
+
       tapTimerRef.current = window.setTimeout(() => {
-        setShowControls((prev) => {
-          const next = !prev;
-          if (next) scheduleControlsHide();
-          return next;
-        });
+        if (!isPlayingRef.current) {
+          revealControls();
+          return;
+        }
+        clearControlsTimer();
+        showControlsRef.current = false;
+        setShowControls(false);
       }, 240);
     } else {
       if (e.detail === 2) {
         toggleFullscreen();
-      } else {
-        setShowControls((prev) => {
-          const next = !prev;
-          if (next) scheduleControlsHide();
-          return next;
-        });
+        revealControls();
+        return;
       }
+
+      if (!isPlayingRef.current) {
+        revealControls();
+        return;
+      }
+
+      if (revealedOnPointerDownRef.current) {
+        revealedOnPointerDownRef.current = false;
+        revealControls();
+        return;
+      }
+
+      clearControlsTimer();
+      showControlsRef.current = false;
+      setShowControls(false);
     }
   };
 
@@ -1759,8 +1845,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
       className={`z-50 bg-black overflow-hidden select-none font-sans transition-[transform,width,height] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${
         !showControls && isPlaying && !errorMessage && !isEnded ? 'cursor-none' : ''
       }`}
-      onMouseMove={revealControls}
-      onTouchStart={revealControls}
+      onPointerMove={(e) => {
+        if (e.pointerType !== 'touch') {
+          revealControls();
+        }
+      }}
     >
       {/* Hidden subtitle file input */}
       <input
@@ -1779,6 +1868,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -12 }}
             transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              revealControls();
+            }}
             onPointerUp={(e) => e.stopPropagation()}
             className="absolute top-0 inset-x-0 z-30 flex items-center justify-between gap-3 px-3 sm:px-6 pt-3 pb-8 bg-gradient-to-b from-black/85 via-black/45 to-transparent pointer-events-none"
           >
@@ -2175,6 +2268,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
       <div
         ref={stageRef}
         className="absolute inset-0 w-full h-full flex items-center justify-center bg-black overflow-hidden"
+        onPointerDown={handleViewportPointerDown}
         onPointerUp={handleViewportPointerUp}
       >
         {isYouTubeSource ? (
@@ -2185,7 +2279,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
               height: `${Math.max(1, Math.round(ytFittedHeight))}px`,
             }}
           >
-            <div ref={ytHostRef} className="absolute inset-0 w-full h-full pointer-events-none" />
+            <div
+              ref={ytHostRef}
+              className="absolute inset-x-0 pointer-events-none"
+              style={{
+                top: '-68px',
+                bottom: '-68px',
+              }}
+            />
           </div>
         ) : (
           <video
@@ -2400,6 +2501,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
                 exit={{ opacity: 0, scale: 0.94 }}
                 transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
                 dir="ltr"
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                  revealControls();
+                }}
                 onPointerUp={(e) => e.stopPropagation()}
                 className="pointer-events-auto flex items-center justify-center gap-6 sm:gap-10"
               >
@@ -2585,6 +2690,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 12 }}
             transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              revealControls();
+            }}
             onPointerUp={(e) => e.stopPropagation()}
             dir="ltr"
             className="absolute bottom-0 inset-x-0 z-30 px-3 sm:px-6 pt-8 pb-3 sm:pb-5 bg-gradient-to-t from-black/90 via-black/55 to-transparent"
@@ -2612,6 +2721,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
                 scheduleControlsHide();
               }}
               onPointerDown={(e) => {
+                e.stopPropagation();
                 if (!duration) return;
                 setIsScrubbing(true);
                 revealControls();
@@ -2638,7 +2748,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
                 e.stopPropagation();
                 setIsScrubbing(false);
                 setHoverSeek(null);
-                scheduleControlsHide();
+                revealControls();
               }}
             >
               {hoverSeek && (
@@ -2746,6 +2856,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
                     max={1}
                     step={0.05}
                     value={isMuted ? 0 : volume}
+                    onPointerDown={revealControls}
+                    onInput={(e) =>
+                      handleVolumeChange(parseFloat((e.target as HTMLInputElement).value))
+                    }
                     onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
                     className="hidden md:block w-20 h-1 bg-white/25 rounded-lg appearance-none cursor-pointer accent-[#F7C600]"
                   />

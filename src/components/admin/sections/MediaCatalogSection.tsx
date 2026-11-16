@@ -21,6 +21,7 @@ import { CategoryItem, MediaItem, MediaType } from '../../../types';
 import {
   deleteMovieFromDatabases,
   deleteMoviesBatchFromDatabases,
+  formatAdminErrorMessage,
   formatFileSize,
   updateMovieInDatabases,
 } from '../../../services/movieService';
@@ -106,7 +107,7 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
       await updateMovieInDatabases(item.id, updates, token);
       onRefresh();
     } catch (err: any) {
-      setActionError(err?.message || 'تعذر تحديث البيانات');
+      setActionError(formatAdminErrorMessage(err, 'تعذر تحديث البيانات'));
     }
   };
 
@@ -118,7 +119,7 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
       await deleteMovieFromDatabases(item, token);
       onRefresh();
     } catch (err: any) {
-      setActionError(err?.message || 'فشل حذف المحتوى');
+      setActionError(formatAdminErrorMessage(err, 'فشل حذف المحتوى'));
     } finally {
       setDeletingIds((prev) => prev.filter((id) => id !== item.id));
     }
@@ -134,7 +135,7 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
       setSelectedIds([]);
       onRefresh();
     } catch (err: any) {
-      setActionError(err?.message || 'فشل حذف الأعمال المحددة');
+      setActionError(formatAdminErrorMessage(err, 'فشل حذف الأعمال المحددة'));
     } finally {
       setIsBulkDeleting(false);
     }
@@ -171,36 +172,40 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
         (editingItem.posterUrl || '').trim() ||
         (isYt ? getYouTubeThumbnailUrl(nextVideoUrl, 'hq') || '' : '');
 
+      const cleanTitleAr =
+        (editingItem.titleAr || '').trim() || (editingItem.title || '').trim() || 'عمل سينمائي';
+
       await updateMovieInDatabases(
         editingItem.id,
         {
-          titleAr: editingItem.titleAr,
-          title: editingItem.title,
+          titleAr: cleanTitleAr,
+          title: (editingItem.title || '').trim() || cleanTitleAr,
           type: editingItem.type as MediaType,
-          description: editingItem.description,
+          description: editingItem.description || '',
           posterUrl: nextPoster,
           bannerUrl: (editingItem.bannerUrl || '').trim() || nextPoster,
           videoUrl: nextVideoUrl,
+          isComingSoon: !nextVideoUrl && editingItem.type !== 'series',
           storageType: isYt ? 'youtube' : editingItem.storageType || 'server',
-          year: Number(editingItem.year),
-          duration: editingItem.duration,
-          videoQuality: editingItem.videoQuality,
-          ageRating: editingItem.ageRating,
-          rating: Number(editingItem.rating),
+          year: Number(editingItem.year) || new Date().getFullYear(),
+          duration: editingItem.duration || '120 دقيقة',
+          videoQuality: editingItem.videoQuality || '1080p',
+          ageRating: editingItem.ageRating || '+16',
+          rating: Number(editingItem.rating) || 8.5,
           director: editingItem.director || '',
           displayOrder: Number(editingItem.displayOrder) || 0,
           isPublished: editingItem.isPublished,
           isFeatured: Boolean(editingItem.isFeatured),
           isLatest: editingItem.isLatest !== false,
           isMostWatched: Boolean(editingItem.isMostWatched),
-          genres: editingItem.genres,
+          genres: Array.isArray(editingItem.genres) ? editingItem.genres : ['action'],
         },
         token
       );
       setEditingItem(null);
       onRefresh();
     } catch (err: any) {
-      setActionError(err?.message || 'تعذر حفظ التعديلات');
+      setActionError(formatAdminErrorMessage(err, 'تعذر حفظ التعديلات'));
     } finally {
       setIsSavingEdit(false);
     }
@@ -503,6 +508,12 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
                             <Flame className="w-3 h-3" />
                             <span>أحدث</span>
                           </button>
+
+                          {!item.videoUrl && item.type !== 'series' && (
+                            <span className="px-2 py-1 rounded-lg text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                              قريباً
+                            </span>
+                          )}
                         </div>
                       </td>
 

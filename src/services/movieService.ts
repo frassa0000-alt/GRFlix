@@ -16,6 +16,7 @@ import {
 } from 'firebase/firestore';
 import { db, storage, handleFirestoreError, OperationType } from './firebase';
 import { MediaItem } from '../types';
+import { generateRandomRating, getEffectiveMediaRating } from '../utils/rating';
 import {
   createMovie,
   updateMovie,
@@ -25,6 +26,8 @@ import {
   fetchAdminMovies,
   fetchPublishedMovies,
   fetchDeletedMovieIds,
+  ApiUnavailableError,
+  isApiUnavailableError,
 } from './api';
 import {
   addLocalDeletedMediaIds,
@@ -125,6 +128,145 @@ const stripUndefinedDeep = <T>(value: T): T => {
   return value;
 };
 
+export const formatAdminErrorMessage = (err: unknown, fallback: string): string => {
+  const raw = err instanceof Error ? err.message : String(err || '');
+  if (!raw) return fallback;
+
+  if (raw.trim().startsWith('{')) {
+    try {
+      const parsed = JSON.parse(raw);
+      const errMsg = String(parsed?.error || '');
+      const email = String(parsed?.authInfo?.email || '');
+      if (
+        errMsg.includes('Missing or insufficient permissions') ||
+        errMsg.includes('PERMISSION_DENIED') ||
+        errMsg.includes('insufficient permissions')
+      ) {
+        if (!email) {
+          return 'الخادم غير متاح حالياً، وللحفظ أو الحذف عبر السحابة يرجى تسجيل الدخول بحساب المطور (frassa.wwindows@gmail.com) عبر زر Google في الملف الشخصي.';
+        }
+        if (email.toLowerCase() !== 'frassa.wwindows@gmail.com') {
+          return 'لا تملك صلاحية التعديل أو الحذف في قاعدة البيانات السحابية. يرجى تسجيل الدخول بحساب المطور (frassa.wwindows@gmail.com).';
+        }
+        return 'تعذر تنفيذ العملية في قاعدة البيانات السحابية. تأكد من صحة البيانات المدخلة أو أعد المحاولة.';
+      }
+      if (errMsg) return errMsg;
+    } catch {
+      // fall through
+    }
+  }
+
+  return raw || fallback;
+};
+
+const uploadMovieVideoToFirebase = (
+  file: File,
+  onProgress: (info: UploadProgressInfo) => void,
+  controller?: UploadController
+): Promise<{
+  videoUrl: string;
+  storagePath: string;
+  fileSizeBytes: number;
+  storageType: 'firebase' | 'server';
+}> => {
+  return new Promise((resolve, reject) => {
+    const ext = (file.name.split('.').pop() || 'mp4').replace(/[^a-zA-Z0-9]/g, '').slice(0, 8) || 'mp4';
+    const storagePath = `movies/videos/video_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const storageRef = ref(storage, storagePath);
+    const task = uploadBytesResumable(storageRef, file, {
+      contentType: file.type || 'video/mp4',
+    });
+
+    const startTime = Date.now();
+    if (controller) {
+      controller.isPaused = false;
+      controller.pause = () => {
+        if (controller.isCancelled) return;
+        task.pause();
+        controller.isPaused = true;
+      };
+      controller.resume = () => {
+        if (controller.isCancelled) return;
+        task.resume();
+        controller.isPaused = false;
+      };
+      controller.cancel = () => {
+        controller.isCancelled = true;
+        task.cancel();
+      };
+    }
+
+    task.on(
+      'state_changed',
+      (snapshot) => {
+        if (snapshot.state === 'paused') {
+          const pct = snapshot.totalBytes > 0 ? Math.min(99, Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100)) : 0;
+          onProgress({
+            percent: pct,
+            loadedBytes: snapshot.bytesTransferred,
+            totalBytes: snapshot.totalBytes,
+            speedFormatted: 'تم إيقاف الرفع مؤقتاً',
+            etaFormatted: 'اضغط استكمال للمتابعة',
+            phase: 'paused',
+          });
+          return;
+        }
+        const elapsedSec = Math.max(0.2, (Date.now() - startTime) / 1000);
+        const speedBps = snapshot.bytesTransferred / elapsedSec;
+        const speedMb = (speedBps / (1024 * 1024)).toFixed(1);
+        const remaining = Math.max(0, snapshot.totalBytes - snapshot.bytesTransferred);
+        const etaSec = speedBps > 0 ? Math.ceil(remaining / speedBps) : 0;
+        const percent =
+          snapshot.totalBytes > 0
+            ? Math.min(99, Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100))
+            : 0;
+
+        onProgress({
+          percent,
+          loadedBytes: snapshot.bytesTransferred,
+          totalBytes: snapshot.totalBytes,
+          speedFormatted: speedBps > 0 ? `${speedMb} MB/ث (التخزين السحابي)` : 'جارٍ الاتصال بالسحابة...',
+          etaFormatted:
+            etaSec > 60
+              ? `متبقي ${Math.ceil(etaSec / 60)} دقيقة`
+              : etaSec > 0
+              ? `متبقي ${etaSec} ثانية`
+              : 'لحظات...',
+          phase: 'uploading',
+        });
+      },
+      (err) => {
+        if (controller?.isCancelled || err?.code === 'storage/canceled') {
+          reject(new Error('تم إلغاء عملية الرفع من قبلك'));
+          return;
+        }
+        reject(new Error('تعذر رفع الفيديو إلى الخادم أو التخزين السحابي'));
+      },
+      async () => {
+        try {
+          const videoUrl = await getDownloadURL(task.snapshot.ref);
+          onProgress({
+            percent: 100,
+            loadedBytes: file.size,
+            totalBytes: file.size,
+            speedFormatted: 'اكتمل النقل بنجاح',
+            etaFormatted: 'تم التحقق من الفيديو',
+            phase: 'verifying',
+          });
+          resolve({
+            videoUrl,
+            storagePath,
+            fileSizeBytes: file.size,
+            storageType: 'firebase',
+          });
+        } catch {
+          reject(new Error('تعذر الحصول على رابط الفيديو السحابي'));
+        }
+      }
+    );
+  });
+};
+
 /**
  * Legacy/Small-File single-stream XHR uploader
  */
@@ -184,9 +326,15 @@ const uploadMovieVideoSingleStream = async (
     });
 
     xhr.addEventListener('load', () => {
+      const rawText = xhr.responseText || '';
+      const isHtmlOrEmpty = !rawText || rawText.trim().startsWith('<');
       if (xhr.status >= 200 && xhr.status < 300) {
+        if (isHtmlOrEmpty) {
+          reject(new ApiUnavailableError('استجابة غير صالحة من الخادم'));
+          return;
+        }
         try {
-          const res = JSON.parse(xhr.responseText);
+          const res = JSON.parse(rawText);
           if (res.success && res.videoUrl) {
             onProgress({
               percent: 100,
@@ -206,11 +354,13 @@ const uploadMovieVideoSingleStream = async (
             reject(new Error(res.error || 'فشل معالجة الفيديو في الخادم'));
           }
         } catch {
-          reject(new Error('استجابة غير صالحة من الخادم'));
+          reject(new ApiUnavailableError('استجابة غير صالحة من الخادم'));
         }
+      } else if (xhr.status === 404 || xhr.status === 405 || xhr.status >= 502 || isHtmlOrEmpty) {
+        reject(new ApiUnavailableError(`خدمة الرفع غير متاحة (${xhr.status})`));
       } else {
         try {
-          const res = JSON.parse(xhr.responseText);
+          const res = JSON.parse(rawText);
           reject(new Error(res.error || `خطأ في الرفع (${xhr.status})`));
         } catch {
           reject(new Error(`فشل رفع الفيديو (رمز الحالة: ${xhr.status})`));
@@ -219,7 +369,7 @@ const uploadMovieVideoSingleStream = async (
     });
 
     xhr.addEventListener('error', () => {
-      reject(new Error('انقطع الاتصال أثناء الرفع، تأكد من اتصالك بالإنترنت وأعد المحاولة'));
+      reject(new ApiUnavailableError('انقطع الاتصال أثناء الرفع، تأكد من اتصالك بالإنترنت وأعد المحاولة'));
     });
 
     xhr.addEventListener('abort', () => {
@@ -253,7 +403,14 @@ export const uploadMovieVideo = async (
 
   // For small files (<= 4MB), single stream is instantaneous
   if (file.size <= CHUNK_SIZE) {
-    return uploadMovieVideoSingleStream(file, token, onProgress, controller);
+    try {
+      return await uploadMovieVideoSingleStream(file, token, onProgress, controller);
+    } catch (err) {
+      if (!controller?.isCancelled && isApiUnavailableError(err)) {
+        return uploadMovieVideoToFirebase(file, onProgress, controller);
+      }
+      throw err;
+    }
   }
 
   const abortController = new AbortController();
@@ -358,27 +515,48 @@ export const uploadMovieVideo = async (
   }
 
   // 1. Initialize parallel upload session on server
-  const initRes = await fetch('/api/admin/upload-video/init', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({
-      fileName: file.name,
-      fileSize: file.size,
-      mimeType: file.type || 'video/mp4',
-    }),
-    signal: abortController.signal,
-  });
+  let initData: any = null;
+  try {
+    const initRes = await fetch('/api/admin/upload-video/init', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        fileName: file.name,
+        fileSize: file.size,
+        mimeType: file.type || 'video/mp4',
+      }),
+      signal: abortController.signal,
+    });
 
-  if (!initRes.ok) {
-    // Fallback cleanly if chunk endpoint unavailable
-    return uploadMovieVideoSingleStream(file, token, onProgress, controller);
+    const initText = await initRes.text();
+    if (!initRes.ok || !initText || initText.trim().startsWith('<')) {
+      try {
+        return await uploadMovieVideoSingleStream(file, token, onProgress, controller);
+      } catch (singleErr) {
+        if (!controller?.isCancelled && isApiUnavailableError(singleErr)) {
+          return uploadMovieVideoToFirebase(file, onProgress, controller);
+        }
+        throw singleErr;
+      }
+    }
+
+    initData = JSON.parse(initText);
+    activeUploadId = initData?.uploadId || '';
+    if (!activeUploadId) {
+      throw new ApiUnavailableError('خدمة الرفع الجزئي غير متوفرة');
+    }
+  } catch (err: any) {
+    if (controller?.isCancelled || abortController.signal.aborted) {
+      throw new Error('تم إلغاء عملية الرفع من قبلك');
+    }
+    if (err instanceof TypeError || isApiUnavailableError(err) || err instanceof SyntaxError) {
+      return uploadMovieVideoToFirebase(file, onProgress, controller);
+    }
+    throw err;
   }
-
-  const initData = await initRes.json();
-  activeUploadId = initData.uploadId;
 
   // 2. Build chunk queue
   const chunks: Array<{ index: number; start: number; end: number }> = [];
@@ -558,12 +736,13 @@ export const saveMovieToDatabases = async (
     ageRating: movieData.ageRating || '+16',
     duration: movieData.duration || (mediaType === 'series' ? 'مسلسل' : '120 دقيقة'),
     year: Number(movieData.year) || new Date().getFullYear(),
-    rating: Number(movieData.rating) || 8.5,
+    rating: Number(movieData.rating) || generateRandomRating(),
     genres: Array.isArray(movieData.genres) && movieData.genres.length > 0 ? movieData.genres : ['action'],
     isPublished: movieData.isPublished !== false,
     isFeatured: Boolean(movieData.isFeatured),
     isLatest: movieData.isLatest !== false,
     isMostWatched: Boolean(movieData.isMostWatched),
+    isComingSoon: Boolean(movieData.isComingSoon) && !(movieData.videoUrl || '').trim(),
     displayOrder: Number(movieData.displayOrder) || 0,
     viewsCount: Number(movieData.viewsCount) || 0,
     director: movieData.director || '',
@@ -580,18 +759,32 @@ export const saveMovieToDatabases = async (
     updatedAt: now,
   };
 
-  // 1. Immediate Save to Server Database
-  const savedServerMovie = await createMovie(finalMovie, token);
-  removeLocalDeletedMediaId(savedServerMovie.id);
+  // 1. Save to Server Database when Express backend is active
+  let targetMovie: MediaItem = finalMovie;
+  let serverSaved = false;
+  try {
+    targetMovie = await createMovie(finalMovie, token);
+    serverSaved = true;
+  } catch (err) {
+    if (!isApiUnavailableError(err)) {
+      throw err;
+    }
+    console.warn('Server API unavailable during save, falling back to Firestore:', err);
+  }
+
+  removeLocalDeletedMediaId(targetMovie.id);
 
   // 2. Sync to Firebase Firestore
   try {
-    await setDoc(doc(db, 'movies', savedServerMovie.id), stripUndefinedDeep(savedServerMovie));
+    await setDoc(doc(db, 'movies', targetMovie.id), stripUndefinedDeep(targetMovie));
   } catch (firestoreErr) {
+    if (!serverSaved) {
+      handleFirestoreError(firestoreErr, OperationType.WRITE, `movies/${targetMovie.id}`);
+    }
     console.warn('Could not save to Firestore (Server record active):', firestoreErr);
   }
 
-  return savedServerMovie;
+  return targetMovie;
 };
 
 /**
@@ -608,22 +801,49 @@ export const updateMovieInDatabases = async (
     updatedAt: now,
   });
 
-  // Update in Server API
-  const serverResult = await updateMovie(id, updatePayload, token);
-
-  // Update in Firestore (use setDoc merge so missing cloud docs get created cleanly)
+  // 1. Update in Server API when active
+  let serverResult: MediaItem | null = null;
   try {
-    const movieRef = doc(db, 'movies', id);
-    await setDoc(movieRef, stripUndefinedDeep(serverResult), { merge: true });
+    serverResult = await updateMovie(id, updatePayload, token);
   } catch (err) {
-    try {
-      await updateDoc(doc(db, 'movies', id), updatePayload as Record<string, any>);
-    } catch {
-      console.warn('Firestore update warning:', err);
+    if (!isApiUnavailableError(err)) {
+      throw err;
     }
+    console.warn('Server API unavailable during update, falling back to Firestore:', err);
   }
 
-  return serverResult;
+  // 2. Update in Firestore (use setDoc merge when full doc available, else updateDoc)
+  try {
+    const movieRef = doc(db, 'movies', id);
+    if (serverResult) {
+      await setDoc(movieRef, stripUndefinedDeep(serverResult), { merge: true });
+    } else {
+      try {
+        await updateDoc(movieRef, updatePayload as Record<string, any>);
+      } catch (updateErr: any) {
+        if (updateErr?.code === 'not-found') {
+          await setDoc(
+            movieRef,
+            stripUndefinedDeep({
+              id,
+              titleAr: updates.titleAr || updates.title || 'عمل سينمائي',
+              ...updatePayload,
+            }),
+            { merge: true }
+          );
+        } else {
+          throw updateErr;
+        }
+      }
+    }
+  } catch (err) {
+    if (!serverResult) {
+      handleFirestoreError(err, OperationType.UPDATE, `movies/${id}`);
+    }
+    console.warn('Firestore update warning:', err);
+  }
+
+  return serverResult || ({ id, ...updatePayload } as MediaItem);
 };
 
 /**
@@ -636,23 +856,30 @@ export const deleteMovieFromDatabases = async (
   addLocalDeletedMediaIds([movie.id]);
   removeMediaFromLocalUserData([movie.id]);
 
-  await deleteMovie(movie.id, token, {
-    titleAr: movie.titleAr,
-    type: movie.type,
-    videoUrl: movie.videoUrl,
-    posterUrl: movie.posterUrl,
-    bannerUrl: movie.bannerUrl,
-    sources: movie.sources,
-    seasons: movie.seasons,
-  });
+  let serverDeleted = false;
+  try {
+    await deleteMovie(movie.id, token, {
+      titleAr: movie.titleAr,
+      type: movie.type,
+      videoUrl: movie.videoUrl,
+      posterUrl: movie.posterUrl,
+      bannerUrl: movie.bannerUrl,
+      sources: movie.sources,
+      seasons: movie.seasons,
+    });
+    serverDeleted = true;
+  } catch (err) {
+    if (!isApiUnavailableError(err)) {
+      throw err;
+    }
+    console.warn('Server API unavailable during delete, falling back to Firestore:', err);
+  }
 
   try {
     await deleteDoc(doc(db, 'movies', movie.id));
   } catch (err) {
-    try {
+    if (!serverDeleted) {
       handleFirestoreError(err, OperationType.DELETE, `movies/${movie.id}`);
-    } catch {
-      // Non-blocking when user is authenticated via server magic-link session rather than Firebase Auth
     }
   }
 
@@ -678,26 +905,39 @@ export const deleteMoviesBatchFromDatabases = async (
   addLocalDeletedMediaIds(ids);
   removeMediaFromLocalUserData(ids);
 
-  await bulkDeleteMovies(
-    movies.map((m) => ({
-      id: m.id,
-      titleAr: m.titleAr,
-      type: m.type,
-      videoUrl: m.videoUrl,
-      posterUrl: m.posterUrl,
-      bannerUrl: m.bannerUrl,
-      sources: m.sources,
-      seasons: m.seasons,
-    })),
-    token
-  );
+  let serverDeleted = false;
+  try {
+    await bulkDeleteMovies(
+      movies.map((m) => ({
+        id: m.id,
+        titleAr: m.titleAr,
+        type: m.type,
+        videoUrl: m.videoUrl,
+        posterUrl: m.posterUrl,
+        bannerUrl: m.bannerUrl,
+        sources: m.sources,
+        seasons: m.seasons,
+      })),
+      token
+    );
+    serverDeleted = true;
+  } catch (err) {
+    if (!isApiUnavailableError(err)) {
+      throw err;
+    }
+    console.warn('Server API unavailable during bulk delete, falling back to Firestore:', err);
+  }
+
+  let firstFirestoreError: { err: unknown; id: string } | null = null;
 
   await Promise.all(
     movies.map(async (movie) => {
       try {
         await deleteDoc(doc(db, 'movies', movie.id));
-      } catch {
-        // Tombstone already guarantees global removal even without Firebase Auth session
+      } catch (err) {
+        if (!firstFirestoreError) {
+          firstFirestoreError = { err, id: movie.id };
+        }
       }
       if (movie.storagePath && movie.storagePath.startsWith('movies/')) {
         try {
@@ -708,6 +948,14 @@ export const deleteMoviesBatchFromDatabases = async (
       }
     })
   );
+
+  if (!serverDeleted && firstFirestoreError) {
+    handleFirestoreError(
+      firstFirestoreError.err,
+      OperationType.DELETE,
+      `movies/${firstFirestoreError.id}`
+    );
+  }
 };
 
 /**
@@ -731,7 +979,7 @@ export const fetchAllMoviesUnified = async (token?: string): Promise<MediaItem[]
 
   serverMoviesResult.forEach((m) => {
     if (m && m.id && !deletedSet.has(m.id)) {
-      moviesMap.set(m.id, m);
+      moviesMap.set(m.id, { ...m, rating: getEffectiveMediaRating(m) });
     }
   });
 
@@ -743,7 +991,8 @@ export const fetchAllMoviesUnified = async (token?: string): Promise<MediaItem[]
       const data = docSnap.data() as MediaItem;
       const effectiveId = data?.id || docSnap.id;
       if (data && effectiveId && !deletedSet.has(effectiveId) && !moviesMap.has(effectiveId)) {
-        moviesMap.set(effectiveId, { ...data, id: effectiveId });
+        const merged = { ...data, id: effectiveId };
+        moviesMap.set(effectiveId, { ...merged, rating: getEffectiveMediaRating(merged) });
       }
     });
   } catch (err) {

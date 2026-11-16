@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { Play, Star, Heart, EyeOff } from 'lucide-react';
-import { MediaItem } from '../../types';
+import { Play, Star, Heart, EyeOff, Bell, BellRing, Clock } from 'lucide-react';
+import { MediaItem, WatchProgress } from '../../types';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { formatQualityLabel } from '../../utils/quality';
+import { hasPlayableMediaVideo } from '../../services/releaseAlertService';
+import { getMediaProgress } from '../../services/storage';
+import { getEffectiveMediaRating } from '../../utils/rating';
 
 export interface MediaCardProps {
   media?: MediaItem;
@@ -12,6 +15,9 @@ export interface MediaCardProps {
   onSelect?: (item: MediaItem) => void;
   isFavorite: boolean;
   onToggleFavorite: (id?: string) => void;
+  isAlertSubscribed?: boolean;
+  onToggleAlert?: (id?: string) => void;
+  watchProgress?: number | WatchProgress;
   variant?: 'poster' | 'landscape';
   inGrid?: boolean;
   index?: number;
@@ -24,6 +30,9 @@ export const MediaCard: React.FC<MediaCardProps> = ({
   onSelect,
   isFavorite,
   onToggleFavorite,
+  isAlertSubscribed = false,
+  onToggleAlert,
+  watchProgress,
   variant = 'poster',
   inGrid = false,
   index = 0,
@@ -45,6 +54,13 @@ export const MediaCard: React.FC<MediaCardProps> = ({
     onToggleFavorite(currentItem.id);
   };
 
+  const handleAlertClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onToggleAlert) {
+      onToggleAlert(currentItem.id);
+    }
+  };
+
   const isLandscape = variant === 'landscape';
   const displayImage = isLandscape
     ? currentItem.bannerUrl || currentItem.posterUrl
@@ -52,6 +68,26 @@ export const MediaCard: React.FC<MediaCardProps> = ({
 
   const displayTitle = getMediaTitle(currentItem);
   const isHiddenItem = currentItem.isPublished === false;
+  const isComingSoonItem = !hasPlayableMediaVideo(currentItem);
+
+  const resolvedProgress =
+    typeof watchProgress === 'number'
+      ? undefined
+      : watchProgress || getMediaProgress(currentItem.id);
+
+  const watchedPercent =
+    typeof watchProgress === 'number'
+      ? Math.max(0, Math.min(100, Math.round(watchProgress)))
+      : resolvedProgress
+      ? resolvedProgress.percentage > 0
+        ? Math.min(100, Math.round(resolvedProgress.percentage))
+        : resolvedProgress.duration > 0 && resolvedProgress.currentTime > 2
+        ? Math.max(
+            1,
+            Math.min(100, Math.round((resolvedProgress.currentTime / resolvedProgress.duration) * 100))
+          )
+        : 0
+      : 0;
 
   const categoryName =
     currentItem.genres && currentItem.genres.length > 0 && typeof currentItem.genres[0] === 'string'
@@ -70,7 +106,7 @@ export const MediaCard: React.FC<MediaCardProps> = ({
       whileHover={{ y: -5 }}
       whileTap={{ scale: 0.985 }}
       onClick={handleClick}
-      className={`group relative flex-shrink-0 cursor-pointer rounded-2xl overflow-hidden bg-[#101016] border transition-colors duration-300 shadow-[0_12px_30px_rgba(0,0,0,0.65)] hover:shadow-[0_22px_45px_rgba(0,0,0,0.85),0_0_0_1px_rgba(251,191,36,0.45)] ${
+      className={`group relative flex flex-col flex-shrink-0 cursor-pointer rounded-2xl overflow-hidden bg-[#101016] border transition-colors duration-300 shadow-[0_12px_30px_rgba(0,0,0,0.65)] hover:shadow-[0_22px_45px_rgba(0,0,0,0.85),0_0_0_1px_rgba(251,191,36,0.45)] ${
         isHiddenItem
           ? 'border-amber-500/45 opacity-95'
           : 'border-white/[0.08] hover:border-amber-400/60'
@@ -129,6 +165,12 @@ export const MediaCard: React.FC<MediaCardProps> = ({
                 {formatQualityLabel(currentItem.videoQuality)}
               </span>
             ) : null}
+            {isComingSoonItem && (
+              <span className="inline-flex items-center gap-1 bg-amber-500/90 text-black font-black text-[10px] px-1.5 py-0.5 rounded-md shadow">
+                <Clock className="w-2.5 h-2.5" />
+                <span>{t('قريباً', 'Soon')}</span>
+              </span>
+            )}
             {isHiddenItem && (
               <span className="inline-flex items-center gap-1 bg-zinc-950/90 border border-amber-400/60 text-amber-300 font-black text-[10px] px-1.5 py-0.5 rounded-md shadow">
                 <EyeOff className="w-2.5 h-2.5" />
@@ -137,13 +179,47 @@ export const MediaCard: React.FC<MediaCardProps> = ({
             )}
           </div>
 
-          {typeof currentItem.rating === 'number' && currentItem.rating > 0 && (
-            <div className="inline-flex items-center gap-1 bg-black/70 backdrop-blur-md px-1.5 py-0.5 rounded-md text-amber-400 text-[11px] font-bold tabular-nums border border-white/10">
-              <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-              <span>{currentItem.rating.toFixed(1)}</span>
-            </div>
-          )}
+          {(() => {
+            const effectiveRating = getEffectiveMediaRating(currentItem);
+            return (
+              <div className="inline-flex items-center gap-1 bg-black/70 backdrop-blur-md px-1.5 py-0.5 rounded-md text-amber-400 text-[11px] font-bold tabular-nums border border-white/10">
+                <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                <span>{effectiveRating.toFixed(1)}</span>
+              </div>
+            );
+          })()}
         </div>
+
+        {/* Notify Me When Added Button */}
+        {onToggleAlert && (
+          <button
+            type="button"
+            onClick={handleAlertClick}
+            title={
+              isAlertSubscribed
+                ? t('إلغاء تنبيهي عند الإضافة', 'Disable release alert')
+                : t('تنبيهي عند الإضافة', 'Notify me when added')
+            }
+            aria-label={
+              isAlertSubscribed
+                ? t('إلغاء تنبيهي عند الإضافة', 'Disable release alert')
+                : t('تنبيهي عند الإضافة', 'Notify me when added')
+            }
+            className={`absolute bottom-2.5 ${
+              dir === 'ltr' ? 'left-2.5' : 'right-2.5'
+            } z-20 w-9 h-9 rounded-full flex items-center justify-center transition-all active:scale-90 cursor-pointer ${
+              isAlertSubscribed
+                ? 'bg-[#F7C600] text-black shadow-lg shadow-[#F7C600]/35'
+                : 'bg-black/65 backdrop-blur-md text-white/85 hover:text-[#F7C600] border border-white/15'
+            }`}
+          >
+            {isAlertSubscribed ? (
+              <BellRing className="w-4 h-4" />
+            ) : (
+              <Bell className="w-4 h-4" />
+            )}
+          </button>
+        )}
 
         {/* Favorite Button */}
         <button
@@ -177,26 +253,64 @@ export const MediaCard: React.FC<MediaCardProps> = ({
       </div>
 
       {/* Card Footer Information */}
-      <div className={`p-3 ${dir === 'ltr' ? 'text-left' : 'text-right'}`}>
-        <h3 className="font-black text-white text-xs sm:text-sm truncate group-hover:text-amber-400 transition-colors">
-          {displayTitle}
-        </h3>
+      <div className={`p-3 flex-1 flex flex-col justify-between ${dir === 'ltr' ? 'text-left' : 'text-right'}`}>
+        <div>
+          <h3 className="font-black text-white text-xs sm:text-sm truncate group-hover:text-amber-400 transition-colors">
+            {displayTitle}
+          </h3>
 
-        <div className="flex items-center gap-1.5 text-[11px] text-zinc-400 mt-1 truncate tabular-nums">
-          <span className="truncate">{categoryName}</span>
-          {currentItem.year ? (
-            <>
-              <span aria-hidden="true">·</span>
-              <span>{currentItem.year}</span>
-            </>
-          ) : null}
-          {currentItem.duration ? (
-            <>
-              <span aria-hidden="true">·</span>
-              <span className="truncate">{currentItem.duration}</span>
-            </>
-          ) : null}
+          <div className="flex items-center gap-1.5 text-[11px] text-zinc-400 mt-1 truncate tabular-nums">
+            <span className="truncate">{categoryName}</span>
+            {currentItem.year ? (
+              <>
+                <span aria-hidden="true">·</span>
+                <span>{currentItem.year}</span>
+              </>
+            ) : null}
+            {currentItem.duration ? (
+              <>
+                <span aria-hidden="true">·</span>
+                <span className="truncate">{currentItem.duration}</span>
+              </>
+            ) : null}
+          </div>
         </div>
+
+        {watchedPercent > 0 && (
+          <div className="mt-2 space-y-1">
+            <div className="flex items-center justify-between text-[10px] leading-none tabular-nums">
+              <span className="text-zinc-400 font-medium">
+                {watchedPercent >= 95
+                  ? t('مكتمل', 'Completed')
+                  : t('تمت المشاهدة', 'Watched')}
+              </span>
+              <span
+                className={`font-black ${
+                  watchedPercent >= 95 ? 'text-emerald-400' : 'text-[#F7C600]'
+                }`}
+              >
+                {watchedPercent}%
+              </span>
+            </div>
+            <div
+              className="w-full h-1 rounded-full bg-white/10 overflow-hidden"
+              role="progressbar"
+              aria-valuenow={watchedPercent}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-label={t(`تمت مشاهدة ${watchedPercent}%`, `${watchedPercent}% watched`)}
+            >
+              <div
+                className={`h-full rounded-full transition-all duration-300 ${
+                  watchedPercent >= 95
+                    ? 'bg-emerald-400'
+                    : 'bg-gradient-to-r from-amber-500 to-[#F7C600]'
+                }`}
+                style={{ width: `${watchedPercent}%` }}
+              />
+            </div>
+          </div>
+        )}
       </div>
     </motion.article>
   );

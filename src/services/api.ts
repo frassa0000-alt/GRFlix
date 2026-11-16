@@ -160,15 +160,31 @@ export const verifyAdminToken = async (token: string): Promise<boolean> => {
   }
 };
 
+export class ApiUnavailableError extends Error {
+  readonly isApiUnavailable = true;
+  constructor(message: string) {
+    super(message);
+    this.name = 'ApiUnavailableError';
+  }
+}
+
+export const isApiUnavailableError = (err: unknown): boolean =>
+  Boolean(
+    err &&
+      typeof err === 'object' &&
+      ((err as any).isApiUnavailable === true ||
+        (err instanceof TypeError && String(err.message).toLowerCase().includes('fetch')))
+  );
+
 const safeParseJsonResponse = async (res: Response, fallbackError: string): Promise<any> => {
   const text = await res.text();
   if (!text || text.trim().startsWith('<')) {
-    throw new Error(fallbackError || 'استجابة غير متوقعة من الخادم');
+    throw new ApiUnavailableError(fallbackError || 'استجابة غير متوقعة من الخادم');
   }
   try {
     return JSON.parse(text);
   } catch {
-    throw new Error(fallbackError || 'فشل معالجة استجابة الخادم');
+    throw new ApiUnavailableError(fallbackError || 'فشل معالجة استجابة الخادم');
   }
 };
 
@@ -369,19 +385,31 @@ export const loginUserWithPassword = async (
   return data;
 };
 
+const isUnavailableHttpStatus = (status: number): boolean =>
+  status === 404 || status === 405 || status === 502 || status === 503 || status === 504;
+
 // Create movie
 export const createMovie = async (
   movieData: Partial<MediaItem>,
   token: string
 ): Promise<MediaItem> => {
-  const res = await fetch('/api/admin/movies', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(movieData),
-  });
+  let res: Response;
+  try {
+    res = await fetch('/api/admin/movies', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(movieData),
+    });
+  } catch {
+    throw new ApiUnavailableError('فشل حفظ الفيلم على الخادم');
+  }
+
+  if (isUnavailableHttpStatus(res.status)) {
+    throw new ApiUnavailableError('فشل حفظ الفيلم على الخادم');
+  }
 
   const data = await safeParseJsonResponse(res, 'فشل حفظ الفيلم على الخادم');
   if (!res.ok || !data.success) {
@@ -396,14 +424,23 @@ export const updateMovie = async (
   updates: Partial<MediaItem>,
   token: string
 ): Promise<MediaItem> => {
-  const res = await fetch(`/api/admin/movies/${encodeURIComponent(id)}`, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(updates),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`/api/admin/movies/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(updates),
+    });
+  } catch {
+    throw new ApiUnavailableError('فشل تحديث بيانات الفيلم');
+  }
+
+  if (isUnavailableHttpStatus(res.status)) {
+    throw new ApiUnavailableError('فشل تحديث بيانات الفيلم');
+  }
 
   const data = await safeParseJsonResponse(res, 'فشل تحديث بيانات الفيلم');
   if (!res.ok || !data.success) {
@@ -418,14 +455,23 @@ export const deleteMovie = async (
   token: string,
   mediaMeta?: Partial<MediaItem>
 ): Promise<void> => {
-  const res = await fetch(`/api/admin/movies/${encodeURIComponent(id)}`, {
-    method: 'DELETE',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(mediaMeta || {}),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`/api/admin/movies/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(mediaMeta || {}),
+    });
+  } catch {
+    throw new ApiUnavailableError('فشل حذف الفيلم');
+  }
+
+  if (isUnavailableHttpStatus(res.status)) {
+    throw new ApiUnavailableError('فشل حذف الفيلم');
+  }
 
   const data = await safeParseJsonResponse(res, 'فشل حذف الفيلم');
   if (!res.ok || !data.success) {
@@ -438,14 +484,23 @@ export const bulkDeleteMovies = async (
   moviesMeta: Partial<MediaItem>[],
   token: string
 ): Promise<string[]> => {
-  const res = await fetch('/api/admin/movies/bulk-delete', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ items: moviesMeta }),
-  });
+  let res: Response;
+  try {
+    res = await fetch('/api/admin/movies/bulk-delete', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ items: moviesMeta }),
+    });
+  } catch {
+    throw new ApiUnavailableError('فشل حذف الأعمال المحددة');
+  }
+
+  if (isUnavailableHttpStatus(res.status)) {
+    throw new ApiUnavailableError('فشل حذف الأعمال المحددة');
+  }
 
   const data = await safeParseJsonResponse(res, 'فشل حذف الأعمال المحددة');
   if (!res.ok || !data.success) {

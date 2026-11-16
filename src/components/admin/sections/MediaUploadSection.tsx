@@ -20,6 +20,7 @@ import {
 import { CategoryItem, MediaItem, PersonItem, VideoSourceOption } from '../../../types';
 import {
   extractVideoDurationFromFile,
+  formatAdminErrorMessage,
   formatFileSize,
   saveMovieToDatabases,
   UploadController,
@@ -27,6 +28,7 @@ import {
   uploadMovieVideo,
   UploadProgressInfo,
 } from '../../../services/movieService';
+import { generateRandomRating } from '../../../utils/rating';
 import {
   extractYouTubeVideoId,
   fetchYouTubeOEmbedMetadata,
@@ -47,6 +49,7 @@ interface QueueVideoTask {
   controller: UploadController;
   uploadedUrl?: string;
   storagePath?: string;
+  storageType?: 'firebase' | 'server';
   error?: string;
 }
 
@@ -89,7 +92,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
   const [duration, setDuration] = useState<string>('120 دقيقة');
   const [videoQuality, setVideoQuality] = useState<string>('1080p');
   const [ageRating, setAgeRating] = useState<string>('+16');
-  const [rating, setRating] = useState<number>(8.5);
+  const [rating, setRating] = useState<number>(() => generateRandomRating());
   const [selectedGenres, setSelectedGenres] = useState<string[]>(['action']);
   const [director, setDirector] = useState<string>('');
   const [castInput, setCastInput] = useState<string>('');
@@ -104,7 +107,9 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
   const [isMostWatched, setIsMostWatched] = useState<boolean>(false);
 
   // Additional playback sources (optional)
-  const [uploadSourceMode, setUploadSourceMode] = useState<'file' | 'youtube' | 'external'>('file');
+  const [uploadSourceMode, setUploadSourceMode] = useState<
+    'file' | 'youtube' | 'external' | 'coming_soon'
+  >('file');
   const [youtubeUrlInput, setYoutubeUrlInput] = useState<string>('');
   const [isFetchingYoutubeMeta, setIsFetchingYoutubeMeta] = useState<boolean>(false);
   const [youtubeMetaNote, setYoutubeMetaNote] = useState<string | null>(null);
@@ -313,8 +318,14 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
       return;
     }
 
-    if (activeQueue.length === 0 && !hasCompletedTask && !hasExternalUrl && !hasYoutubeUrl) {
-      setErrorMsg('يرجى اختيار ملف فيديو من جهازك، أو ربط فيلم عبر يوتيوب، أو إدخال رابط بث مباشر');
+    if (
+      uploadSourceMode !== 'coming_soon' &&
+      activeQueue.length === 0 &&
+      !hasCompletedTask &&
+      !hasExternalUrl &&
+      !hasYoutubeUrl
+    ) {
+      setErrorMsg('يرجى اختيار ملف فيديو من جهازك، أو ربط فيلم عبر يوتيوب، أو إدخال رابط بث مباشر، أو اختيار وضع قريباً');
       return;
     }
 
@@ -361,11 +372,42 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
           format: isYouTubeUrl(s.url) ? 'youtube' : s.format || 'mp4',
         }));
 
-      // 2. If saving via YouTube link or direct external stream URL (no device file queue)
-      const shouldUseLinkOnly =
-        queue.length === 0 || (uploadSourceMode !== 'file' && activeQueue.length === 0 && !hasCompletedTask);
-
-      if (shouldUseLinkOnly && (hasYoutubeUrl || hasExternalUrl)) {
+      // 2. Coming soon teaser (no video uploaded yet — visitors can subscribe to 'تنبيهي عند الإضافة')
+      if (uploadSourceMode === 'coming_soon') {
+        const saved = await saveMovieToDatabases(
+          {
+            type: 'movie',
+            title: titleEn.trim() || titleAr.trim(),
+            titleAr: titleAr.trim(),
+            description: description.trim(),
+            posterUrl: finalPosterUrl,
+            bannerUrl: finalBannerUrl,
+            videoUrl: '',
+            videoQuality,
+            ageRating,
+            duration: duration.trim() || 'قريباً',
+            year: Number(year) || new Date().getFullYear(),
+            rating: Number(rating) || generateRandomRating(),
+            genres: selectedGenres,
+            director: director.trim(),
+            cast: castArray,
+            displayOrder: Number(displayOrder) || 0,
+            isPublished,
+            isFeatured,
+            isLatest,
+            isMostWatched,
+            isComingSoon: true,
+            sources: cleanExtraSources,
+            storageType: 'external',
+          },
+          token
+        );
+        newlySaved.push(saved);
+      } else if (
+        (queue.length === 0 || (uploadSourceMode !== 'file' && activeQueue.length === 0 && !hasCompletedTask)) &&
+        (hasYoutubeUrl || hasExternalUrl)
+      ) {
+        // 2b. Saving via YouTube link or direct external stream URL (no device file queue)
         const rawMainUrl =
           uploadSourceMode === 'youtube'
             ? trimmedYoutubeUrl
@@ -399,7 +441,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
             ageRating,
             duration: duration.trim() || '120 دقيقة',
             year: Number(year) || new Date().getFullYear(),
-            rating: Number(rating) || 8.5,
+            rating: Number(rating) || generateRandomRating(),
             genres: selectedGenres,
             director: director.trim(),
             cast: castArray,
@@ -408,6 +450,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
             isFeatured,
             isLatest,
             isMostWatched,
+            isComingSoon: false,
             introStart: introStart ? Number(introStart) : undefined,
             introEnd: introEnd ? Number(introEnd) : undefined,
             sources: allSources,
@@ -424,6 +467,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
 
           let videoUrl = task.uploadedUrl || '';
           let storagePath = task.storagePath || '';
+          let storageType: 'firebase' | 'server' = task.storageType || 'server';
           let fileSizeBytes = task.file.size;
 
           if (task.status !== 'completed' || !videoUrl) {
@@ -445,19 +489,21 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
               );
               videoUrl = res.videoUrl;
               storagePath = res.storagePath;
+              storageType = res.storageType;
               fileSizeBytes = res.fileSizeBytes;
               updateTaskState(task.id, (t) => ({
                 ...t,
                 status: 'completed',
                 uploadedUrl: videoUrl,
                 storagePath,
+                storageType,
                 progress: { ...t.progress, percent: 100, phase: 'completed' },
               }));
             } catch (uploadErr: any) {
               updateTaskState(task.id, (t) => ({
                 ...t,
                 status: t.controller.isCancelled ? 'cancelled' : 'error',
-                error: uploadErr?.message || 'فشل رفع هذا الفيديو',
+                error: formatAdminErrorMessage(uploadErr, 'فشل رفع هذا الفيديو'),
               }));
               continue;
             }
@@ -495,7 +541,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
               ageRating,
               duration: queue.length === 1 ? duration.trim() || task.duration : task.duration,
               year: Number(year) || new Date().getFullYear(),
-              rating: Number(rating) || 8.5,
+              rating: queue.length > 1 ? generateRandomRating() : Number(rating) || generateRandomRating(),
               genres: selectedGenres,
               director: director.trim(),
               cast: castArray,
@@ -509,7 +555,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
               sources: allSources,
               fileSizeBytes,
               storagePath,
-              storageType: 'server',
+              storageType,
             },
             token
           );
@@ -520,10 +566,11 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
 
       if (newlySaved.length > 0) {
         setSavedItems(newlySaved);
+        setRating(generateRandomRating());
         onSaved();
       }
     } catch (err: any) {
-      setErrorMsg(err?.message || 'حدث خطأ أثناء رفع وحفظ المحتوى');
+      setErrorMsg(formatAdminErrorMessage(err, 'حدث خطأ أثناء رفع وحفظ المحتوى'));
     } finally {
       setIsSubmitting(false);
       setActiveTaskId(null);
@@ -584,7 +631,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
       {/* 1. Video Source Selector: Device Upload / YouTube Link / Direct Stream */}
       <div className="p-4 rounded-2xl bg-[#111116] border border-white/[0.08] space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.06] pb-3">
-          <div className="flex items-center gap-1.5 p-1 rounded-xl bg-zinc-950 border border-white/10 text-xs font-bold">
+          <div className="flex flex-wrap items-center gap-1.5 p-1 rounded-xl bg-zinc-950 border border-white/10 text-xs font-bold">
             <button
               type="button"
               onClick={() => setUploadSourceMode('file')}
@@ -620,6 +667,18 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
             >
               <Link2 className="w-3.5 h-3.5" />
               <span>رابط بث مباشر</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setUploadSourceMode('coming_soon')}
+              className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer ${
+                uploadSourceMode === 'coming_soon'
+                  ? 'bg-amber-400 text-black font-black'
+                  : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              <Clock className="w-3.5 h-3.5" />
+              <span>قريباً (بدون فيديو)</span>
             </button>
           </div>
 
@@ -901,6 +960,20 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
               </div>
             )}
           </>
+        )}
+
+        {uploadSourceMode === 'coming_soon' && (
+          <div className="p-4 rounded-xl bg-amber-400/10 border border-amber-400/30 flex items-start gap-3">
+            <Clock className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <p className="text-xs font-black text-amber-300">
+                نشر كعمل قادم قريباً (بدون فيديو حالياً)
+              </p>
+              <p className="text-[11px] text-zinc-300 leading-relaxed">
+                سيظهر هذا العمل بشارة (قريباً) ليتمكن المستخدمون من الضغط على زر «تنبيهي عند الإضافة»، وعند تعديله وإضافة رابط أو ملف الفيديو لاحقاً سيصلهم إشعار فوري.
+              </p>
+            </div>
+          </div>
         )}
 
         {uploadSourceMode === 'external' && (

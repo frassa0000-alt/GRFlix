@@ -21,6 +21,7 @@ import {
 import { CategoryItem, Episode, MediaItem, Season } from '../../../types';
 import {
   extractVideoDurationFromFile,
+  formatAdminErrorMessage,
   formatFileSize,
   saveMovieToDatabases,
   updateMovieInDatabases,
@@ -28,6 +29,7 @@ import {
   uploadMovieVideo,
   UploadProgressInfo,
 } from '../../../services/movieService';
+import { generateRandomRating } from '../../../utils/rating';
 
 interface SeriesManagerSectionProps {
   activeSubMode: 'add_series' | 'seasons_episodes';
@@ -61,7 +63,7 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
   const [year, setYear] = useState<number>(new Date().getFullYear());
   const [videoQuality, setVideoQuality] = useState<string>('1080p');
   const [ageRating, setAgeRating] = useState<string>('+16');
-  const [rating, setRating] = useState<number>(8.8);
+  const [rating, setRating] = useState<number>(() => generateRandomRating());
   const [director, setDirector] = useState<string>('');
   const [castInput, setCastInput] = useState<string>('');
   const [selectedGenres, setSelectedGenres] = useState<string[]>(['drama']);
@@ -164,7 +166,7 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
           year: Number(year) || new Date().getFullYear(),
           videoQuality,
           ageRating,
-          rating: Number(rating) || 8.5,
+          rating: Number(rating) || generateRandomRating(),
           director: director.trim(),
           cast: castInput
             .split(',')
@@ -187,11 +189,12 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
       setDescription('');
       setPosterFile(null);
       setPosterUrl('');
+      setRating(generateRandomRating());
       onRefresh();
       onSelectSeriesId(created.id);
       onSwitchToSeasons();
     } catch (err: any) {
-      setCreateError(err?.message || 'تعذر إنشاء المسلسل');
+      setCreateError(formatAdminErrorMessage(err, 'تعذر إنشاء المسلسل'));
     } finally {
       setIsCreating(false);
     }
@@ -227,7 +230,10 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
       setSeasonFeedback({ type: 'success', msg: successMessage });
       onRefresh();
     } catch (err: any) {
-      setSeasonFeedback({ type: 'error', msg: err?.message || 'فشل حفظ المواسم والحلقات' });
+      setSeasonFeedback({
+        type: 'error',
+        msg: formatAdminErrorMessage(err, 'فشل حفظ المواسم والحلقات'),
+      });
     } finally {
       setIsSavingSeasons(false);
     }
@@ -296,7 +302,10 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
         finalFileSize = res.fileSizeBytes;
       } catch (err: any) {
         setIsUploadingEp(false);
-        setSeasonFeedback({ type: 'error', msg: err?.message || 'فشل رفع فيديو الحلقة' });
+        setSeasonFeedback({
+          type: 'error',
+          msg: formatAdminErrorMessage(err, 'فشل رفع فيديو الحلقة'),
+        });
         return;
       }
       setIsUploadingEp(false);

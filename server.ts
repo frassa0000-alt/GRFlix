@@ -2538,14 +2538,16 @@ app.post('/api/admin/movies', requireAdmin, (req: Request, res: Response) => {
     fileSizeBytes,
     storagePath,
     storageType,
+    isComingSoon,
   } = req.body;
 
   const mediaType = type === 'series' || type === 'anime' ? type : 'movie';
   const normalizedSeasons = Array.isArray(seasons) ? seasons : [];
   const firstEpisodeUrl = normalizedSeasons[0]?.episodes?.[0]?.videoUrl || '';
   const effectiveVideoUrl = (videoUrl || firstEpisodeUrl || '').toString().trim();
+  const comingSoonFlag = Boolean(isComingSoon) && !effectiveVideoUrl;
 
-  if (!titleAr || (mediaType === 'movie' && !effectiveVideoUrl)) {
+  if (!titleAr || (mediaType === 'movie' && !effectiveVideoUrl && !comingSoonFlag)) {
     return res.status(400).json({ error: 'الاسم ورابط/ملف الفيديو مطلوبان للفيلم' });
   }
 
@@ -2565,12 +2567,13 @@ app.post('/api/admin/movies', requireAdmin, (req: Request, res: Response) => {
     ageRating: ageRating || '+16',
     duration: duration || (mediaType === 'series' ? 'مسلسل' : '120 دقيقة'),
     year: Number(year) || new Date().getFullYear(),
-    rating: Number(rating) || 8.5,
+    rating: Number(rating) || Math.round((6.3 + Math.random() * 3.3) * 10) / 10,
     genres: Array.isArray(genres) && genres.length > 0 ? genres : ['action'],
     isPublished: isPublished !== false,
     isFeatured: Boolean(isFeatured),
     isLatest: isLatest !== false,
     isMostWatched: Boolean(isMostWatched),
+    isComingSoon: comingSoonFlag,
     displayOrder: Number(displayOrder) || 0,
     viewsCount: 0,
     director: director || '',

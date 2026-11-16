@@ -63,6 +63,7 @@ export interface MediaItem {
   videoQuality?: string;
   ageRating?: string;
   isPublished: boolean;
+  isComingSoon?: boolean;
   fileSizeBytes?: number;
   storagePath?: string;
   storageType?: 'firebase' | 'server' | 'youtube' | 'external';
@@ -136,6 +137,7 @@ export type ActiveTab =
   | 'romance';
 export type BottomNavTab =
   | 'home'
+  | 'search'
   | 'movies'
   | 'series'
   | 'categories'
@@ -207,6 +209,33 @@ export interface NotificationItem {
   type: 'info' | 'new_release' | 'alert';
   target: 'all' | 'members';
   isActive: boolean;
+  createdAt: number;
+}
+
+export interface MediaAlertSubscription {
+  mediaId: string;
+  mediaTitle: string;
+  mediaType: MediaType;
+  posterUrl?: string;
+  knownEpisodeCount: number;
+  hadVideo: boolean;
+  knownUpdatedAt?: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface UserReleaseNotification {
+  id: string;
+  mediaId: string;
+  mediaTitle?: string;
+  mediaType?: MediaType;
+  posterUrl?: string;
+  title: string;
+  message: string;
+  kind: 'new_episode' | 'movie_added' | 'media_updated';
+  read: boolean;
+  episodeNumber?: number;
+  seasonNumber?: number;
   createdAt: number;
 }
 

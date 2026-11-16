@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Home, Tv, Heart, Settings } from 'lucide-react';
+import { Home, Search, Heart, Settings } from 'lucide-react';
 import { BottomNavTab } from '../../types';
 import { useLanguage } from '../../contexts/LanguageContext';
 
@@ -24,7 +24,7 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
     icon: React.ComponentType<{ className?: string }>;
   }[] = [
     { id: 'home', labelAr: 'الرئيسية', labelEn: 'Home', icon: Home },
-    { id: 'series', labelAr: 'المسلسلات', labelEn: 'Series', icon: Tv },
+    { id: 'search', labelAr: 'البحث', labelEn: 'Search', icon: Search },
     { id: 'favorites', labelAr: 'المفضلة', labelEn: 'Favorites', icon: Heart },
     { id: 'settings', labelAr: 'الإعدادات', labelEn: 'Settings', icon: Settings },
   ];
@@ -35,11 +35,11 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
   };
 
   return (
-    <nav
-      aria-label={t('التنقل السفلي للموبايل', 'Mobile bottom navigation')}
-      className="fixed bottom-0 inset-x-0 z-40 md:hidden rounded-t-[26px] bg-[#121216]/96 backdrop-blur-2xl border-t border-white/[0.09] pb-[env(safe-area-inset-bottom)] shadow-[0_-14px_38px_rgba(0,0,0,0.92)] overflow-hidden"
-    >
-      <div className="max-w-md mx-auto h-[68px] px-3 flex items-center justify-around gap-1">
+    <div className="fixed bottom-2.5 inset-x-0 z-40 md:hidden pb-[env(safe-area-inset-bottom)] flex justify-center px-4 pointer-events-none select-none">
+      <nav
+        aria-label={t('التنقل السفلي للموبايل', 'Mobile bottom navigation')}
+        className="pointer-events-auto relative inline-flex items-center gap-1 rounded-full bg-[#101116]/75 backdrop-blur-xl border border-white/[0.12] p-1 shadow-[0_12px_32px_rgba(0,0,0,0.65),inset_0_1px_0_rgba(255,255,255,0.14)]"
+      >
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const active = isTabActive(tab.id);
@@ -49,49 +49,49 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
             <motion.button
               key={tab.id}
               type="button"
-              whileTap={{ scale: 0.88 }}
-              transition={{ type: 'spring', stiffness: 500, damping: 26 }}
+              whileTap={{ scale: 0.92 }}
+              transition={{ type: 'spring', stiffness: 520, damping: 30 }}
               onClick={() => onSelectTab(tab.id)}
-              className={`relative flex-1 min-h-[54px] flex flex-col items-center justify-center gap-1 rounded-xl transition-colors duration-200 cursor-pointer ${
+              className={`relative min-w-[66px] min-h-[42px] px-3 py-1 flex flex-col items-center justify-center gap-0.5 rounded-full transition-colors duration-200 cursor-pointer ${
                 active ? 'text-[#F7C600]' : 'text-zinc-400 hover:text-zinc-200'
               }`}
             >
-              <motion.div
-                animate={
-                  active
-                    ? {
-                        y: -1.5,
-                        scale: 1.12,
-                        rotate: tab.id === 'settings' ? 25 : 0,
-                      }
-                    : { y: 0, scale: 1, rotate: 0 }
-                }
-                transition={{ type: 'spring', stiffness: 460, damping: 24 }}
-                className="relative z-10 flex items-center justify-center"
+              {active && (
+                <motion.div
+                  layoutId="bottomNavActivePill"
+                  transition={{ type: 'spring', stiffness: 440, damping: 34 }}
+                  className="absolute inset-0 rounded-full bg-[#F7C600]/[0.13] border border-[#F7C600]/30 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]"
+                />
+              )}
+
+              <span
+                className={`relative z-10 flex items-center justify-center transition-transform duration-200 ${
+                  active ? '-translate-y-[0.5px]' : ''
+                }`}
               >
                 <Icon
-                  className={`w-5 h-5 transition-colors duration-200 ${
+                  className={`w-[17px] h-[17px] transition-all duration-200 ${
                     active
-                      ? tab.id === 'settings'
-                        ? 'stroke-[2.2] text-[#F7C600]'
-                        : 'stroke-[2.2] fill-[#F7C600] text-[#F7C600]'
+                      ? tab.id === 'favorites'
+                        ? 'fill-[#F7C600] text-[#F7C600] stroke-[1.9]'
+                        : 'text-[#F7C600] stroke-[2.2]'
                       : 'stroke-[1.9]'
                   }`}
                 />
-              </motion.div>
+              </span>
 
-              <motion.span
-                animate={active ? { scale: 1.03 } : { scale: 1 }}
-                transition={{ duration: 0.18 }}
-                className="relative z-10 text-[11px] font-bold leading-none whitespace-nowrap"
+              <span
+                className={`relative z-10 text-[9.5px] leading-none whitespace-nowrap transition-all ${
+                  active ? 'font-bold text-[#F7C600]' : 'font-medium text-zinc-400'
+                }`}
               >
                 {label}
-              </motion.span>
+              </span>
             </motion.button>
           );
         })}
-      </div>
-    </nav>
+      </nav>
+    </div>
   );
 };
 

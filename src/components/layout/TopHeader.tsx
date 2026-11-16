@@ -17,12 +17,18 @@ import {
   Heart,
   User,
   Play,
+  BellRing,
+  CheckCheck,
+  Trash2,
+  Clock,
 } from 'lucide-react';
 import {
   ActiveTab,
   BottomNavTab,
   GoogleUserProfile,
+  MediaAlertSubscription,
   NotificationItem,
+  UserReleaseNotification,
 } from '../../types';
 import { useLanguage } from '../../contexts/LanguageContext';
 
@@ -37,6 +43,12 @@ interface TopHeaderProps {
   onSelectTab: (tab: ActiveTab) => void;
   onSelectBottomTab: (tab: BottomNavTab) => void;
   notifications: NotificationItem[];
+  releaseNotifications?: UserReleaseNotification[];
+  mediaAlerts?: MediaAlertSubscription[];
+  onSelectReleaseNotification?: (notif: UserReleaseNotification) => void;
+  onMarkAllReleaseRead?: () => void;
+  onRemoveMediaAlert?: (mediaId: string) => void;
+  onOpenAlertMedia?: (mediaId: string) => void;
   siteName?: string;
 }
 
@@ -73,10 +85,17 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   onSelectTab,
   onSelectBottomTab,
   notifications,
+  releaseNotifications = [],
+  mediaAlerts = [],
+  onSelectReleaseNotification,
+  onMarkAllReleaseRead,
+  onRemoveMediaAlert,
+  onOpenAlertMedia,
   siteName = 'GoldenFlix',
 }) => {
   const { lang, dir, t } = useLanguage();
   const [showNotifications, setShowNotifications] = useState(false);
+  const [notifTab, setNotifTab] = useState<'feed' | 'alerts'>('feed');
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [shouldSpinOnEntry] = useState<boolean>(() => !hasPlayedEntryLogoSpin);
 
@@ -105,6 +124,13 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
     [notifications]
   );
 
+  const unreadReleaseCount = React.useMemo(
+    () => releaseNotifications.filter((n) => !n.read).length,
+    [releaseNotifications]
+  );
+
+  const totalBadgeCount = unreadReleaseCount + activeNotifications.length;
+
   const handleTopNavClick = (item: (typeof TOP_NAV_ITEMS)[number]) => {
     setShowNotifications(false);
     if (searchQuery) {
@@ -126,7 +152,8 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
     if (
       bottomNavTab === 'categories' ||
       bottomNavTab === 'history' ||
-      bottomNavTab === 'favorites'
+      bottomNavTab === 'favorites' ||
+      bottomNavTab === 'search'
     ) {
       return false;
     }
@@ -282,9 +309,15 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
               }`}
             >
               <Bell className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
-              {activeNotifications.length > 0 && (
-                <span className="absolute top-1 right-1 min-w-[14px] h-[14px] px-1 rounded-full bg-[#F7C600] text-black text-[9px] font-black flex items-center justify-center leading-none tabular-nums">
-                  {activeNotifications.length > 9 ? '9+' : activeNotifications.length}
+              {totalBadgeCount > 0 && (
+                <span
+                  className={`absolute top-1 right-1 min-w-[14px] h-[14px] px-1 rounded-full text-[9px] font-black flex items-center justify-center leading-none tabular-nums ${
+                    unreadReleaseCount > 0
+                      ? 'bg-emerald-400 text-black shadow-[0_0_8px_rgba(52,211,153,0.75)]'
+                      : 'bg-[#F7C600] text-black'
+                  }`}
+                >
+                  {totalBadgeCount > 9 ? '9+' : totalBadgeCount}
                 </span>
               )}
             </motion.button>
@@ -394,13 +427,21 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                     <Bell className="w-3.5 h-3.5" />
                   </div>
                   <span className="text-sm font-black text-white">
-                    {t('الإشعارات', 'Notifications')}
+                    {t('الإشعارات والتنبيهات', 'Notifications & Alerts')}
                   </span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] font-bold text-[#F7C600] tabular-nums">
-                    {activeNotifications.length} {t('نشط', 'active')}
-                  </span>
+                <div className="flex items-center gap-1.5">
+                  {unreadReleaseCount > 0 && onMarkAllReleaseRead && (
+                    <button
+                      type="button"
+                      onClick={onMarkAllReleaseRead}
+                      title={t('تحديد الكل كمقروء', 'Mark all read')}
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 text-[10px] font-bold transition-colors cursor-pointer"
+                    >
+                      <CheckCheck className="w-3 h-3" />
+                      <span>{t('قرأت الكل', 'Read all')}</span>
+                    </button>
+                  )}
                   <button
                     onClick={() => setShowNotifications(false)}
                     type="button"
@@ -412,7 +453,116 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                 </div>
               </div>
 
-              {activeNotifications.length === 0 ? (
+              {/* Sub-tabs: الإشعارات vs التنبيهات المفعّلة */}
+              <div className="grid grid-cols-2 gap-1.5 p-1 bg-zinc-900/90 rounded-xl border border-white/[0.06] mb-3">
+                <button
+                  type="button"
+                  onClick={() => setNotifTab('feed')}
+                  className={`py-1.5 px-2.5 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                    notifTab === 'feed'
+                      ? 'bg-[#F7C600] text-black font-black'
+                      : 'text-zinc-400 hover:text-white'
+                  }`}
+                >
+                  <Bell className="w-3 h-3" />
+                  <span>{t('الإشعارات', 'Notifications')}</span>
+                  {releaseNotifications.length + activeNotifications.length > 0 && (
+                    <span className="tabular-nums opacity-80">
+                      ({releaseNotifications.length + activeNotifications.length})
+                    </span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNotifTab('alerts')}
+                  className={`py-1.5 px-2.5 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                    notifTab === 'alerts'
+                      ? 'bg-[#F7C600] text-black font-black'
+                      : 'text-zinc-400 hover:text-white'
+                  }`}
+                >
+                  <BellRing className="w-3 h-3" />
+                  <span>{t('التنبيهات المفعّلة', 'Active Alerts')}</span>
+                  {mediaAlerts.length > 0 && (
+                    <span className="tabular-nums opacity-80">({mediaAlerts.length})</span>
+                  )}
+                </button>
+              </div>
+
+              {notifTab === 'alerts' ? (
+                mediaAlerts.length === 0 ? (
+                  <div className="py-8 text-center text-zinc-400 space-y-1.5">
+                    <BellRing className="w-7 h-7 mx-auto text-zinc-600 mb-2" />
+                    <p className="text-xs font-bold text-zinc-300">
+                      {t('لم تفعّل أي تنبيه بعد', 'No active alerts yet')}
+                    </p>
+                    <p className="text-[11px] text-zinc-500">
+                      {t(
+                        'اضغط على "تنبيهي عند الإضافة" لأي فيلم أو مسلسل ليصلك إشعار عند توفر حلقات أو إضافات جديدة.',
+                        'Tap "Notify Me When Added" on any movie or series to receive updates.'
+                      )}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-[55vh] overflow-y-auto overscroll-contain no-scrollbar">
+                    {mediaAlerts.map((alert) => (
+                      <div
+                        key={alert.mediaId}
+                        className="p-2.5 rounded-xl bg-zinc-900/90 border border-white/[0.08] hover:border-[#F7C600]/35 transition-colors flex items-center gap-2.5"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowNotifications(false);
+                            onOpenAlertMedia?.(alert.mediaId);
+                          }}
+                          className="flex items-center gap-2.5 flex-1 min-w-0 text-start cursor-pointer"
+                        >
+                          {alert.posterUrl ? (
+                            <img
+                              src={alert.posterUrl}
+                              alt={alert.mediaTitle}
+                              className="w-10 h-14 rounded-lg object-cover shrink-0 bg-zinc-800"
+                            />
+                          ) : (
+                            <div className="w-10 h-14 rounded-lg bg-zinc-800 flex items-center justify-center shrink-0">
+                              <BellRing className="w-4 h-4 text-[#F7C600]" />
+                            </div>
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <h4 className="text-xs font-black text-white truncate">
+                              {alert.mediaTitle}
+                            </h4>
+                            <p className="text-[10px] text-amber-300/90 mt-1 flex items-center gap-1">
+                              <Clock className="w-3 h-3 shrink-0" />
+                              <span className="truncate">
+                                {alert.mediaType === 'series'
+                                  ? t(
+                                      `متابعة الحلقات الجديدة (حالياً ${alert.knownEpisodeCount})`,
+                                      `Tracking new episodes (current: ${alert.knownEpisodeCount})`
+                                    )
+                                  : alert.hadVideo
+                                  ? t('متابعة التحديثات الجديدة', 'Tracking updates')
+                                  : t('بانتظار الإضافة على المنصة', 'Waiting for release')}
+                              </span>
+                            </p>
+                          </div>
+                        </button>
+                        {onRemoveMediaAlert && (
+                          <button
+                            type="button"
+                            onClick={() => onRemoveMediaAlert(alert.mediaId)}
+                            aria-label={t('إزالة التنبيه', 'Remove alert')}
+                            className="w-8 h-8 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0 cursor-pointer transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )
+              ) : releaseNotifications.length === 0 && activeNotifications.length === 0 ? (
                 <div className="py-8 text-center text-zinc-400 space-y-1">
                   <Bell className="w-7 h-7 mx-auto text-zinc-600 mb-2" />
                   <p className="text-xs font-bold text-zinc-300">
@@ -420,13 +570,59 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                   </p>
                   <p className="text-[11px] text-zinc-500">
                     {t(
-                      'ستظهر تنبيهات الأعمال المضافة حديثاً هنا فور نشرها.',
-                      'Alerts for newly published releases will appear here.'
+                      'ستظهر تنبيهات الحلقات الجديدة والأعمال المضافة حديثاً هنا فور نشرها.',
+                      'Alerts for new episodes and newly published releases will appear here.'
                     )}
                   </p>
                 </div>
               ) : (
                 <div className="space-y-2.5 max-h-[55vh] overflow-y-auto overscroll-contain no-scrollbar">
+                  {releaseNotifications.map((rn) => (
+                    <button
+                      key={rn.id}
+                      type="button"
+                      onClick={() => {
+                        setShowNotifications(false);
+                        onSelectReleaseNotification?.(rn);
+                      }}
+                      className={`w-full text-start p-2.5 rounded-xl border transition-colors flex items-start gap-2.5 cursor-pointer ${
+                        rn.read
+                          ? 'bg-zinc-900/75 border-white/[0.06] hover:border-[#F7C600]/30'
+                          : 'bg-[#F7C600]/10 border-[#F7C600]/45 hover:border-[#F7C600]/75'
+                      }`}
+                    >
+                      {rn.posterUrl ? (
+                        <img
+                          src={rn.posterUrl}
+                          alt={rn.mediaTitle || rn.title}
+                          className="w-10 h-14 rounded-lg object-cover shrink-0 bg-zinc-800"
+                        />
+                      ) : (
+                        <div className="w-10 h-14 rounded-lg bg-[#F7C600]/15 flex items-center justify-center shrink-0">
+                          <BellRing className="w-4 h-4 text-[#F7C600]" />
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            {!rn.read && (
+                              <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+                            )}
+                            <h4 className="text-xs font-black text-white leading-snug truncate">
+                              {rn.title}
+                            </h4>
+                          </div>
+                          <span className="text-[10px] text-zinc-400 shrink-0 tabular-nums">
+                            {formatTimeAgo(rn.createdAt)}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-zinc-300 mt-1 leading-relaxed break-words">
+                          {rn.message}
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+
                   {activeNotifications.map((n) => (
                     <div
                       key={n.id}

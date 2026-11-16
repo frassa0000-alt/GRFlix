@@ -1,5 +1,61 @@
 [
   {
+    "id": "log-1794860101198-23459",
+    "action": "حذف عمل نهائياً من الموقع بالكامل",
+    "category": "media",
+    "details": "تم حذف \"فيلم قريباً للتحقق\" وجميع ملفاته وآثاره",
+    "adminEmail": "frassa.wwindows@gmail.com",
+    "createdAt": 1794860101198
+  },
+  {
+    "id": "log-1794860101126-66366",
+    "action": "تسجيل دخول لوحة التحكم",
+    "category": "auth",
+    "details": "دخول المشرف frassa.wwindows@gmail.com",
+    "adminEmail": "frassa.wwindows@gmail.com",
+    "createdAt": 1794860101126
+  },
+  {
+    "id": "log-1794860096794-50249",
+    "action": "تحديث عمل",
+    "category": "media",
+    "details": "تم تحديث \"فيلم قريباً للتحقق\"",
+    "adminEmail": "frassa.wwindows@gmail.com",
+    "createdAt": 1794860096794
+  },
+  {
+    "id": "log-1794860096461-50111",
+    "action": "إضافة فيلم جديد",
+    "category": "media",
+    "details": "تمت إضافة \"فيلم قريباً للتحقق\" (1080p Full HD)",
+    "adminEmail": "frassa.wwindows@gmail.com",
+    "createdAt": 1794860096461
+  },
+  {
+    "id": "log-1794860096366-3577",
+    "action": "تسجيل دخول لوحة التحكم",
+    "category": "auth",
+    "details": "دخول المشرف frassa.wwindows@gmail.com",
+    "adminEmail": "frassa.wwindows@gmail.com",
+    "createdAt": 1794860096366
+  },
+  {
+    "id": "log-1794859744687-30034",
+    "action": "حذف جماعي للأعمال",
+    "category": "media",
+    "details": "تم حذف 1 أعمال نهائياً (فيلم تجريبي)",
+    "adminEmail": "frassa.wwindows@gmail.com",
+    "createdAt": 1794859744687
+  },
+  {
+    "id": "log-1794859744634-12664",
+    "action": "إضافة فيلم جديد",
+    "category": "media",
+    "details": "تمت إضافة \"فيلم تجريبي\" (1080p Full HD)",
+    "adminEmail": "frassa.wwindows@gmail.com",
+    "createdAt": 1794859744634
+  },
+  {
     "id": "log-1794779789807-56335",
     "action": "تسجيل دخول لوحة التحكم",
     "category": "auth",

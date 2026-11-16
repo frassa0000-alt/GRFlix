@@ -8,6 +8,8 @@ import {
   AdminSectionId,
   SiteSettingsConfig,
   NotificationItem,
+  MediaAlertSubscription,
+  UserReleaseNotification,
 } from './types';
 import {
   fetchAllMoviesUnified,
@@ -35,6 +37,17 @@ import {
   getWatchHistory,
   removeMediaFromLocalUserData,
 } from './services/storage';
+import {
+  getStoredMediaAlerts,
+  getStoredReleaseNotifications,
+  syncAlertsAndNotificationsFromCloud,
+  toggleMediaAlertSubscription,
+  removeMediaAlertSubscription,
+  evaluateMediaReleaseAlerts,
+  markReleaseNotificationRead,
+  markAllReleaseNotificationsRead,
+  hasPlayableMediaVideo,
+} from './services/releaseAlertService';
 import {
   onAuthUserChanged,
   completeGoogleRedirectResult,
@@ -78,6 +91,9 @@ import {
   ArrowLeft,
   ArrowRight,
   Plus,
+  BellRing,
+  Calendar,
+  RotateCcw,
 } from 'lucide-react';
 
 export default function App() {
@@ -87,6 +103,13 @@ export default function App() {
   const [favorites, setFavorites] = useState<string[]>([]);
   const [history, setHistory] = useState<WatchProgress[]>([]);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [mediaAlerts, setMediaAlerts] = useState<MediaAlertSubscription[]>(() =>
+    getStoredMediaAlerts()
+  );
+  const [releaseNotifications, setReleaseNotifications] = useState<UserReleaseNotification[]>(() =>
+    getStoredReleaseNotifications()
+  );
+  const [releaseToast, setReleaseToast] = useState<UserReleaseNotification | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   // User Authentication State (Verified Email Session + Firebase Auth)
@@ -297,6 +320,11 @@ export default function App() {
   // Navigation states
   const [activeTab, setActiveTab] = useState<ActiveTab>('home');
   const [bottomNavTab, setBottomNavTab] = useState<BottomNavTab>('home');
+  const [selectedTabYear, setSelectedTabYear] = useState<string>('all');
+
+  useEffect(() => {
+    setSelectedTabYear('all');
+  }, [activeTab]);
 
   // Modals & Player state
   const [selectedMedia, setSelectedMedia] = useState<MediaItem | null>(null);
@@ -364,6 +392,61 @@ export default function App() {
     loadNotifications();
   }, [refreshData, loadSiteSettings, loadNotifications]);
 
+  // Refresh catalog and alerts softly when user returns to browser tab
+  useEffect(() => {
+    const handleTabFocus = () => {
+      refreshData();
+      loadNotifications();
+    };
+    window.addEventListener('focus', handleTabFocus);
+    return () => window.removeEventListener('focus', handleTabFocus);
+  }, [refreshData, loadNotifications]);
+
+  // Sync personal release alerts and notifications from Firestore when user signs in
+  useEffect(() => {
+    let active = true;
+    syncAlertsAndNotificationsFromCloud(authUser?.uid)
+      .then(({ alerts, notifications: relNotifs }) => {
+        if (!active) return;
+        setMediaAlerts(alerts);
+        setReleaseNotifications(relNotifs);
+      })
+      .catch((err) => console.warn('Alert cloud sync skipped:', err));
+    return () => {
+      active = false;
+    };
+  }, [authUser?.uid]);
+
+  // Evaluate subscribed movies & series whenever catalog updates to detect new episodes or added videos
+  useEffect(() => {
+    if (mediaItems.length === 0) return;
+    let active = true;
+    evaluateMediaReleaseAlerts(mediaItems, authUser?.uid)
+      .then(({ newNotifications, allNotifications, alerts }) => {
+        if (!active) return;
+        setReleaseNotifications(allNotifications);
+        setMediaAlerts(alerts);
+        if (newNotifications.length > 0) {
+          setReleaseToast(newNotifications[0]);
+        }
+      })
+      .catch((err) => console.warn('Release alert evaluation warning:', err));
+    return () => {
+      active = false;
+    };
+  }, [mediaItems, authUser?.uid]);
+
+  useEffect(() => {
+    if (!releaseToast) return;
+    const timer = setTimeout(() => setReleaseToast(null), 9000);
+    return () => clearTimeout(timer);
+  }, [releaseToast]);
+
+  const alertSubscribedIds = useMemo(
+    () => mediaAlerts.map((a) => a.mediaId),
+    [mediaAlerts]
+  );
+
   // Synchronized navigation between Top Header, Category Capsules, Side Drawer, and Mobile Bottom Nav
   const handleTopTabSelect = useCallback((tab: ActiveTab) => {
     setActiveTab(tab);
@@ -394,6 +477,13 @@ export default function App() {
         return;
       }
 
+      if (tab === 'search') {
+        setBottomNavTab('search');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+
+      setSearchQuery('');
       setBottomNavTab(tab);
       if (tab === 'favorites') {
         setActiveTab('favorites');
@@ -414,7 +504,100 @@ export default function App() {
     setFavorites(updated);
   };
 
+  const handleToggleMediaAlert = useCallback(
+    async (target: MediaItem | string) => {
+      const media =
+        typeof target === 'string'
+          ? mediaItems.find((m) => m.id === target)
+          : target;
+      if (!media) return;
+
+      try {
+        const result = await toggleMediaAlertSubscription(media, authUser?.uid);
+        setMediaAlerts(result.alerts);
+
+        if (
+          result.subscribed &&
+          typeof window !== 'undefined' &&
+          'Notification' in window &&
+          Notification.permission === 'default'
+        ) {
+          Notification.requestPermission().catch(() => {});
+        }
+
+        const displayTitle = getMediaTitle(media);
+        setAuthLinkNotice({
+          type: 'success',
+          message: result.subscribed
+            ? t(
+                `تم تفعيل التنبيه لـ "${displayTitle}" ✓ — سيصلك إشعار عند توفر حلقات جديدة أو إضافة العمل.`,
+                `Alert enabled for "${displayTitle}" ✓ — You will be notified when new episodes or the video are added.`
+              )
+            : t(
+                `تم إلغاء التنبيه لـ "${displayTitle}".`,
+                `Alert disabled for "${displayTitle}".`
+              ),
+        });
+      } catch (err) {
+        console.error('Failed toggling media alert:', err);
+      }
+    },
+    [mediaItems, authUser?.uid, getMediaTitle, t]
+  );
+
+  const handleSelectReleaseNotification = useCallback(
+    async (notif: UserReleaseNotification) => {
+      try {
+        const updated = await markReleaseNotificationRead(notif.id, authUser?.uid);
+        setReleaseNotifications(updated);
+      } catch {
+        // local already updated
+      }
+      const found = mediaItems.find((m) => m.id === notif.mediaId);
+      if (found) {
+        setSelectedMedia(found);
+      }
+      setReleaseToast(null);
+    },
+    [authUser?.uid, mediaItems]
+  );
+
+  const handleMarkAllReleaseRead = useCallback(async () => {
+    try {
+      const updated = await markAllReleaseNotificationsRead(authUser?.uid);
+      setReleaseNotifications(updated);
+    } catch {
+      // ignore
+    }
+  }, [authUser?.uid]);
+
+  const handleRemoveMediaAlert = useCallback(
+    async (mediaId: string) => {
+      try {
+        const updated = await removeMediaAlertSubscription(mediaId, authUser?.uid);
+        setMediaAlerts(updated);
+      } catch {
+        // ignore
+      }
+    },
+    [authUser?.uid]
+  );
+
+  const handleOpenAlertMedia = useCallback(
+    (mediaId: string) => {
+      const found = mediaItems.find((m) => m.id === mediaId);
+      if (found) {
+        setSelectedMedia(found);
+      }
+    },
+    [mediaItems]
+  );
+
   const handleStartPlay = (media: MediaItem) => {
+    if (!hasPlayableMediaVideo(media)) {
+      setSelectedMedia(media);
+      return;
+    }
     setPlayingMedia(media);
     setSelectedMedia(null);
     recordMediaView(media.id, undefined, authUser?.email);
@@ -587,6 +770,26 @@ export default function App() {
     return [];
   }, [mediaItems, activeTab, mostWatched]);
 
+  const { availableTabYears, tabYearCounts } = useMemo(() => {
+    const counts: Record<number, number> = {};
+    tabFilteredItems.forEach((item) => {
+      const yr = Number(item.year);
+      if (Number.isInteger(yr) && yr >= 1900 && yr <= 2100) {
+        counts[yr] = (counts[yr] || 0) + 1;
+      }
+    });
+    const years = Object.keys(counts)
+      .map(Number)
+      .sort((a, b) => b - a);
+    return { availableTabYears: years, tabYearCounts: counts };
+  }, [tabFilteredItems]);
+
+  const displayedTabItems = useMemo(() => {
+    if (selectedTabYear === 'all') return tabFilteredItems;
+    const yr = Number(selectedTabYear);
+    return tabFilteredItems.filter((item) => Number(item.year) === yr);
+  }, [tabFilteredItems, selectedTabYear]);
+
   // Ensure developer admin session stays cleared for non-developer users
   useEffect(() => {
     if (!isDeveloperUser) {
@@ -668,8 +871,43 @@ export default function App() {
         onSelectTab={handleTopTabSelect}
         onSelectBottomTab={handleBottomTabSelect}
         notifications={notifications}
+        releaseNotifications={releaseNotifications}
+        mediaAlerts={mediaAlerts}
+        onSelectReleaseNotification={handleSelectReleaseNotification}
+        onMarkAllReleaseRead={handleMarkAllReleaseRead}
+        onRemoveMediaAlert={handleRemoveMediaAlert}
+        onOpenAlertMedia={handleOpenAlertMedia}
         siteName={siteSettings?.siteName}
       />
+
+      {/* New Release / Episode Alert Toast */}
+      {releaseToast && (
+        <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 pt-3">
+          <div className="p-3 rounded-2xl border bg-[#14120a] border-[#F7C600]/55 text-zinc-100 text-xs flex items-center justify-between gap-2.5 shadow-[0_14px_32px_rgba(247,198,0,0.18)]">
+            <button
+              type="button"
+              onClick={() => handleSelectReleaseNotification(releaseToast)}
+              className="flex items-center gap-2.5 flex-1 min-w-0 text-start cursor-pointer"
+            >
+              <div className="w-8 h-8 rounded-xl bg-[#F7C600] text-black flex items-center justify-center shrink-0">
+                <BellRing className="w-4 h-4" />
+              </div>
+              <div className="min-w-0">
+                <p className="font-black text-[#F7C600] truncate">{releaseToast.title}</p>
+                <p className="text-[11px] text-zinc-300 truncate">{releaseToast.message}</p>
+              </div>
+            </button>
+            <button
+              type="button"
+              onClick={() => setReleaseToast(null)}
+              aria-label={t('إغلاق الإشعار', 'Dismiss alert')}
+              className="p-1.5 rounded-full hover:bg-white/10 text-zinc-300 cursor-pointer shrink-0"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Email Verification Notification Toast */}
       {authLinkNotice && (
@@ -708,40 +946,103 @@ export default function App() {
       )}
 
       {/* Main Content Stage */}
-      <main className="flex-1 w-full max-w-7xl mx-auto px-3 sm:px-6 pt-4 pb-24 md:pb-14">
-        {/* A. Active Search Results */}
-        {searchQuery.trim().length > 0 ? (
-          <div className="py-3 space-y-4">
-            <div className="flex items-center justify-between text-xs sm:text-sm text-zinc-400">
-              <span>{t(`نتائج البحث عن: "${searchQuery}"`, `Search results for: "${searchQuery}"`)}</span>
-              <span className="font-bold text-amber-400 tabular-nums">({searchResults.length})</span>
-            </div>
-
-            {searchResults.length === 0 ? (
-              <div className="py-20 text-center text-zinc-500">
-                <Search className="w-12 h-12 mx-auto mb-2 text-zinc-600" />
-                <p className="text-sm font-bold text-zinc-300">
-                  {t('لم يتم العثور على أي نتائج', 'No matching results found')}
-                </p>
-                <p className="text-xs text-zinc-500 mt-1">
-                  {t(
-                    'جرب البحث بكلمة أخرى أو تصفح الأقسام المتاحة',
-                    'Try searching another keyword or browse available sections.'
-                  )}
-                </p>
+      <main className="flex-1 w-full max-w-7xl mx-auto px-3 sm:px-6 pt-4 pb-28 md:pb-14">
+        {/* A. Active Search View or Results */}
+        {searchQuery.trim().length > 0 || bottomNavTab === 'search' ? (
+          <div className="py-3 space-y-5">
+            {bottomNavTab === 'search' && (
+              <div className="relative flex items-center w-full">
+                <Search
+                  className={`w-4.5 h-4.5 text-[#F7C600] absolute pointer-events-none ${
+                    dir === 'ltr' ? 'left-4' : 'right-4'
+                  }`}
+                />
+                <input
+                  type="text"
+                  autoFocus
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder={t('ابحث عن فيلم أو مسلسل أو تصنيف...', 'Search movies, series, or genres...')}
+                  className={`w-full h-12 bg-[#14151a] text-zinc-100 placeholder-zinc-500 text-sm font-medium rounded-2xl border border-white/12 focus:border-[#F7C600]/75 focus:outline-none focus:ring-2 focus:ring-[#F7C600]/20 transition-all ${
+                    dir === 'ltr' ? 'pl-11 pr-10' : 'pr-11 pl-10'
+                  }`}
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    aria-label={t('مسح البحث', 'Clear search')}
+                    className={`absolute p-2 text-zinc-400 hover:text-white cursor-pointer ${
+                      dir === 'ltr' ? 'right-2.5' : 'left-2.5'
+                    }`}
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
               </div>
+            )}
+
+            {searchQuery.trim().length > 0 ? (
+              <>
+                <div className="flex items-center justify-between text-xs sm:text-sm text-zinc-400">
+                  <span>{t(`نتائج البحث عن: "${searchQuery}"`, `Search results for: "${searchQuery}"`)}</span>
+                  <span className="font-bold text-amber-400 tabular-nums">({searchResults.length})</span>
+                </div>
+
+                {searchResults.length === 0 ? (
+                  <div className="py-20 text-center text-zinc-500">
+                    <Search className="w-12 h-12 mx-auto mb-2 text-zinc-600" />
+                    <p className="text-sm font-bold text-zinc-300">
+                      {t('لم يتم العثور على أي نتائج', 'No matching results found')}
+                    </p>
+                    <p className="text-xs text-zinc-500 mt-1">
+                      {t(
+                        'جرب البحث بكلمة أخرى أو تصفح الأقسام المتاحة',
+                        'Try searching another keyword or browse available sections.'
+                      )}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
+                    {searchResults.map((item) => (
+                      <MediaCard
+                        key={item.id}
+                        item={item}
+                        inGrid={true}
+                        onSelect={(m) => setSelectedMedia(m)}
+                        isFavorite={favorites.includes(item.id)}
+                        onToggleFavorite={handleToggleFav}
+                        isAlertSubscribed={alertSubscribedIds.includes(item.id)}
+                        onToggleAlert={handleToggleMediaAlert}
+                        watchProgress={history.find((h) => h.mediaId === item.id)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
-                {searchResults.map((item) => (
-                  <MediaCard
-                    key={item.id}
-                    item={item}
-                    inGrid={true}
-                    onSelect={(m) => setSelectedMedia(m)}
-                    isFavorite={favorites.includes(item.id)}
-                    onToggleFavorite={handleToggleFav}
-                  />
-                ))}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between text-xs sm:text-sm text-zinc-400">
+                  <span className="font-bold text-zinc-200">{t('أعمال مقترحة للبحث', 'Suggested Titles')}</span>
+                  <span className="text-[11px] text-zinc-500">
+                    {t('اكتب للبحث الفوري', 'Type to filter instantly')}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
+                  {(mostWatched.length > 0 ? mostWatched : mediaItems).slice(0, 12).map((item) => (
+                    <MediaCard
+                      key={item.id}
+                      item={item}
+                      inGrid={true}
+                      onSelect={(m) => setSelectedMedia(m)}
+                      isFavorite={favorites.includes(item.id)}
+                      onToggleFavorite={handleToggleFav}
+                      isAlertSubscribed={alertSubscribedIds.includes(item.id)}
+                      onToggleAlert={handleToggleMediaAlert}
+                      watchProgress={history.find((h) => h.mediaId === item.id)}
+                    />
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -752,6 +1053,9 @@ export default function App() {
             onSelectMedia={(item) => setSelectedMedia(item)}
             favorites={favorites}
             onToggleFavorite={handleToggleFav}
+            alertSubscribedIds={alertSubscribedIds}
+            onToggleAlert={handleToggleMediaAlert}
+            history={history}
           />
         ) : bottomNavTab === 'history' ? (
           /* C. Watch History View */
@@ -769,6 +1073,9 @@ export default function App() {
             mediaItems={mediaItems}
             onSelectMedia={(item) => setSelectedMedia(item)}
             onToggleFavorite={handleToggleFav}
+            alertSubscribedIds={alertSubscribedIds}
+            onToggleAlert={handleToggleMediaAlert}
+            history={history}
             onBrowseContent={() => handleTopTabSelect('home')}
           />
         ) : activeTab !== 'home' ? (
@@ -783,66 +1090,208 @@ export default function App() {
                 transition={{ duration: 0.22 }}
                 className="space-y-4"
               >
-                <div className="flex items-center justify-between text-xs sm:text-sm text-zinc-400">
-                  <h2 className="font-black text-white text-base sm:text-lg">
-                    {activeTab === 'latest'
-                      ? t('أحدث الإضافات', 'Latest Releases')
-                      : activeTab === 'trending'
-                      ? t('الأكثر مشاهدة', 'Most Watched')
-                      : activeTab === 'top_rated'
-                      ? t('الأعلى تقييماً', 'Top Rated')
-                      : activeTab === 'series'
-                      ? t('المسلسلات', 'TV Series')
-                      : activeTab === 'movies'
-                      ? t('الأفلام السينمائية', 'Movies')
-                      : activeTab === 'action'
-                      ? t('أكشن وحركة', 'Action')
-                      : activeTab === 'drama'
-                      ? t('دراما', 'Drama')
-                      : activeTab === 'horror'
-                      ? t('رعب وتشويق', 'Horror & Thriller')
-                      : activeTab === 'comedy'
-                      ? t('كوميديا', 'Comedy')
-                      : activeTab === 'sci-fi'
-                      ? t('خيال علمي', 'Sci-Fi')
-                      : activeTab === 'adventure'
-                      ? t('مغامرات', 'Adventure')
-                      : activeTab === 'crime'
-                      ? t('جريمة وغموض', 'Crime & Mystery')
-                      : activeTab === 'romance'
-                      ? t('رومانسي', 'Romance')
-                      : t('التصنيف المختار', 'Selected Category')}
-                  </h2>
-                  <span className="text-amber-400 font-mono font-bold tabular-nums">
-                    ({tabFilteredItems.length})
-                  </span>
+                <div className="flex flex-wrap items-center justify-between gap-3 text-xs sm:text-sm text-zinc-400">
+                  <div className="flex items-center gap-2">
+                    <h2 className="font-black text-white text-base sm:text-lg">
+                      {activeTab === 'latest'
+                        ? t('أحدث الإضافات', 'Latest Releases')
+                        : activeTab === 'trending'
+                        ? t('الأكثر مشاهدة', 'Most Watched')
+                        : activeTab === 'top_rated'
+                        ? t('الأعلى تقييماً', 'Top Rated')
+                        : activeTab === 'series'
+                        ? t('المسلسلات', 'TV Series')
+                        : activeTab === 'movies'
+                        ? t('الأفلام السينمائية', 'Movies')
+                        : activeTab === 'action'
+                        ? t('أكشن وحركة', 'Action')
+                        : activeTab === 'drama'
+                        ? t('دراما', 'Drama')
+                        : activeTab === 'horror'
+                        ? t('رعب وتشويق', 'Horror & Thriller')
+                        : activeTab === 'comedy'
+                        ? t('كوميديا', 'Comedy')
+                        : activeTab === 'sci-fi'
+                        ? t('خيال علمي', 'Sci-Fi')
+                        : activeTab === 'adventure'
+                        ? t('مغامرات', 'Adventure')
+                        : activeTab === 'crime'
+                        ? t('جريمة وغموض', 'Crime & Mystery')
+                        : activeTab === 'romance'
+                        ? t('رومانسي', 'Romance')
+                        : t('التصنيف المختار', 'Selected Category')}
+                    </h2>
+                    <span className="text-amber-400 font-mono font-bold tabular-nums">
+                      ({displayedTabItems.length})
+                    </span>
+                  </div>
+
+                  {/* Production Year Dropdown Filter (Quick Select on All Viewports) */}
+                  {availableTabYears.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex items-center">
+                        <Calendar
+                          className={`w-3.5 h-3.5 text-[#F7C600] absolute pointer-events-none ${
+                            dir === 'ltr' ? 'left-3' : 'right-3'
+                          }`}
+                        />
+                        <select
+                          value={selectedTabYear}
+                          onChange={(e) => setSelectedTabYear(e.target.value)}
+                          aria-label={t('تصفية حسب سنة الإنتاج', 'Filter by release year')}
+                          className={`h-9 bg-[#14141a] hover:bg-[#1b1b24] text-zinc-100 text-xs font-bold rounded-xl border border-white/10 focus:border-[#F7C600]/70 focus:outline-none transition-colors cursor-pointer ${
+                            dir === 'ltr' ? 'pl-8 pr-4' : 'pr-8 pl-4'
+                          }`}
+                        >
+                          <option value="all">
+                            {t('سنة الإنتاج: الكل', 'Release Year: All')} ({tabFilteredItems.length})
+                          </option>
+                          {availableTabYears.map((yr) => (
+                            <option key={yr} value={String(yr)}>
+                              {yr} ({tabYearCounts[yr] || 0})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {selectedTabYear !== 'all' && (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedTabYear('all')}
+                          title={t('عرض جميع السنوات', 'Show all years')}
+                          className="h-9 px-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-[#F7C600] border border-white/10 text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">{t('الكل', 'All')}</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
 
-                {tabFilteredItems.length === 0 ? (
+                {displayedTabItems.length === 0 ? (
                   <EmptyCinemaState
                     titleStart={t('مكتبتك', 'This Section is')}
                     titleHighlight={t('فارغة', 'Empty')}
                     titleEnd={t('حالياً', 'Right Now')}
-                    subtitle={t(
-                      'لا توجد أعمال منشورة في هذا القسم حالياً، يمكنك تصفح باقي المحتوى المتاح',
-                      'No titles are published in this section yet. Browse other available titles'
-                    )}
-                    ctaLabel={t('تصفح المحتوى', 'Browse Content')}
-                    onCtaClick={() => handleTopTabSelect('home')}
+                    subtitle={
+                      selectedTabYear !== 'all'
+                        ? t(
+                            `لا توجد أعمال متاحة لسنة الإنتاج ${selectedTabYear} في هذا القسم.`,
+                            `No titles available for release year ${selectedTabYear} in this section.`
+                          )
+                        : t(
+                            'لا توجد أعمال منشورة في هذا القسم حالياً، يمكنك تصفح باقي المحتوى المتاح',
+                            'No titles are published in this section yet. Browse other available titles'
+                          )
+                    }
+                    ctaLabel={
+                      selectedTabYear !== 'all'
+                        ? t('عرض جميع السنوات', 'Show All Years')
+                        : t('تصفح المحتوى', 'Browse Content')
+                    }
+                    onCtaClick={() =>
+                      selectedTabYear !== 'all'
+                        ? setSelectedTabYear('all')
+                        : handleTopTabSelect('home')
+                    }
                     showHeartAccent={false}
                   />
                 ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
-                    {tabFilteredItems.map((item) => (
-                      <MediaCard
-                        key={item.id}
-                        item={item}
-                        inGrid={true}
-                        onSelect={(m) => setSelectedMedia(m)}
-                        isFavorite={favorites.includes(item.id)}
-                        onToggleFavorite={handleToggleFav}
-                      />
-                    ))}
+                  <div className="flex flex-col lg:flex-row items-start gap-5">
+                    {/* Desktop Year Filter Sidebar */}
+                    {availableTabYears.length > 0 && (
+                      <aside
+                        aria-label={t('تصفية حسب سنة الإنتاج', 'Filter by release year')}
+                        className="hidden lg:block w-56 shrink-0 sticky top-24 rounded-2xl bg-[#101016]/95 border border-white/[0.08] p-3.5 shadow-xl space-y-2.5"
+                      >
+                        <div className="flex items-center justify-between pb-2 border-b border-white/[0.08]">
+                          <div className="flex items-center gap-1.5 text-xs font-black text-white">
+                            <Calendar className="w-4 h-4 text-[#F7C600]" />
+                            <span>{t('سنة الإنتاج', 'Release Year')}</span>
+                          </div>
+                          {selectedTabYear !== 'all' && (
+                            <button
+                              type="button"
+                              onClick={() => setSelectedTabYear('all')}
+                              className="text-[11px] font-bold text-[#F7C600] hover:underline cursor-pointer"
+                            >
+                              {t('إعادة ضبط', 'Reset')}
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="space-y-1 max-h-[58vh] overflow-y-auto no-scrollbar">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedTabYear('all')}
+                            className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                              selectedTabYear === 'all'
+                                ? 'bg-[#F7C600] text-black font-black shadow-sm shadow-[#F7C600]/25'
+                                : 'text-zinc-300 hover:text-white hover:bg-white/[0.05]'
+                            }`}
+                          >
+                            <span>{t('جميع السنوات', 'All Years')}</span>
+                            <span
+                              className={`text-[10px] px-1.5 py-0.5 rounded-md tabular-nums ${
+                                selectedTabYear === 'all'
+                                  ? 'bg-black/15 text-black'
+                                  : 'bg-zinc-800 text-zinc-400'
+                              }`}
+                            >
+                              {tabFilteredItems.length}
+                            </span>
+                          </button>
+
+                          {availableTabYears.map((yr) => {
+                            const activeYear = selectedTabYear === String(yr);
+                            return (
+                              <button
+                                key={yr}
+                                type="button"
+                                onClick={() => setSelectedTabYear(String(yr))}
+                                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer tabular-nums ${
+                                  activeYear
+                                    ? 'bg-[#F7C600] text-black font-black shadow-sm shadow-[#F7C600]/25'
+                                    : 'text-zinc-300 hover:text-white hover:bg-white/[0.05]'
+                                }`}
+                              >
+                                <span>{yr}</span>
+                                <span
+                                  className={`text-[10px] px-1.5 py-0.5 rounded-md tabular-nums ${
+                                    activeYear
+                                      ? 'bg-black/15 text-black'
+                                      : 'bg-zinc-800 text-zinc-400'
+                                  }`}
+                                >
+                                  {tabYearCounts[yr] || 0}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </aside>
+                    )}
+
+                    <div
+                      className={`flex-1 min-w-0 w-full grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 ${
+                        availableTabYears.length > 0 ? 'xl:grid-cols-5' : 'lg:grid-cols-5 xl:grid-cols-6'
+                      } gap-3 sm:gap-4`}
+                    >
+                      {displayedTabItems.map((item) => (
+                        <MediaCard
+                          key={item.id}
+                          item={item}
+                          inGrid={true}
+                          onSelect={(m) => setSelectedMedia(m)}
+                          isFavorite={favorites.includes(item.id)}
+                          onToggleFavorite={handleToggleFav}
+                          isAlertSubscribed={alertSubscribedIds.includes(item.id)}
+                          onToggleAlert={handleToggleMediaAlert}
+                          watchProgress={history.find((h) => h.mediaId === item.id)}
+                        />
+                      ))}
+                    </div>
                   </div>
                 )}
               </motion.div>
@@ -1029,6 +1478,9 @@ export default function App() {
                     onSelectMedia={(item) => setSelectedMedia(item)}
                     favorites={favorites}
                     onToggleFavorite={handleToggleFav}
+                    alertSubscribedIds={alertSubscribedIds}
+                    onToggleAlert={handleToggleMediaAlert}
+                    history={history}
                     onViewAll={() => handleTopTabSelect('movies')}
                     variant="poster"
                   />
@@ -1044,6 +1496,8 @@ export default function App() {
                       onSelectMedia={(item) => setSelectedMedia(item)}
                       favorites={favorites}
                       onToggleFavorite={handleToggleFav}
+                      alertSubscribedIds={alertSubscribedIds}
+                      onToggleAlert={handleToggleMediaAlert}
                     />
                   )}
 
@@ -1056,6 +1510,9 @@ export default function App() {
                     onSelectMedia={(item) => setSelectedMedia(item)}
                     favorites={favorites}
                     onToggleFavorite={handleToggleFav}
+                    alertSubscribedIds={alertSubscribedIds}
+                    onToggleAlert={handleToggleMediaAlert}
+                    history={history}
                     onViewAll={() => handleTopTabSelect('series')}
                     variant="poster"
                   />
@@ -1070,6 +1527,9 @@ export default function App() {
                     onSelectMedia={(item) => setSelectedMedia(item)}
                     favorites={favorites}
                     onToggleFavorite={handleToggleFav}
+                    alertSubscribedIds={alertSubscribedIds}
+                    onToggleAlert={handleToggleMediaAlert}
+                    history={history}
                     onViewAll={() => handleTopTabSelect('trending')}
                     variant="landscape"
                   />
@@ -1135,7 +1595,7 @@ export default function App() {
         </div>
       </footer>
 
-      {/* Mobile Bottom Navigation: الرئيسية · المسلسلات · المفضلة · الإعدادات */}
+      {/* Mobile Bottom Navigation: الرئيسية · البحث · المفضلة · الإعدادات */}
       <BottomNavigation
         currentTab={bottomNavTab}
         onSelectTab={handleBottomTabSelect}
@@ -1193,6 +1653,7 @@ export default function App() {
           playerDefaults={siteSettings?.playerSettings}
           onClose={() => {
             setPlayingMedia(null);
+            setHistory(getWatchHistory());
             refreshData();
           }}
         />
@@ -1206,6 +1667,8 @@ export default function App() {
         onPlay={(media) => handleStartPlay(media)}
         isFavorite={selectedMedia ? favorites.includes(selectedMedia.id) : false}
         onToggleFavorite={() => selectedMedia && handleToggleFav(selectedMedia.id)}
+        isAlertSubscribed={selectedMedia ? alertSubscribedIds.includes(selectedMedia.id) : false}
+        onToggleAlert={() => selectedMedia && handleToggleMediaAlert(selectedMedia)}
         isAdmin={isDeveloperUser}
         onDeleteMovie={
           isDeveloperUser

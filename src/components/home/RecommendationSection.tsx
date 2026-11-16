@@ -10,6 +10,8 @@ interface RecommendationSectionProps {
   favorites: string[];
   onSelectMedia: (item: MediaItem) => void;
   onToggleFavorite: (id: string) => void;
+  alertSubscribedIds?: string[];
+  onToggleAlert?: (id: string) => void;
   userGenrePreference?: string;
 }
 
@@ -19,6 +21,8 @@ export const RecommendationSection: React.FC<RecommendationSectionProps> = ({
   favorites,
   onSelectMedia,
   onToggleFavorite,
+  alertSubscribedIds = [],
+  onToggleAlert,
 }) => {
   const { lang, t, translateGenre } = useLanguage();
 
@@ -149,6 +153,9 @@ export const RecommendationSection: React.FC<RecommendationSectionProps> = ({
             onClick={() => onSelectMedia(item)}
             isFavorite={favorites.includes(item.id)}
             onToggleFavorite={() => onToggleFavorite(item.id)}
+            isAlertSubscribed={alertSubscribedIds.includes(item.id)}
+            onToggleAlert={onToggleAlert ? () => onToggleAlert(item.id) : undefined}
+            watchProgress={history.find((h) => h.mediaId === item.id)}
           />
         ))}
       </div>

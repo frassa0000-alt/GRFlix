@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { MediaItem, MediaType } from '../../types';
+import { MediaItem, MediaType, WatchProgress } from '../../types';
 import { MediaCard } from '../cards/MediaCard';
 import { useLanguage } from '../../contexts/LanguageContext';
 import {
@@ -21,6 +21,7 @@ import {
   RotateCcw,
   SlidersHorizontal,
   Sparkles,
+  Calendar,
 } from 'lucide-react';
 
 interface CategoriesViewProps {
@@ -28,6 +29,9 @@ interface CategoriesViewProps {
   onSelectMedia: (item: MediaItem) => void;
   favorites: string[];
   onToggleFavorite: (id: string) => void;
+  alertSubscribedIds?: string[];
+  onToggleAlert?: (id: string) => void;
+  history?: WatchProgress[];
 }
 
 interface GenreConfig {
@@ -44,10 +48,14 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({
   onSelectMedia,
   favorites,
   onToggleFavorite,
+  alertSubscribedIds = [],
+  onToggleAlert,
+  history = [],
 }) => {
   const { lang, dir, t } = useLanguage();
   const [selectedType, setSelectedType] = useState<MediaType | 'all'>('all');
   const [selectedGenre, setSelectedGenre] = useState<string>('all');
+  const [selectedYear, setSelectedYear] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'latest' | 'rating'>('latest');
 
   const genresList: GenreConfig[] = [
@@ -89,15 +97,38 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({
     return counts;
   }, [mediaItems, selectedType]);
 
+  const baseFilteredItems = useMemo(() => {
+    return mediaItems.filter((item) => {
+      if (selectedType !== 'all' && item.type !== selectedType) return false;
+      if (selectedGenre !== 'all') {
+        const hasGenre = item.genres?.some(
+          (g) => String(g).toLowerCase().trim() === selectedGenre.toLowerCase().trim()
+        );
+        if (!hasGenre) return false;
+      }
+      return true;
+    });
+  }, [mediaItems, selectedType, selectedGenre]);
+
+  const { availableYears, yearCounts } = useMemo(() => {
+    const counts: Record<number, number> = {};
+    baseFilteredItems.forEach((item) => {
+      const yr = Number(item.year);
+      if (Number.isInteger(yr) && yr >= 1900 && yr <= 2100) {
+        counts[yr] = (counts[yr] || 0) + 1;
+      }
+    });
+    const years = Object.keys(counts)
+      .map(Number)
+      .sort((a, b) => b - a);
+    return { availableYears: years, yearCounts: counts };
+  }, [baseFilteredItems]);
+
   const filteredItems = useMemo(() => {
-    return mediaItems
+    return baseFilteredItems
       .filter((item) => {
-        if (selectedType !== 'all' && item.type !== selectedType) return false;
-        if (selectedGenre !== 'all') {
-          const hasGenre = item.genres?.some(
-            (g) => String(g).toLowerCase().trim() === selectedGenre.toLowerCase().trim()
-          );
-          if (!hasGenre) return false;
+        if (selectedYear !== 'all' && Number(item.year) !== Number(selectedYear)) {
+          return false;
         }
         return true;
       })
@@ -107,17 +138,19 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({
         }
         return (b.year || 0) - (a.year || 0);
       });
-  }, [mediaItems, selectedType, selectedGenre, sortBy]);
+  }, [baseFilteredItems, selectedYear, sortBy]);
 
   const activeGenreObj = genresList.find((g) => g.id === selectedGenre) || genresList[0];
 
   const resetFilters = () => {
     setSelectedType('all');
     setSelectedGenre('all');
+    setSelectedYear('all');
     setSortBy('latest');
   };
 
-  const isFilterActive = selectedType !== 'all' || selectedGenre !== 'all';
+  const isFilterActive =
+    selectedType !== 'all' || selectedGenre !== 'all' || selectedYear !== 'all';
 
   return (
     <div className="w-full max-w-7xl mx-auto px-3.5 sm:px-6 py-4 space-y-6 animate-fade-in select-none">
@@ -318,34 +351,63 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({
           </span>
         </div>
 
-        <div className="flex items-center gap-1.5 self-end sm:self-auto bg-zinc-950 p-1 rounded-xl border border-zinc-800/80">
-          <span className="text-[10px] text-zinc-400 px-2 font-medium">
-            {t('الترتيب:', 'Sort:')}
-          </span>
-          <button
-            type="button"
-            onClick={() => setSortBy('latest')}
-            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all active:scale-95 cursor-pointer ${
-              sortBy === 'latest'
-                ? 'bg-amber-400 text-black font-black shadow-sm'
-                : 'text-zinc-400 hover:text-white'
-            }`}
-          >
-            <Clock className="w-3 h-3" />
-            <span>{t('الأحدث', 'Latest')}</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setSortBy('rating')}
-            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all active:scale-95 cursor-pointer ${
-              sortBy === 'rating'
-                ? 'bg-amber-400 text-black font-black shadow-sm'
-                : 'text-zinc-400 hover:text-white'
-            }`}
-          >
-            <Star className="w-3 h-3" />
-            <span>{t('الأعلى تقييماً', 'Top Rated')}</span>
-          </button>
+        <div className="flex flex-wrap items-center gap-2 self-end sm:self-auto">
+          {availableYears.length > 0 && (
+            <div className="relative flex items-center">
+              <Calendar
+                className={`w-3.5 h-3.5 text-amber-400 absolute pointer-events-none ${
+                  dir === 'ltr' ? 'left-2.5' : 'right-2.5'
+                }`}
+              />
+              <select
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(e.target.value)}
+                aria-label={t('تصفية حسب سنة الإنتاج', 'Filter by release year')}
+                className={`h-9 bg-zinc-950 hover:bg-zinc-900 text-zinc-200 text-xs font-bold rounded-xl border border-zinc-800/80 focus:border-amber-400/70 focus:outline-none transition-colors cursor-pointer ${
+                  dir === 'ltr' ? 'pl-8 pr-3' : 'pr-8 pl-3'
+                }`}
+              >
+                <option value="all">
+                  {t('سنة الإنتاج: الكل', 'Year: All')} ({baseFilteredItems.length})
+                </option>
+                {availableYears.map((yr) => (
+                  <option key={yr} value={String(yr)}>
+                    {yr} ({yearCounts[yr] || 0})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div className="flex items-center gap-1.5 bg-zinc-950 p-1 rounded-xl border border-zinc-800/80">
+            <span className="text-[10px] text-zinc-400 px-2 font-medium">
+              {t('الترتيب:', 'Sort:')}
+            </span>
+            <button
+              type="button"
+              onClick={() => setSortBy('latest')}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all active:scale-95 cursor-pointer ${
+                sortBy === 'latest'
+                  ? 'bg-amber-400 text-black font-black shadow-sm'
+                  : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              <Clock className="w-3 h-3" />
+              <span>{t('الأحدث', 'Latest')}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setSortBy('rating')}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all active:scale-95 cursor-pointer ${
+                sortBy === 'rating'
+                  ? 'bg-amber-400 text-black font-black shadow-sm'
+                  : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              <Star className="w-3 h-3" />
+              <span>{t('الأعلى تقييماً', 'Top Rated')}</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -385,6 +447,9 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({
                 onClick={() => onSelectMedia(item)}
                 isFavorite={favorites.includes(item.id)}
                 onToggleFavorite={() => onToggleFavorite(item.id)}
+                isAlertSubscribed={alertSubscribedIds.includes(item.id)}
+                onToggleAlert={onToggleAlert ? () => onToggleAlert(item.id) : undefined}
+                watchProgress={history.find((h) => h.mediaId === item.id)}
               />
             </div>
           ))}

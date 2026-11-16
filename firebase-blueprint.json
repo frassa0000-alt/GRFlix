@@ -114,6 +114,7 @@
         "isFeatured": { "type": "boolean", "description": "Featured on hero banner" },
         "isLatest": { "type": "boolean", "description": "Included in latest releases" },
         "isMostWatched": { "type": "boolean", "description": "Highlighted as most watched" },
+        "isComingSoon": { "type": "boolean", "description": "Published teaser awaiting video release" },
         "displayOrder": { "type": "number", "description": "Custom sort order in catalog" },
         "viewsCount": { "type": "number", "description": "Recorded total playback views" },
         "director": { "type": "string", "description": "Director name" },
@@ -122,6 +123,43 @@
         "updatedAt": { "type": "number", "description": "Last update timestamp" }
       },
       "required": ["titleAr"]
+    },
+    "UserMediaAlert": {
+      "title": "UserMediaAlert",
+      "description": "User subscription to be notified when a movie is added or new episodes release",
+      "type": "object",
+      "properties": {
+        "mediaId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$", "description": "Subscribed movie or series ID" },
+        "mediaTitle": { "type": "string", "minLength": 1, "maxLength": 200, "description": "Display title of the media" },
+        "mediaType": { "type": "string", "enum": ["movie", "series", "anime"], "description": "Media type" },
+        "posterUrl": { "type": "string", "maxLength": 2000, "description": "Poster URL" },
+        "knownEpisodeCount": { "type": "number", "description": "Episode count snapshot when subscribed or last notified" },
+        "hadVideo": { "type": "boolean", "description": "Whether playable video already existed when subscribed" },
+        "knownUpdatedAt": { "type": "number", "description": "Last observed media updatedAt timestamp" },
+        "createdAt": { "type": "number", "description": "Subscription creation timestamp" },
+        "updatedAt": { "type": "number", "description": "Last update timestamp" }
+      },
+      "required": ["mediaId", "mediaTitle", "mediaType", "knownEpisodeCount", "hadVideo", "createdAt", "updatedAt"]
+    },
+    "UserNotification": {
+      "title": "UserNotification",
+      "description": "Triggered release or new episode notification delivered to a user",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$", "description": "Notification document ID" },
+        "mediaId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$", "description": "Related movie or series ID" },
+        "mediaTitle": { "type": "string", "maxLength": 200, "description": "Title of related media" },
+        "mediaType": { "type": "string", "enum": ["movie", "series", "anime"], "description": "Type of related media" },
+        "posterUrl": { "type": "string", "maxLength": 2000, "description": "Poster thumbnail URL" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 200, "description": "Notification headline" },
+        "message": { "type": "string", "minLength": 1, "maxLength": 1000, "description": "Notification body text" },
+        "kind": { "type": "string", "enum": ["new_episode", "movie_added", "media_updated"], "description": "Notification category" },
+        "read": { "type": "boolean", "description": "Whether user has read this notification" },
+        "episodeNumber": { "type": "number", "description": "Newly added episode number if applicable" },
+        "seasonNumber": { "type": "number", "description": "Season number if applicable" },
+        "createdAt": { "type": "number", "description": "Notification creation timestamp" }
+      },
+      "required": ["id", "mediaId", "title", "message", "kind", "read", "createdAt"]
     },
     "SiteSettingDoc": {
       "title": "SiteSettingDoc",
@@ -147,6 +185,14 @@
     "/users/{userId}/history/{historyId}": {
       "schema": "UserHistory",
       "description": "User private watch history"
+    },
+    "/users/{userId}/alerts/{alertId}": {
+      "schema": "UserMediaAlert",
+      "description": "User private release alert subscriptions for movies and series"
+    },
+    "/users/{userId}/notifications/{notificationId}": {
+      "schema": "UserNotification",
+      "description": "User private triggered release notifications"
     },
     "/movies/{movieId}": {
       "schema": "MovieItem",

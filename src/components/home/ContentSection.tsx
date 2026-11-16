@@ -10,7 +10,7 @@ import {
   ArrowLeft,
   ArrowRight,
 } from 'lucide-react';
-import { MediaItem } from '../../types';
+import { MediaItem, WatchProgress } from '../../types';
 import { MediaCard } from '../cards/MediaCard';
 import { useLanguage } from '../../contexts/LanguageContext';
 
@@ -21,6 +21,9 @@ interface ContentSectionProps {
   onSelectMedia: (item: MediaItem) => void;
   favorites: string[];
   onToggleFavorite: (id: string) => void;
+  alertSubscribedIds?: string[];
+  onToggleAlert?: (id: string) => void;
+  history?: WatchProgress[];
   onViewAll?: () => void;
   variant?: 'poster' | 'landscape';
 }
@@ -32,6 +35,9 @@ export const ContentSection: React.FC<ContentSectionProps> = ({
   onSelectMedia,
   favorites,
   onToggleFavorite,
+  alertSubscribedIds = [],
+  onToggleAlert,
+  history = [],
   onViewAll,
   variant = 'poster',
 }) => {
@@ -151,6 +157,9 @@ export const ContentSection: React.FC<ContentSectionProps> = ({
             onSelect={onSelectMedia}
             isFavorite={favorites.includes(item.id)}
             onToggleFavorite={onToggleFavorite}
+            isAlertSubscribed={alertSubscribedIds.includes(item.id)}
+            onToggleAlert={onToggleAlert ? () => onToggleAlert(item.id) : undefined}
+            watchProgress={history.find((h) => h.mediaId === item.id)}
             variant={variant}
           />
         ))}

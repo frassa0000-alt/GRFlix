@@ -93,6 +93,7 @@ service cloud.firestore {
           'isLatest',
           'isFeatured',
           'isMostWatched',
+          'isComingSoon',
           'displayOrder',
           'viewsCount',
           'director',
@@ -137,7 +138,71 @@ service cloud.firestore {
         && (!('isPublished' in data) || data.isPublished is bool)
         && (!('isLatest' in data) || data.isLatest is bool)
         && (!('isFeatured' in data) || data.isFeatured is bool)
-        && (!('isMostWatched' in data) || data.isMostWatched is bool);
+        && (!('isMostWatched' in data) || data.isMostWatched is bool)
+        && (!('isComingSoon' in data) || data.isComingSoon is bool);
+    }
+
+    function isValidUserAlert(data) {
+      return data.keys().hasAll([
+          'mediaId',
+          'mediaTitle',
+          'mediaType',
+          'knownEpisodeCount',
+          'hadVideo',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'mediaId',
+          'mediaTitle',
+          'mediaType',
+          'posterUrl',
+          'knownEpisodeCount',
+          'hadVideo',
+          'knownUpdatedAt',
+          'createdAt',
+          'updatedAt'
+        ])
+        && isValidId(data.mediaId)
+        && data.mediaTitle is string && data.mediaTitle.size() >= 1 && data.mediaTitle.size() <= 200
+        && data.mediaType is string && data.mediaType in ['movie', 'series', 'anime']
+        && (!('posterUrl' in data) || (data.posterUrl is string && data.posterUrl.size() <= 2000))
+        && (data.knownEpisodeCount is int || data.knownEpisodeCount is float)
+        && data.knownEpisodeCount >= 0
+        && data.hadVideo is bool
+        && (!('knownUpdatedAt' in data) || data.knownUpdatedAt is int || data.knownUpdatedAt is float)
+        && (data.createdAt is int || data.createdAt is float)
+        && (data.updatedAt is int || data.updatedAt is float);
+    }
+
+    function isValidUserNotification(data) {
+      return data.keys().hasAll(['id', 'mediaId', 'title', 'message', 'kind', 'read', 'createdAt'])
+        && data.keys().hasOnly([
+          'id',
+          'mediaId',
+          'mediaTitle',
+          'mediaType',
+          'posterUrl',
+          'title',
+          'message',
+          'kind',
+          'read',
+          'episodeNumber',
+          'seasonNumber',
+          'createdAt'
+        ])
+        && isValidId(data.id)
+        && isValidId(data.mediaId)
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 200
+        && data.message is string && data.message.size() >= 1 && data.message.size() <= 1000
+        && (!('mediaTitle' in data) || (data.mediaTitle is string && data.mediaTitle.size() <= 200))
+        && (!('mediaType' in data) || (data.mediaType is string && data.mediaType in ['movie', 'series', 'anime']))
+        && (!('posterUrl' in data) || (data.posterUrl is string && data.posterUrl.size() <= 2000))
+        && data.kind is string && data.kind in ['new_episode', 'movie_added', 'media_updated']
+        && data.read is bool
+        && (!('episodeNumber' in data) || data.episodeNumber is int || data.episodeNumber is float)
+        && (!('seasonNumber' in data) || data.seasonNumber is int || data.seasonNumber is float)
+        && (data.createdAt is int || data.createdAt is float);
     }
 
     // Test connection document for initial validation
@@ -185,6 +250,42 @@ service cloud.firestore {
       match /history/{historyId} {
         allow get, create, update, delete: if isValidId(userId) && isValidId(historyId) && isOwner(userId);
         allow list: if isValidId(userId) && isOwner(userId);
+      }
+
+      match /alerts/{alertId} {
+        allow get: if isValidId(userId) && isValidId(alertId) && isOwner(userId);
+        allow list: if isValidId(userId) && isOwner(userId);
+        allow create: if isValidId(userId) && isValidId(alertId) && isOwner(userId)
+          && isValidUserAlert(incoming())
+          && incoming().mediaId == alertId;
+        allow update: if isValidId(userId) && isValidId(alertId) && isOwner(userId)
+          && isValidUserAlert(incoming())
+          && incoming().mediaId == existing().mediaId
+          && incoming().createdAt == existing().createdAt
+          && incoming().diff(existing()).affectedKeys().hasOnly([
+            'mediaTitle',
+            'posterUrl',
+            'knownEpisodeCount',
+            'hadVideo',
+            'knownUpdatedAt',
+            'updatedAt'
+          ]);
+        allow delete: if isValidId(userId) && isValidId(alertId) && isOwner(userId);
+      }
+
+      match /notifications/{notificationId} {
+        allow get: if isValidId(userId) && isValidId(notificationId) && isOwner(userId);
+        allow list: if isValidId(userId) && isOwner(userId);
+        allow create: if isValidId(userId) && isValidId(notificationId) && isOwner(userId)
+          && isValidUserNotification(incoming())
+          && incoming().id == notificationId;
+        allow update: if isValidId(userId) && isValidId(notificationId) && isOwner(userId)
+          && isValidUserNotification(incoming())
+          && incoming().id == existing().id
+          && incoming().mediaId == existing().mediaId
+          && incoming().createdAt == existing().createdAt
+          && incoming().diff(existing()).affectedKeys().hasOnly(['read']);
+        allow delete: if isValidId(userId) && isValidId(notificationId) && isOwner(userId);
       }
     }
 
