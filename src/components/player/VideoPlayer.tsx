@@ -30,7 +30,8 @@ import {
   WifiOff,
   X,
 } from 'lucide-react';
-import { Episode, MediaItem, PlayerSettingsConfig } from '../../types';
+import { Episode, MediaItem, PlayerSettingsConfig, VideoSourceOption } from '../../types';
+import { PlayerCinemaIntro } from './PlayerCinemaIntro';
 import { fetchVideoStreams, VideoStreamsResponse } from '../../services/api';
 import { getMediaProgress, saveWatchProgress } from '../../services/storage';
 import {
@@ -51,6 +52,11 @@ import {
   qualityRankToYouTubeCode,
   YTPlayerInstance,
 } from '../../utils/youtube';
+import {
+  convertToUniversalEmbedUrl,
+  getPipedMirrorEmbedUrl,
+  isHlsStreamUrl,
+} from '../../utils/videoEngines';
 import {
   formatQualityLabel,
   getQualityNumericRank,
@@ -87,14 +93,20 @@ interface OrderedServerItem {
   shortLabel: string;
   label: string;
   url: string;
-  format: 'mp4' | 'hls' | 'webm' | 'youtube';
+  format: 'mp4' | 'hls' | 'webm' | 'youtube' | 'embed';
   qualityLabel: string;
   qualityRank: number;
   isDefault: boolean;
-  engineType: 'direct-mp4' | 'hls-adaptive' | 'youtube-embed' | 'custom-source';
+  engineType:
+    | 'direct-mp4'
+    | 'hls-adaptive'
+    | 'youtube-embed'
+    | 'youtube-nocookie'
+    | 'universal-embed'
+    | 'custom-source';
 }
 
-type ActivePanel = 'quality' | 'settings' | 'episodes' | null;
+type ActivePanel = 'quality' | 'settings' | 'episodes' | 'servers' | null;
 type SettingsTab = 'speed' | 'subtitles' | 'servers';
 
 const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2];
@@ -130,8 +142,7 @@ function getQualityRank(labelOrUrl: string | undefined): number {
 }
 
 function isHlsSource(url: string): boolean {
-  const clean = url.split('?')[0].toLowerCase();
-  return clean.endsWith('.m3u8') || url.toLowerCase().includes('.m3u8?');
+  return isHlsStreamUrl(url);
 }
 
 function isValidVideoUrl(url: string | undefined | null): boolean {
@@ -182,6 +193,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
   const showControlsRef = useRef<boolean>(true);
   const isPlayingRef = useRef<boolean>(false);
   const revealedOnPointerDownRef = useRef<boolean>(false);
+  const failedServerIdsRef = useRef<Set<string>>(new Set());
+  const failoverTimerRef = useRef<number | null>(null);
 
   // Flatten series episodes if available
   const episodesList = useMemo<FlattenedEpisode[]>(() => {
@@ -222,19 +235,34 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
       : null;
 
   const baseVideoUrl = activeEpisode?.videoUrl || media.videoUrl;
+  const playbackSessionKey = `${media.id}::${activeEpisode?.id || 'movie'}`;
   const availableCustomSources = useMemo(
     () => activeEpisode?.sources || media.sources || [],
     [activeEpisode?.sources, media.sources]
   );
 
+  // Pre-roll cinema intro state (plays once per movie/episode launch; never replays on pause/resume/quality switch)
+  const [isPreRollIntroActive, setIsPreRollIntroActive] = useState<boolean>(true);
+  const isPreRollIntroActiveRef = useRef<boolean>(true);
+
   // Playback & stream state
   const [selectedSourceUrl, setSelectedSourceUrl] = useState<string>(baseVideoUrl);
-  const [activeServerId, setActiveServerId] = useState<string>('server-direct-mp4');
+  const [activeServerId, setActiveServerId] = useState<string>(() =>
+    extractLocalVideoFilename(baseVideoUrl)
+      ? 'server-gr'
+      : isYouTubeUrl(baseVideoUrl)
+      ? 'server-youtube'
+      : 'server-gr'
+  );
   const [serverStreamData, setServerStreamData] = useState<VideoStreamsResponse | null>(null);
-  const isYouTubeSource = useMemo(() => isYouTubeUrl(selectedSourceUrl), [selectedSourceUrl]);
+  const [resolvedServerAlts, setResolvedServerAlts] = useState<
+    Array<{ label: string; url: string; format: string }>
+  >([]);
+  const [failoverNotice, setFailoverNotice] = useState<string | null>(null);
   const [ytQualityOptions, setYtQualityOptions] = useState<QualityOption[]>([]);
   const [activeYtQualityId, setActiveYtQualityId] = useState<string>('auto');
   const [ytEmbedBlocked, setYtEmbedBlocked] = useState<boolean>(false);
+  const [ytHasStartedPlaying, setYtHasStartedPlaying] = useState<boolean>(false);
 
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [currentTime, setCurrentTime] = useState<number>(0);
@@ -353,6 +381,260 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
     };
   }, [localVideoFilename, retryToken]);
 
+  // Query server for any non-YouTube stored alternatives (GR / G streams) matching this media or episode
+  useEffect(() => {
+    let cancelled = false;
+    setResolvedServerAlts([]);
+    const params = new URLSearchParams({ mediaId: media.id });
+    if (activeEpisode?.id) params.set('episodeId', activeEpisode.id);
+    if (baseVideoUrl) params.set('url', baseVideoUrl);
+
+    fetch(`/api/stream/resolve?${params.toString()}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!cancelled && data && Array.isArray(data.alternatives)) {
+          setResolvedServerAlts(data.alternatives);
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [media.id, activeEpisode?.id, baseVideoUrl]);
+
+  const orderedServers = useMemo<OrderedServerItem[]>(() => {
+    const rawList: Array<Omit<OrderedServerItem, 'orderNumber'>> = [];
+    const seenKeys = new Set<string>();
+    const normalizeUrlKey = (u: string) => u.trim().split('?')[0];
+
+    let hasGrServer = false;
+    let hasGServer = false;
+    let ytPrimaryUrl: string | null = isYouTubeUrl(baseVideoUrl) ? baseVideoUrl : null;
+
+    if (serverStreamData?.exists && serverStreamData.servers.length > 0) {
+      serverStreamData.servers.forEach((srv, idx) => {
+        const key = normalizeUrlKey(srv.url);
+        if (!key || seenKeys.has(key)) return;
+        seenKeys.add(key);
+        const isFirst = idx === 0;
+        if (isFirst) hasGrServer = true;
+        else hasGServer = true;
+        rawList.push({
+          id: srv.id,
+          shortLabel: srv.shortLabel || (isFirst ? 'مشغل GR' : 'مشغل G'),
+          label: srv.label,
+          url: srv.url,
+          format: srv.format,
+          qualityLabel:
+            srv.format === 'hls'
+              ? 'HLS تكيفي'
+              : serverStreamData.sourceHeight
+              ? `${serverStreamData.sourceHeight}p`
+              : media.videoQuality
+              ? formatQualityLabel(media.videoQuality)
+              : 'أصلي',
+          qualityRank: srv.format === 'hls' ? 1400 : serverStreamData.sourceHeight || 1080,
+          isDefault: srv.isDefault,
+          engineType: srv.format === 'hls' ? 'hls-adaptive' : 'direct-mp4',
+        });
+      });
+    }
+
+    const mergedCustomSources: VideoSourceOption[] = [
+      ...availableCustomSources,
+      ...resolvedServerAlts.map((alt, i) => ({
+        id: `resolved-${i}`,
+        label: alt.label,
+        url: alt.url,
+        format: alt.format,
+        isDefault: false,
+      })),
+    ];
+
+    const sortedCustom = [...mergedCustomSources]
+      .filter((s) => Boolean(s?.url))
+      .sort((a, b) => {
+        if (Boolean(a.isDefault) !== Boolean(b.isDefault)) {
+          return a.isDefault ? -1 : 1;
+        }
+        return getQualityRank(b.label) - getQualityRank(a.label);
+      });
+
+    sortedCustom.forEach((src, idx) => {
+      const isYt = src.format === 'youtube' || isYouTubeUrl(src.url);
+      if (isYt && !ytPrimaryUrl) {
+        ytPrimaryUrl = src.url;
+      }
+      const key = `${isYt ? 'yt' : 'direct'}::${normalizeUrlKey(src.url)}`;
+      if (!normalizeUrlKey(src.url) || seenKeys.has(key)) return;
+      seenKeys.add(key);
+
+      const embedUrl = !isYt ? convertToUniversalEmbedUrl(src.url) : null;
+      const isHls = !isYt && !embedUrl && (src.format === 'hls' || isHlsSource(src.url));
+
+      if (isYt) {
+        rawList.push({
+          id: src.id || `server-youtube-${idx}`,
+          shortLabel: 'YouTube',
+          label: src.label ? formatQualityLabel(src.label) : 'مشغل يوتيوب القياسي',
+          url: src.url,
+          format: 'youtube',
+          qualityLabel: src.label ? formatQualityLabel(src.label) : '1080p',
+          qualityRank: getQualityRank(src.label),
+          isDefault: Boolean(src.isDefault) && rawList.length === 0,
+          engineType: 'youtube-embed',
+        });
+        return;
+      }
+
+      const rawLabel = (src.label || '').trim();
+      const explicitGr = /\bgr\b/i.test(rawLabel) || src.id === 'server-gr';
+      const explicitG = !explicitGr && (/\bg\b/i.test(rawLabel) || src.id === 'server-g');
+
+      let assignedShort = rawLabel ? formatQualityLabel(rawLabel) : '';
+      let assignedId = src.id || `custom-${idx}`;
+
+      if (explicitGr || (!hasGrServer && !explicitG)) {
+        hasGrServer = true;
+        assignedShort = explicitGr ? rawLabel : 'مشغل GR';
+        assignedId = hasGrServer && !rawList.some((x) => x.id === 'server-gr') ? 'server-gr' : assignedId;
+      } else if (explicitG || !hasGServer) {
+        hasGServer = true;
+        assignedShort = explicitG ? rawLabel : 'مشغل G';
+        assignedId = hasGServer && !rawList.some((x) => x.id === 'server-g') ? 'server-g' : assignedId;
+      }
+
+      rawList.push({
+        id: assignedId,
+        shortLabel: assignedShort || 'مشغل GR',
+        label: rawLabel
+          ? `${assignedShort} • ${formatQualityLabel(rawLabel)}`
+          : `${assignedShort} • سيرفر الموقع`,
+        url: embedUrl || src.url,
+        format: embedUrl ? 'embed' : isHls ? 'hls' : src.format === 'webm' ? 'webm' : 'mp4',
+        qualityLabel: src.quality || (src.label ? formatQualityLabel(src.label) : 'HD'),
+        qualityRank: getQualityRank(src.quality || src.label),
+        isDefault: Boolean(src.isDefault) && rawList.length === 0,
+        engineType: embedUrl ? 'universal-embed' : isHls ? 'hls-adaptive' : 'direct-mp4',
+      });
+    });
+
+    const baseKey = normalizeUrlKey(baseVideoUrl || '');
+    if (baseKey) {
+      const baseIsYt = isYouTubeUrl(baseVideoUrl);
+      const baseCheckKey = `${baseIsYt ? 'yt' : 'direct'}::${baseKey}`;
+      if (!seenKeys.has(baseCheckKey) && !seenKeys.has(baseKey)) {
+        seenKeys.add(baseCheckKey);
+        const embedUrl = !baseIsYt ? convertToUniversalEmbedUrl(baseVideoUrl) : null;
+        const isHls = !baseIsYt && !embedUrl && isHlsSource(baseVideoUrl);
+
+        if (baseIsYt) {
+          ytPrimaryUrl = ytPrimaryUrl || baseVideoUrl;
+          rawList.unshift({
+            id: 'server-youtube',
+            shortLabel: 'YouTube',
+            label: 'مشغل يوتيوب القياسي (YouTube)',
+            url: baseVideoUrl,
+            format: 'youtube',
+            qualityLabel: media.videoQuality ? formatQualityLabel(media.videoQuality) : '1080p',
+            qualityRank: getQualityRank(media.videoQuality),
+            isDefault: !hasGrServer,
+            engineType: 'youtube-embed',
+          });
+        } else {
+          const srvId = !hasGrServer ? 'server-gr' : !hasGServer ? 'server-g' : 'server-primary';
+          const shortLbl = !hasGrServer ? 'مشغل GR' : !hasGServer ? 'مشغل G' : 'الرئيسي';
+          if (!hasGrServer) hasGrServer = true;
+          else if (!hasGServer) hasGServer = true;
+          rawList.unshift({
+            id: srvId,
+            shortLabel: shortLbl,
+            label: `${shortLbl} • ${
+              embedUrl ? 'المشغل المدمج المستقل' : isHls ? 'البث التكيفي HLS' : 'سيرفر الموقع المباشر'
+            }`,
+            url: embedUrl || baseVideoUrl,
+            format: embedUrl ? 'embed' : isHls ? 'hls' : 'mp4',
+            qualityLabel: media.videoQuality ? formatQualityLabel(media.videoQuality) : 'الأصلية',
+            qualityRank: getQualityRank(media.videoQuality),
+            isDefault: true,
+            engineType: embedUrl ? 'universal-embed' : isHls ? 'hls-adaptive' : 'direct-mp4',
+          });
+        }
+      }
+    }
+
+    // Ensure GoldenFlix non-YouTube / mirror players GR and G are ALWAYS available as ready fallback/switch servers
+    if (ytPrimaryUrl) {
+      if (!hasGrServer) {
+        hasGrServer = true;
+        rawList.push({
+          id: 'server-gr',
+          shortLabel: 'مشغل GR',
+          label: 'مشغل GR • مشغل الموقع الآمن (خارج صفحة يوتيوب)',
+          url: ytPrimaryUrl,
+          format: 'youtube',
+          qualityLabel: '1080p HD',
+          qualityRank: 1080,
+          isDefault: false,
+          engineType: 'youtube-nocookie',
+        });
+      }
+
+      if (!hasGServer) {
+        const pipedUrl = getPipedMirrorEmbedUrl(ytPrimaryUrl, true);
+        if (pipedUrl) {
+          hasGServer = true;
+          rawList.push({
+            id: 'server-g',
+            shortLabel: 'مشغل G',
+            label: 'مشغل G • السيرفر الاحتياطي المستقل (غير يوتيوب)',
+            url: pipedUrl,
+            format: 'embed',
+            qualityLabel: 'HD',
+            qualityRank: 900,
+            isDefault: false,
+            engineType: 'universal-embed',
+          });
+        }
+      }
+    }
+
+    // Prioritize explicit non-YouTube GR/G first if a native stream exists, otherwise keep default YouTube + GR + G
+    return rawList.map((item, idx) => ({
+      ...item,
+      orderNumber: idx + 1,
+    }));
+  }, [availableCustomSources, baseVideoUrl, media.videoQuality, resolvedServerAlts, serverStreamData]);
+
+  const resolvedActiveServer = useMemo(() => {
+    const byId = orderedServers.find((s) => s.id === activeServerId);
+    if (byId) return byId;
+    const byUrl = orderedServers.find((s) => s.url === selectedSourceUrl);
+    return byUrl || orderedServers[0] || null;
+  }, [activeServerId, orderedServers, selectedSourceUrl]);
+
+  const activeEngineType = resolvedActiveServer?.engineType;
+  const universalEmbedUrl = useMemo(() => {
+    if (activeEngineType === 'universal-embed') {
+      return convertToUniversalEmbedUrl(selectedSourceUrl) || selectedSourceUrl;
+    }
+    if (!isYouTubeUrl(selectedSourceUrl) && !isHlsSource(selectedSourceUrl)) {
+      return convertToUniversalEmbedUrl(selectedSourceUrl);
+    }
+    return null;
+  }, [activeEngineType, selectedSourceUrl]);
+
+  const isUniversalEmbedMode = Boolean(universalEmbedUrl);
+  const isYouTubeSource = useMemo(
+    () =>
+      !isUniversalEmbedMode &&
+      (activeEngineType === 'youtube-embed' ||
+        activeEngineType === 'youtube-nocookie' ||
+        isYouTubeUrl(selectedSourceUrl)),
+    [activeEngineType, isUniversalEmbedMode, selectedSourceUrl]
+  );
+
   useEffect(() => {
     preferredQualityRef.current = preferredQualityPref;
   }, [preferredQualityPref]);
@@ -390,13 +672,22 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
   // Sync source state when episode/media changes
   useEffect(() => {
     manualQualityChosenRef.current = false;
+    failedServerIdsRef.current.clear();
+    setFailoverNotice(null);
     setSelectedSourceUrl(baseVideoUrl);
-    setActiveServerId(extractLocalVideoFilename(baseVideoUrl) ? 'server-direct-mp4' : 'custom-0');
+    setActiveServerId(
+      extractLocalVideoFilename(baseVideoUrl)
+        ? 'server-gr'
+        : isYouTubeUrl(baseVideoUrl)
+        ? 'server-youtube'
+        : 'server-gr'
+    );
     setHlsQualityOptions([]);
     setActiveHlsQualityId('auto');
     setYtQualityOptions([]);
     setActiveYtQualityId('auto');
     setYtEmbedBlocked(false);
+    setYtHasStartedPlaying(false);
     setCurrentTime(0);
     setDuration(0);
     setBufferedTime(0);
@@ -408,6 +699,20 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
     pendingSeekRef.current = null;
     resumeAutoplayRef.current = false;
   }, [baseVideoUrl]);
+
+  // Activate pre-roll cinema intro whenever a different movie or episode session begins
+  useEffect(() => {
+    isPreRollIntroActiveRef.current = true;
+    setIsPreRollIntroActive(true);
+  }, [playbackSessionKey]);
+
+  // Immediately dismiss pre-roll intro if stream encounters a fatal loading error
+  useEffect(() => {
+    if (errorMessage && isPreRollIntroActiveRef.current) {
+      isPreRollIntroActiveRef.current = false;
+      setIsPreRollIntroActive(false);
+    }
+  }, [errorMessage]);
 
   // Lock body scroll while player is mounted
   useEffect(() => {
@@ -645,7 +950,64 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
     [media.id, activeEpisode?.id, activeEpisode?.seasonNumber]
   );
 
-  // Initialize playback engine (YouTube IFrame API / HLS.js / Native MP4)
+  const triggerFailoverToNextServer = useCallback(
+    (reason?: string): boolean => {
+      if (!navigator.onLine) return false;
+      const currentSrvId = resolvedActiveServer?.id || activeServerId;
+      if (currentSrvId) {
+        failedServerIdsRef.current.add(currentSrvId);
+      }
+
+      const priorityOrder = (srv: OrderedServerItem) => {
+        if (srv.id === 'server-gr' || srv.shortLabel.includes('GR')) return 0;
+        if (srv.id === 'server-g' || srv.shortLabel.includes('G')) return 1;
+        return 2;
+      };
+
+      const nextServer = [...orderedServers]
+        .filter((srv) => srv.id !== currentSrvId && !failedServerIdsRef.current.has(srv.id))
+        .sort((a, b) => priorityOrder(a) - priorityOrder(b))[0];
+
+      if (!nextServer) {
+        return false;
+      }
+
+      const activeTime = isYouTubeSource
+        ? ytPlayerRef.current?.getCurrentTime?.() || currentTime || 0
+        : videoRef.current?.currentTime || currentTime || 0;
+
+      if (activeTime > 0) {
+        pendingSeekRef.current = activeTime;
+      }
+      resumeAutoplayRef.current = true;
+      hasFatalErrorRef.current = false;
+      setErrorMessage(null);
+      setYtEmbedBlocked(false);
+      setIsLoading(nextServer.engineType !== 'universal-embed');
+      setActiveServerId(nextServer.id);
+      setSelectedSourceUrl(nextServer.url);
+      setFailoverNotice(
+        reason
+          ? `${reason} — تم التحويل تلقائياً إلى ${nextServer.shortLabel}`
+          : `تم التحويل تلقائياً إلى ${nextServer.shortLabel}`
+      );
+      if (failoverTimerRef.current) {
+        window.clearTimeout(failoverTimerRef.current);
+      }
+      failoverTimerRef.current = window.setTimeout(() => {
+        setFailoverNotice(null);
+      }, 4500);
+      return true;
+    },
+    [activeServerId, currentTime, isYouTubeSource, orderedServers, resolvedActiveServer?.id]
+  );
+
+  const attemptAutomaticFailoverRef = useRef(triggerFailoverToNextServer);
+  useEffect(() => {
+    attemptAutomaticFailoverRef.current = triggerFailoverToNextServer;
+  }, [triggerFailoverToNextServer]);
+
+  // Initialize playback engine (YouTube IFrame API / YouTube-NoCookie / Universal Embed / HLS.js / Native MP4)
   useEffect(() => {
     if (hlsRef.current) {
       hlsRef.current.destroy();
@@ -667,6 +1029,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
     hasFatalErrorRef.current = false;
     setErrorMessage(null);
     setYtEmbedBlocked(false);
+    setYtHasStartedPlaying(false);
     setIsEnded(false);
 
     if (!navigator.onLine) {
@@ -676,7 +1039,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
       return;
     }
 
-    if (isYouTubeUrl(selectedSourceUrl)) {
+    if (isUniversalEmbedMode) {
+      setIsLoading(false);
+      setIsPlaying(true);
+      setHlsQualityOptions([]);
+      setYtQualityOptions([]);
+      return;
+    }
+
+    if (isYouTubeSource && isYouTubeUrl(selectedSourceUrl)) {
       const videoId = extractYouTubeVideoId(selectedSourceUrl);
       if (!videoId) {
         hasFatalErrorRef.current = true;
@@ -687,6 +1058,16 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
 
       let cancelled = false;
       let progressTimer: number | null = null;
+      let ytReadyReceived = false;
+      const ytBootWatchdog = window.setTimeout(() => {
+        if (cancelled || ytReadyReceived || hasFatalErrorRef.current) return;
+        const switched = attemptAutomaticFailoverRef.current('تأخر استجابة مشغل يوتيوب');
+        if (!switched) {
+          hasFatalErrorRef.current = true;
+          setIsLoading(false);
+          setErrorMessage('تعذر الاتصال بخادم يوتيوب. يمكنك المحاولة مجدداً أو اختيار مشغل آخر.');
+        }
+      }, 9000);
 
       const savedPref = preferredQualityRef.current;
       const initialYtOptionId =
@@ -761,6 +1142,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
           const startSeconds =
             pendingSeekRef.current !== null
               ? pendingSeekRef.current
+              : isPreRollIntroActiveRef.current
+              ? 0
               : extractYouTubeStartSeconds(selectedSourceUrl);
 
           const enforceYoutubeIframeStyle = () => {
@@ -776,12 +1159,18 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
             }
           };
 
+          const ytEmbedHost =
+            activeEngineType === 'youtube-nocookie'
+              ? 'https://www.youtube-nocookie.com'
+              : 'https://www.youtube.com';
+
           const player = new YT.Player(mountNode, {
             videoId,
+            host: ytEmbedHost,
             width: '100%',
             height: '100%',
             playerVars: {
-              autoplay: 1,
+              autoplay: isPreRollIntroActiveRef.current ? 0 : 1,
               controls: 0,
               disablekb: 1,
               fs: 0,
@@ -798,6 +1187,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
             events: {
               onReady: ({ target }) => {
                 if (cancelled) return;
+                ytReadyReceived = true;
+                window.clearTimeout(ytBootWatchdog);
                 ytPlayerRef.current = target;
                 enforceYoutubeIframeStyle();
                 setIsLoading(false);
@@ -827,7 +1218,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
                   pendingSeekRef.current = null;
                 }
 
-                target.playVideo?.();
+                if (!isPreRollIntroActiveRef.current) {
+                  target.playVideo?.();
+                }
 
                 progressTimer = window.setInterval(() => {
                   const p = ytPlayerRef.current;
@@ -852,6 +1245,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
                 if (data === 1) {
                   setIsLoading(false);
                   setIsPlaying(true);
+                  setYtHasStartedPlaying(true);
                   setIsEnded(false);
                   const dur = target.getDuration?.() || 0;
                   if (dur > 0) setDuration(dur);
@@ -882,13 +1276,21 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
               },
               onError: ({ data }) => {
                 if (cancelled) return;
+                window.clearTimeout(ytBootWatchdog);
+                const reasonText =
+                  data === 101 || data === 150
+                    ? 'مشغل يوتيوب محجوب لهذا الفيديو'
+                    : 'توقف مشغل يوتيوب عن الاستجابة';
+                if (attemptAutomaticFailoverRef.current(reasonText)) {
+                  return;
+                }
                 hasFatalErrorRef.current = true;
                 setIsLoading(false);
                 setIsPlaying(false);
                 if (data === 101 || data === 150) {
                   setYtEmbedBlocked(true);
                   setErrorMessage(
-                    'ناشر هذا الفيديو يمنع تشغيله داخل المشغلات المضمّنة. يمكنك فتحه مباشرة على يوتيوب أو تبديل المشغل.'
+                    'ناشر هذا الفيديو يمنع تشغيله داخل المشغلات المضمّنة. يمكنك فتحه مباشرة على يوتيوب أو تجربة مشغل GR / مشغل G.'
                   );
                 } else if (data === 2 || data === 100) {
                   setErrorMessage('رابط يوتيوب غير صالح أو أن الفيديو لم يعد متاحاً.');
@@ -903,6 +1305,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
         })
         .catch(() => {
           if (cancelled) return;
+          window.clearTimeout(ytBootWatchdog);
+          if (attemptAutomaticFailoverRef.current('صفحة يوتيوب غير متاحة')) {
+            return;
+          }
           hasFatalErrorRef.current = true;
           setIsLoading(false);
           setErrorMessage('تعذر تجهيز مشغل يوتيوب. تأكد من الاتصال بالإنترنت ثم أعد المحاولة.');
@@ -910,6 +1316,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
 
       return () => {
         cancelled = true;
+        window.clearTimeout(ytBootWatchdog);
         if (progressTimer !== null) {
           window.clearInterval(progressTimer);
         }
@@ -1018,6 +1425,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
             return;
           }
 
+          if (attemptAutomaticFailoverRef.current('تعذر تحميل البث التكيفي')) {
+            hls.destroy();
+            hlsRef.current = null;
+            return;
+          }
+
           hasFatalErrorRef.current = true;
           hls.destroy();
           hlsRef.current = null;
@@ -1052,7 +1465,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
         hlsRef.current = null;
       }
     };
-  }, [selectedSourceUrl, retryToken, persistProgress]);
+  }, [selectedSourceUrl, activeEngineType, isUniversalEmbedMode, isYouTubeSource, retryToken, persistProgress]);
 
   const handleTimeUpdate = useCallback(() => {
     const video = videoRef.current;
@@ -1452,18 +1865,21 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
     (srv: OrderedServerItem) => {
       const video = videoRef.current;
       const activeTime = isYouTubeSource
-        ? ytPlayerRef.current?.getCurrentTime?.() || 0
-        : video?.currentTime || 0;
+        ? ytPlayerRef.current?.getCurrentTime?.() || currentTime || 0
+        : video?.currentTime || currentTime || 0;
+      hasFatalErrorRef.current = false;
+      setErrorMessage(null);
+      setYtEmbedBlocked(false);
       setActiveServerId(srv.id);
-      if (srv.url !== selectedSourceUrl) {
-        pendingSeekRef.current = activeTime;
-        resumeAutoplayRef.current = isYouTubeSource ? true : Boolean(video && !video.paused);
+      if (srv.url !== selectedSourceUrl || srv.engineType !== activeEngineType) {
+        pendingSeekRef.current = activeTime > 0 ? activeTime : null;
+        resumeAutoplayRef.current = true;
         setSelectedSourceUrl(srv.url);
       }
       setActivePanel(null);
       revealControls();
     },
-    [isYouTubeSource, revealControls, selectedSourceUrl]
+    [activeEngineType, currentTime, isYouTubeSource, revealControls, selectedSourceUrl]
   );
 
   const handleSelectEpisode = useCallback(
@@ -1477,9 +1893,83 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
     [episodesList.length]
   );
 
+  const handlePreRollComplete = useCallback(() => {
+    if (!isPreRollIntroActiveRef.current) return;
+    isPreRollIntroActiveRef.current = false;
+    setIsPreRollIntroActive(false);
+    setIsEnded(false);
+
+    if (hasFatalErrorRef.current) return;
+
+    if (isUniversalEmbedMode) {
+      isPlayingRef.current = true;
+      setIsPlaying(true);
+      setIsLoading(false);
+      revealControls();
+      return;
+    }
+
+    if (isYouTubeSource) {
+      const yt = ytPlayerRef.current;
+      setCurrentTime(0);
+      if (yt) {
+        try {
+          yt.seekTo?.(0, true);
+          yt.playVideo?.();
+          isPlayingRef.current = true;
+          setIsPlaying(true);
+        } catch {
+          isPlayingRef.current = false;
+          setIsPlaying(false);
+        }
+      }
+      revealControls();
+      return;
+    }
+
+    const video = videoRef.current;
+    if (video) {
+      try {
+        if (video.readyState >= 1) {
+          video.currentTime = 0;
+        }
+        setCurrentTime(0);
+        video.playbackRate = playbackSpeed;
+        video.muted = isMuted;
+        video.volume = volume;
+        pendingSeekRef.current = null;
+        resumeAutoplayRef.current = false;
+
+        const playPromise = video.play();
+        if (playPromise && typeof playPromise.then === 'function') {
+          playPromise
+            .then(() => {
+              isPlayingRef.current = true;
+              setIsPlaying(true);
+              setIsLoading(false);
+              revealControls();
+            })
+            .catch(() => {
+              isPlayingRef.current = false;
+              setIsPlaying(false);
+              setIsLoading(false);
+              revealControls();
+            });
+        }
+      } catch {
+        isPlayingRef.current = false;
+        setIsPlaying(false);
+        setIsLoading(false);
+        revealControls();
+      }
+    }
+  }, [isMuted, isUniversalEmbedMode, isYouTubeSource, playbackSpeed, revealControls, volume]);
+
   const handleRetry = useCallback(() => {
+    failedServerIdsRef.current.clear();
     hasFatalErrorRef.current = false;
     setErrorMessage(null);
+    setFailoverNotice(null);
     setYtEmbedBlocked(false);
     setIsOffline(!navigator.onLine);
     setIsLoading(true);
@@ -1578,6 +2068,25 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
 
       const key = e.key.toLowerCase();
 
+      if (isPreRollIntroActiveRef.current) {
+        if (key === 'f') {
+          e.preventDefault();
+          toggleFullscreen();
+        } else if (e.key === 'Escape') {
+          const fsEl =
+            document.fullscreenElement ||
+            (document as unknown as { webkitFullscreenElement?: Element }).webkitFullscreenElement;
+          if (isLandscapeMode) {
+            e.preventDefault();
+            setIsLandscapeMode(false);
+          } else if (!fsEl) {
+            e.preventDefault();
+            handleClosePlayer();
+          }
+        }
+        return;
+      }
+
       if (e.code === 'Space' || key === 'k') {
         e.preventDefault();
         togglePlay();
@@ -1639,6 +2148,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
 
   // Viewport pointer down/up gesture handler (respects 90° landscape rotation & pause lock)
   const handleViewportPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (isPreRollIntroActiveRef.current) return;
     if (activePanel || errorMessage || isEnded) {
       revealedOnPointerDownRef.current = false;
       return;
@@ -1663,6 +2173,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
   };
 
   const handleViewportPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (isPreRollIntroActiveRef.current) return;
     if (activePanel) {
       setActivePanel(null);
       revealControls();
@@ -1723,25 +2234,22 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
       }, 240);
     } else {
       if (e.detail === 2) {
+        if (tapTimerRef.current) {
+          window.clearTimeout(tapTimerRef.current);
+          tapTimerRef.current = null;
+        }
         toggleFullscreen();
         revealControls();
         return;
       }
 
-      if (!isPlayingRef.current) {
-        revealControls();
-        return;
+      if (tapTimerRef.current) {
+        window.clearTimeout(tapTimerRef.current);
       }
-
-      if (revealedOnPointerDownRef.current) {
-        revealedOnPointerDownRef.current = false;
-        revealControls();
-        return;
-      }
-
-      clearControlsTimer();
-      showControlsRef.current = false;
-      setShowControls(false);
+      tapTimerRef.current = window.setTimeout(() => {
+        tapTimerRef.current = null;
+        togglePlay();
+      }, 210);
     }
   };
 
@@ -1762,95 +2270,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
 
   const subtitleSizeClass =
     SUBTITLE_SIZES.find((s) => s.id === subtitleSize)?.className || 'text-sm sm:text-lg';
-
-  const orderedServers = useMemo<OrderedServerItem[]>(() => {
-    const rawList: Array<Omit<OrderedServerItem, 'orderNumber'>> = [];
-    const seenUrls = new Set<string>();
-    const normalizeUrlKey = (u: string) => u.trim().split('?')[0];
-
-    if (serverStreamData?.exists && serverStreamData.servers.length > 0) {
-      for (const srv of serverStreamData.servers) {
-        const key = normalizeUrlKey(srv.url);
-        if (!key || seenUrls.has(key)) continue;
-        seenUrls.add(key);
-        rawList.push({
-          id: srv.id,
-          shortLabel: srv.shortLabel,
-          label: srv.label,
-          url: srv.url,
-          format: srv.format,
-          qualityLabel:
-            srv.format === 'hls'
-              ? 'HLS تكيفي'
-              : serverStreamData.sourceHeight
-              ? `${serverStreamData.sourceHeight}p`
-              : media.videoQuality
-              ? formatQualityLabel(media.videoQuality)
-              : 'أصلي',
-          qualityRank: srv.format === 'hls' ? 1400 : serverStreamData.sourceHeight || 1080,
-          isDefault: srv.isDefault,
-          engineType: srv.format === 'hls' ? 'hls-adaptive' : 'direct-mp4',
-        });
-      }
-    }
-
-    const sortedCustom = [...availableCustomSources]
-      .filter((s) => Boolean(s?.url))
-      .sort((a, b) => {
-        if (Boolean(a.isDefault) !== Boolean(b.isDefault)) {
-          return a.isDefault ? -1 : 1;
-        }
-        return getQualityRank(b.label) - getQualityRank(a.label);
-      });
-
-    sortedCustom.forEach((src, idx) => {
-      const key = normalizeUrlKey(src.url);
-      if (!key || seenUrls.has(key)) return;
-      seenUrls.add(key);
-      const isYt = src.format === 'youtube' || isYouTubeUrl(src.url);
-      const isHls = !isYt && (src.format === 'hls' || isHlsSource(src.url));
-      rawList.push({
-        id: `custom-${idx}`,
-        shortLabel: src.label ? formatQualityLabel(src.label) : isYt ? 'YouTube' : `سيرفر ${rawList.length + 1}`,
-        label: src.label ? formatQualityLabel(src.label) : isYt ? 'مشغل يوتيوب' : `المصدر ${rawList.length + 1}`,
-        url: src.url,
-        format: isYt ? 'youtube' : isHls ? 'hls' : src.format === 'webm' ? 'webm' : 'mp4',
-        qualityLabel: src.label ? formatQualityLabel(src.label) : isYt ? '1080p' : 'HD',
-        qualityRank: getQualityRank(src.label),
-        isDefault: Boolean(src.isDefault) && rawList.length === 0,
-        engineType: isYt ? 'youtube-embed' : 'custom-source',
-      });
-    });
-
-    const baseKey = normalizeUrlKey(baseVideoUrl || '');
-    if (baseKey && !seenUrls.has(baseKey)) {
-      const isYt = isYouTubeUrl(baseVideoUrl);
-      const isHls = !isYt && isHlsSource(baseVideoUrl);
-      rawList.unshift({
-        id: 'server-primary',
-        shortLabel: isYt ? 'YouTube' : isHls ? 'HLS' : 'الرئيسي',
-        label: isYt ? 'مشغل يوتيوب' : isHls ? 'البث التكيفي HLS' : 'المشغل الرئيسي',
-        url: baseVideoUrl,
-        format: isYt ? 'youtube' : isHls ? 'hls' : 'mp4',
-        qualityLabel: media.videoQuality ? formatQualityLabel(media.videoQuality) : 'الأصلية',
-        qualityRank: getQualityRank(media.videoQuality),
-        isDefault: true,
-        engineType: isYt ? 'youtube-embed' : isHls ? 'hls-adaptive' : 'custom-source',
-      });
-    }
-
-    return rawList.map((item, idx) => ({
-      ...item,
-      orderNumber: idx + 1,
-    }));
-  }, [availableCustomSources, baseVideoUrl, media.videoQuality, serverStreamData]);
-
-  const resolvedActiveServer = useMemo(() => {
-    const byId = orderedServers.find((s) => s.id === activeServerId);
-    if (byId) return byId;
-    const byUrl = orderedServers.find((s) => s.url === selectedSourceUrl);
-    return byUrl || orderedServers[0] || null;
-  }, [activeServerId, orderedServers, selectedSourceUrl]);
 
   const effectiveQualityOptions = useMemo<QualityOption[]>(() => {
     if (isYouTubeSource) {
@@ -2017,7 +2436,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
 
       {/* 1. Minimal Top Bar */}
       <AnimatePresence>
-        {(showControls || errorMessage || isEnded) && (
+        {!isPreRollIntroActive && (showControls || isUniversalEmbedMode || errorMessage || isEnded) && (
           <motion.header
             initial={{ opacity: 0, y: -12 }}
             animate={{ opacity: 1, y: 0 }}
@@ -2042,9 +2461,18 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
               </button>
 
               <div className="min-w-0">
-                <h2 className="text-white font-bold text-sm sm:text-base truncate leading-snug">
-                  {media.titleAr || media.title}
-                </h2>
+                <div className="flex items-center gap-2 min-w-0">
+                  <span
+                    dir="ltr"
+                    className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full bg-black/55 border border-[#F7C600]/35 text-[10px] font-black tracking-wide shrink-0"
+                  >
+                    <span className="text-[#F7C600]">Golden</span>
+                    <span className="text-white">Flix</span>
+                  </span>
+                  <h2 className="text-white font-bold text-sm sm:text-base truncate leading-snug">
+                    {media.titleAr || media.title}
+                  </h2>
+                </div>
                 <p className="text-[11px] sm:text-xs text-zinc-300/80 truncate leading-tight">
                   {activeEpisode
                     ? `الموسم ${activeEpisode.seasonNumber} · الحلقة ${activeEpisode.episodeNumber}${
@@ -2075,21 +2503,43 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
                 </button>
               )}
 
-              <button
-                type="button"
-                onClick={() =>
-                  setActivePanel((prev) => (prev === 'quality' ? null : 'quality'))
-                }
-                aria-label="الجودة"
-                className={`h-10 px-3 rounded-full text-xs font-semibold flex items-center gap-1.5 backdrop-blur-md transition-all active:scale-95 cursor-pointer ${
-                  activePanel === 'quality'
-                    ? 'bg-[#F7C600] text-black'
-                    : 'bg-white/10 hover:bg-white/20 text-white'
-                }`}
-              >
-                <SlidersHorizontal className="w-4 h-4" />
-                <span className="tabular-nums">{activeQualityLabel}</span>
-              </button>
+              {orderedServers.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setActivePanel((prev) => (prev === 'servers' ? null : 'servers'))
+                  }
+                  aria-label="تبديل المشغل"
+                  className={`h-10 px-3 rounded-full text-xs font-bold flex items-center gap-1.5 backdrop-blur-md transition-all active:scale-95 cursor-pointer ${
+                    activePanel === 'servers'
+                      ? 'bg-[#F7C600] text-black'
+                      : 'bg-white/10 hover:bg-white/20 text-[#F7C600]'
+                  }`}
+                >
+                  <Server className="w-3.5 h-3.5 shrink-0" />
+                  <span className="whitespace-nowrap">
+                    {resolvedActiveServer?.shortLabel || 'مشغل GR'}
+                  </span>
+                </button>
+              )}
+
+              {!isUniversalEmbedMode && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setActivePanel((prev) => (prev === 'quality' ? null : 'quality'))
+                  }
+                  aria-label="الجودة"
+                  className={`h-10 px-3 rounded-full text-xs font-semibold flex items-center gap-1.5 backdrop-blur-md transition-all active:scale-95 cursor-pointer ${
+                    activePanel === 'quality'
+                      ? 'bg-[#F7C600] text-black'
+                      : 'bg-white/10 hover:bg-white/20 text-white'
+                  }`}
+                >
+                  <SlidersHorizontal className="w-4 h-4" />
+                  <span className="tabular-nums">{activeQualityLabel}</span>
+                </button>
+              )}
 
               <button
                 type="button"
@@ -2108,6 +2558,53 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
 
               {/* Popover Panels */}
               <AnimatePresence>
+                {activePanel === 'servers' && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -6, scale: 0.96 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -6, scale: 0.96 }}
+                    transition={{ duration: 0.16 }}
+                    className="absolute top-full left-0 mt-2.5 w-72 max-w-[calc(100vw-2rem)] bg-zinc-950/95 backdrop-blur-xl border border-white/10 rounded-2xl p-2.5 shadow-2xl z-50"
+                  >
+                    <p className="text-[11px] font-bold text-zinc-400 px-3 py-1.5">
+                      سيرفرات ومشغلات العرض
+                    </p>
+                    <div
+                      className={`space-y-1 overflow-y-auto ${
+                        isLandscapeMode ? 'max-h-[calc(100vw-8.5rem)]' : 'max-h-64'
+                      }`}
+                    >
+                      {orderedServers.map((srv) => {
+                        const isActiveSrv = resolvedActiveServer?.id === srv.id;
+                        return (
+                          <button
+                            key={srv.id}
+                            type="button"
+                            onClick={() => switchServer(srv)}
+                            className={`w-full min-h-[44px] px-3 py-2 rounded-xl text-right text-xs font-semibold flex items-center justify-between gap-2 transition-colors cursor-pointer ${
+                              isActiveSrv
+                                ? 'bg-[#F7C600] text-black'
+                                : 'text-zinc-200 hover:bg-white/10'
+                            }`}
+                          >
+                            <div className="min-w-0">
+                              <p className="font-bold truncate">{srv.shortLabel}</p>
+                              <p
+                                className={`text-[10px] truncate ${
+                                  isActiveSrv ? 'text-black/75' : 'text-zinc-400'
+                                }`}
+                              >
+                                {srv.label}
+                              </p>
+                            </div>
+                            {isActiveSrv && <Check className="w-4 h-4 shrink-0" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </motion.div>
+                )}
+
                 {activePanel === 'quality' && (
                   <motion.div
                     initial={{ opacity: 0, y: -6, scale: 0.96 }}
@@ -2426,7 +2923,24 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
         onPointerDown={handleViewportPointerDown}
         onPointerUp={handleViewportPointerUp}
       >
-        {isYouTubeSource ? (
+        {isUniversalEmbedMode && universalEmbedUrl ? (
+          <div
+            className="relative w-full h-full bg-black pt-14"
+            onPointerDown={(e) => e.stopPropagation()}
+            onPointerUp={(e) => e.stopPropagation()}
+          >
+            <iframe
+              key={`${resolvedActiveServer?.id || 'embed'}::${universalEmbedUrl}::${retryToken}`}
+              src={universalEmbedUrl}
+              title={media.titleAr || media.title}
+              allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
+              allowFullScreen
+              referrerPolicy="no-referrer-when-downgrade"
+              onLoad={() => setIsLoading(false)}
+              className="w-full h-full border-0 bg-black"
+            />
+          </div>
+        ) : isYouTubeSource ? (
           <div
             className="relative shrink-0 bg-black overflow-hidden"
             style={{
@@ -2442,6 +2956,20 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
                 bottom: '-68px',
               }}
             />
+
+            {/* Cover YouTube pre-play third-party center icon cleanly until actual playback begins */}
+            {!ytHasStartedPlaying && !errorMessage && (
+              <div className="absolute inset-0 z-10 bg-black pointer-events-none flex items-center justify-center">
+                {(activeEpisode?.thumbnailUrl || media.bannerUrl || media.posterUrl) && (
+                  <img
+                    src={activeEpisode?.thumbnailUrl || media.bannerUrl || media.posterUrl}
+                    alt=""
+                    aria-hidden="true"
+                    className="w-full h-full object-contain opacity-85"
+                  />
+                )}
+              </div>
+            )}
           </div>
         ) : (
           <video
@@ -2449,7 +2977,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
             controlsList="nodownload"
             className="w-full h-full max-w-full max-h-full object-contain block"
             playsInline
-            preload="metadata"
+            preload="auto"
             poster={activeEpisode?.thumbnailUrl || media.bannerUrl || media.posterUrl}
             onLoadStart={() => {
               if (!hasFatalErrorRef.current) setIsLoading(true);
@@ -2461,6 +2989,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
               setDuration(video.duration || 0);
               if (video.videoHeight) {
                 setDetectedResolution(`${video.videoHeight}p`);
+              }
+
+              if (isPreRollIntroActiveRef.current) {
+                if (video.currentTime !== 0) {
+                  video.currentTime = 0;
+                }
+                return;
               }
 
               if (pendingSeekRef.current !== null) {
@@ -2502,6 +3037,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
             }}
             onError={() => {
               if (hasFatalErrorRef.current) return;
+              if (attemptAutomaticFailoverRef.current('تعذر تشغيل السيرفر الحالي')) {
+                return;
+              }
               hasFatalErrorRef.current = true;
               setIsLoading(false);
               setIsPlaying(false);
@@ -2563,7 +3101,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
         </AnimatePresence>
 
         {/* Minimal Loading Indicator */}
-        {isLoading && !errorMessage && !isEnded && (
+        {!isPreRollIntroActive && isLoading && !errorMessage && !isEnded && (
           <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/45 pointer-events-none">
             <div className="w-11 h-11 sm:w-12 sm:h-12 border-[3px] border-white/20 border-t-[#F7C600] rounded-full animate-spin" />
           </div>
@@ -2571,7 +3109,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
 
         {/* Resume Watch Prompt */}
         <AnimatePresence>
-          {resumePrompt !== null && !errorMessage && !isEnded && (
+          {!isPreRollIntroActive && resumePrompt !== null && !errorMessage && !isEnded && (
             <div className="absolute top-16 sm:top-20 inset-x-0 z-40 flex justify-center px-4 pointer-events-none">
               <motion.div
                 initial={{ opacity: 0, y: -10 }}
@@ -2645,44 +3183,63 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
           )}
         </AnimatePresence>
 
-        {/* Center Minimal Transport Controls: Rewind 10s / Play-Pause / Forward 10s */}
+        {/* Automatic Failover Notice */}
         <AnimatePresence>
-          {!isLoading && !errorMessage && !isEnded && showControls && (
-            <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
+          {failoverNotice && !errorMessage && (
+            <motion.div
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              className="absolute top-16 sm:top-20 inset-x-0 z-30 flex justify-center px-4 pointer-events-none"
+            >
+              <div className="px-3.5 py-2 rounded-full bg-zinc-950/92 border border-[#F7C600]/45 text-[#F7C600] text-xs font-bold backdrop-blur-md shadow-xl flex items-center gap-2">
+                <Server className="w-3.5 h-3.5 shrink-0" />
+                <span>{failoverNotice}</span>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* GoldenFlix Center Transport Controls (Restored GoldenFlix center mark; opaque center button covers YouTube's white || pause bezel) */}
+        <AnimatePresence>
+          {!isUniversalEmbedMode &&
+            !isPreRollIntroActive &&
+            (showControls || !isPlaying) &&
+            !errorMessage &&
+            !isEnded && (
               <motion.div
-                key="center-transport"
                 initial={{ opacity: 0, scale: 0.94 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.94 }}
-                transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
                 dir="ltr"
                 onPointerDown={(e) => {
                   e.stopPropagation();
                   revealControls();
                 }}
                 onPointerUp={(e) => e.stopPropagation()}
-                className="pointer-events-auto flex items-center justify-center gap-6 sm:gap-10"
+                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 flex items-center gap-5 sm:gap-8"
               >
                 <button
                   type="button"
                   onClick={skipBackward}
                   aria-label="تأخير 10 ثوانٍ"
-                  className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-black/50 hover:bg-white/15 active:scale-90 text-white flex items-center justify-center backdrop-blur-md transition-all relative cursor-pointer"
+                  className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-zinc-950/85 hover:bg-zinc-900 border border-white/20 hover:border-[#F7C600]/60 text-white backdrop-blur-md flex items-center justify-center relative active:scale-90 transition-all cursor-pointer shadow-lg"
                 >
                   <RotateCcw className="w-5 h-5 sm:w-6 sm:h-6" />
-                  <span className="absolute text-[9px] font-mono font-bold mt-0.5">10</span>
+                  <span className="absolute text-[9px] font-mono font-extrabold mt-0.5">10</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={togglePlay}
                   aria-label={isPlaying ? 'إيقاف مؤقت' : 'تشغيل'}
-                  className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-black/60 hover:bg-[#F7C600] active:scale-92 text-white hover:text-black border border-white/20 hover:border-[#F7C600] flex items-center justify-center backdrop-blur-md transition-all shadow-2xl cursor-pointer"
+                  className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-[#09090D] hover:bg-[#14141D] border-2 border-[#F7C600] text-[#F7C600] flex items-center justify-center active:scale-90 transition-all cursor-pointer shadow-[0_0_32px_rgba(0,0,0,0.95),0_0_18px_rgba(247,198,0,0.2)]"
                 >
                   {isPlaying ? (
-                    <Pause className="w-7 h-7 sm:w-9 sm:h-9 fill-current" />
+                    <Pause className="w-7 h-7 sm:w-8 sm:h-8 fill-current" />
                   ) : (
-                    <Play className="w-7 h-7 sm:w-9 sm:h-9 fill-current ml-0.5" />
+                    <Play className="w-7 h-7 sm:w-8 sm:h-8 fill-current ml-1" />
                   )}
                 </button>
 
@@ -2690,14 +3247,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
                   type="button"
                   onClick={skipForward}
                   aria-label="تقديم 10 ثوانٍ"
-                  className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-black/50 hover:bg-white/15 active:scale-90 text-white flex items-center justify-center backdrop-blur-md transition-all relative cursor-pointer"
+                  className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-zinc-950/85 hover:bg-zinc-900 border border-white/20 hover:border-[#F7C600]/60 text-white backdrop-blur-md flex items-center justify-center relative active:scale-90 transition-all cursor-pointer shadow-lg"
                 >
                   <RotateCw className="w-5 h-5 sm:w-6 sm:h-6" />
-                  <span className="absolute text-[9px] font-mono font-bold mt-0.5">10</span>
+                  <span className="absolute text-[9px] font-mono font-extrabold mt-0.5">10</span>
                 </button>
               </motion.div>
-            </div>
-          )}
+            )}
         </AnimatePresence>
 
         {/* Offline Banner */}
@@ -2721,9 +3277,28 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
               <h3 className="text-white font-bold text-base sm:text-lg mb-2">
                 {isOffline ? 'لا يوجد اتصال بالإنترنت' : 'تعذر تشغيل الفيديو'}
               </h3>
-              <p className="text-zinc-400 text-xs sm:text-sm mb-6 leading-relaxed">
+              <p className="text-zinc-400 text-xs sm:text-sm mb-5 leading-relaxed">
                 {errorMessage}
               </p>
+
+              {orderedServers.length > 1 && (
+                <div className="flex flex-wrap justify-center gap-2 mb-4">
+                  {orderedServers
+                    .filter((s) => s.id !== resolvedActiveServer?.id)
+                    .map((altSrv) => (
+                      <button
+                        key={altSrv.id}
+                        type="button"
+                        onClick={() => switchServer(altSrv)}
+                        className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-[#F7C600] text-white hover:text-black font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                      >
+                        <Server className="w-3.5 h-3.5" />
+                        <span>تشغيل عبر {altSrv.shortLabel}</span>
+                      </button>
+                    ))}
+                </div>
+              )}
+
               <div className="flex flex-col sm:flex-row gap-2.5">
                 {ytEmbedBlocked && getYouTubeCanonicalUrl(selectedSourceUrl) && (
                   <a
@@ -2839,7 +3414,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
 
       {/* 3. Clean Minimal Bottom Dock (Strictly Non-Overlapping Controls Row) */}
       <AnimatePresence>
-        {(showControls || errorMessage) && !isEnded && (
+        {!isUniversalEmbedMode && !isPreRollIntroActive && (showControls || errorMessage) && !isEnded && (
           <motion.footer
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
@@ -2961,7 +3536,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
                   type="button"
                   onClick={togglePlay}
                   aria-label={isPlaying ? 'إيقاف مؤقت' : 'تشغيل'}
-                  className="w-10 h-10 min-w-[40px] min-h-[40px] rounded-full flex items-center justify-center text-white hover:bg-white/10 active:scale-90 transition-all cursor-pointer shrink-0"
+                  className="w-10 h-10 min-w-[40px] min-h-[40px] rounded-full flex items-center justify-center text-white hover:bg-[#F7C600] hover:text-black active:scale-90 transition-all cursor-pointer shrink-0"
                 >
                   {isPlaying ? (
                     <Pause className="w-5 h-5 fill-current" />
@@ -3066,6 +3641,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
           </motion.footer>
         )}
       </AnimatePresence>
+
+      {/* 4. GoldenFlix Pre-Roll Cinematic Intro (Plays before every movie/series/episode) */}
+      {isPreRollIntroActive && !errorMessage && (
+        <PlayerCinemaIntro
+          key={playbackSessionKey}
+          onComplete={handlePreRollComplete}
+          isLandscape={isLandscapeMode}
+        />
+      )}
     </div>
   );
 };

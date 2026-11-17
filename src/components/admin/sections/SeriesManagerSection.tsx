@@ -18,7 +18,8 @@ import {
   UploadCloud,
   X,
 } from 'lucide-react';
-import { CategoryItem, Episode, MediaItem, Season } from '../../../types';
+import { CategoryItem, Episode, MediaItem, Season, VideoSourceOption } from '../../../types';
+import { resolveMediaFormat } from '../../../utils/videoEngines';
 import {
   extractVideoDurationFromFile,
   formatAdminErrorMessage,
@@ -93,6 +94,8 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
   const [epDesc, setEpDesc] = useState<string>('');
   const [epDuration, setEpDuration] = useState<string>('45 دقيقة');
   const [epVideoUrl, setEpVideoUrl] = useState<string>('');
+  const [epGrUrl, setEpGrUrl] = useState<string>('');
+  const [epGUrl, setEpGUrl] = useState<string>('');
   const [epVideoFile, setEpVideoFile] = useState<File | null>(null);
   const [epFileSize, setEpFileSize] = useState<number>(0);
   const [epIntroStart, setEpIntroStart] = useState<string>('');
@@ -269,6 +272,8 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
     setEpDesc('');
     setEpDuration('45 دقيقة');
     setEpVideoUrl('');
+    setEpGrUrl('');
+    setEpGUrl('');
     setEpVideoFile(null);
     setEpFileSize(0);
     setEpIntroStart('');
@@ -311,16 +316,41 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
       setIsUploadingEp(false);
     }
 
+    const episodeSources: VideoSourceOption[] = [];
+    const trimmedGr = epGrUrl.trim();
+    const trimmedG = epGUrl.trim();
+    if (trimmedGr) {
+      episodeSources.push({
+        id: 'server-gr',
+        label: 'مشغل GR • سيرفر الموقع',
+        url: trimmedGr,
+        format: resolveMediaFormat(trimmedGr),
+        quality: '1080p HD',
+        isDefault: !finalVideoUrl,
+      });
+    }
+    if (trimmedG) {
+      episodeSources.push({
+        id: 'server-g',
+        label: 'مشغل G • سيرفر بديل',
+        url: trimmedG,
+        format: resolveMediaFormat(trimmedG),
+        quality: 'HD',
+        isDefault: false,
+      });
+    }
+
     const epPayload: Episode = {
       id: editingEpId || `ep-${Date.now()}-${Math.round(Math.random() * 1e4)}`,
       episodeNumber: Number(epNumber) || (currentSeason.episodes.length + 1),
       title: epTitle.trim(),
       description: epDesc.trim(),
       duration: epDuration.trim() || '45 دقيقة',
-      videoUrl: finalVideoUrl,
+      videoUrl: finalVideoUrl || trimmedGr || trimmedG,
       fileSizeBytes: finalFileSize || undefined,
       introStart: epIntroStart ? Number(epIntroStart) : undefined,
       introEnd: epIntroEnd ? Number(epIntroEnd) : undefined,
+      sources: episodeSources.length > 0 ? episodeSources : undefined,
     };
 
     const nextSeasons = seasons.map((sn) => {
@@ -875,6 +905,25 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
                     className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono"
                   />
 
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <input
+                      type="url"
+                      dir="ltr"
+                      value={epGrUrl}
+                      onChange={(e) => setEpGrUrl(e.target.value)}
+                      placeholder="رابط مشغل GR (غير يوتيوب / MP4 / Embed)"
+                      className="w-full bg-zinc-950 border border-amber-400/25 rounded-xl px-3 py-2 text-white font-mono text-[11px]"
+                    />
+                    <input
+                      type="url"
+                      dir="ltr"
+                      value={epGUrl}
+                      onChange={(e) => setEpGUrl(e.target.value)}
+                      placeholder="رابط مشغل G (احتياطي 2 / HLS / Embed)"
+                      className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono text-[11px]"
+                    />
+                  </div>
+
                   {isUploadingEp && epUploadProgress && (
                     <div className="space-y-1">
                       <div className="flex justify-between text-[11px] font-mono text-amber-400">
@@ -978,6 +1027,17 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
                               setEpDesc(ep.description || '');
                               setEpDuration(ep.duration || '45 دقيقة');
                               setEpVideoUrl(ep.videoUrl);
+                              const existingGr = ep.sources?.find(
+                                (s) => s.id === 'server-gr' || (s.label || '').toUpperCase().includes('GR')
+                              );
+                              const existingG = ep.sources?.find(
+                                (s) =>
+                                  s.id === 'server-g' ||
+                                  ((s.label || '').toUpperCase().includes('G') &&
+                                    !(s.label || '').toUpperCase().includes('GR'))
+                              );
+                              setEpGrUrl(existingGr?.url || '');
+                              setEpGUrl(existingG?.url || '');
                               setEpIntroStart(ep.introStart !== undefined ? String(ep.introStart) : '');
                               setEpIntroEnd(ep.introEnd !== undefined ? String(ep.introEnd) : '');
                             }}

@@ -80,6 +80,7 @@ import { SupportPage } from './components/pages/SupportPage';
 import { PrivacyPage } from './components/pages/PrivacyPage';
 import { AboutPage } from './components/pages/AboutPage';
 import { TermsPage } from './components/pages/TermsPage';
+import { CinemaIntro } from './components/intro/CinemaIntro';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Search,
@@ -104,6 +105,17 @@ import {
 
 export default function App() {
   const { lang, dir, t, getMediaTitle } = useLanguage();
+  const [showIntro, setShowIntro] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('auth_token') || params.get('mode') || params.get('email_test')) {
+      return false;
+    }
+    return true;
+  });
+  const handleIntroComplete = useCallback(() => {
+    setShowIntro(false);
+  }, []);
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [favorites, setFavorites] = useState<string[]>([]);
@@ -1891,6 +1903,9 @@ export default function App() {
           currentUserEmail={authUser?.email || null}
         />
       )}
+
+      {/* Opening 3D Intro Animation */}
+      {showIntro && <CinemaIntro onComplete={handleIntroComplete} />}
     </div>
   );
 }

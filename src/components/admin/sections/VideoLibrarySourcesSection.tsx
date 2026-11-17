@@ -34,6 +34,7 @@ import {
   VideoSourceOption,
 } from '../../../types';
 import { extractYouTubeVideoId, getYouTubeEmbedUrl, isYouTubeUrl } from '../../../utils/youtube';
+import { resolveMediaFormat } from '../../../utils/videoEngines';
 
 interface VideoLibrarySourcesSectionProps {
   mode: 'video_library' | 'playback_links';
@@ -61,9 +62,9 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
   // --- PLAYBACK LINKS STATE ---
   const [selectedMediaId, setSelectedMediaId] = useState<string>(mediaItems[0]?.id || '');
   const [sources, setSources] = useState<VideoSourceOption[]>([]);
-  const [newLabel, setNewLabel] = useState<string>('السيرفر الأساسي');
+  const [newLabel, setNewLabel] = useState<string>('مشغل GR');
   const [newUrl, setNewUrl] = useState<string>('');
-  const [newFormat, setNewFormat] = useState<'mp4' | 'hls' | 'webm' | 'youtube'>('mp4');
+  const [newFormat, setNewFormat] = useState<'mp4' | 'hls' | 'webm' | 'embed' | 'youtube'>('mp4');
   const [newQuality, setNewQuality] = useState<string>('1080p');
   const [testResults, setTestResults] = useState<Record<string, StreamTestResult>>({});
   const [testingUrlKey, setTestingUrlKey] = useState<string | null>(null);
@@ -687,13 +688,31 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
             onSubmit={handleAddSource}
             className="p-4 rounded-2xl bg-[#111116] border border-white/[0.08] space-y-3 text-xs"
           >
-            <h3 className="font-black text-amber-400">إضافة مصدر تشغيل جديد</h3>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="font-black text-amber-400">إضافة مصدر تشغيل جديد</h3>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setNewLabel('مشغل GR')}
+                  className="px-2.5 py-1 rounded-lg bg-amber-400/15 hover:bg-amber-400/25 text-amber-300 font-bold text-[11px] cursor-pointer"
+                >
+                  مشغل GR
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNewLabel('مشغل G')}
+                  className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/15 text-zinc-200 font-bold text-[11px] cursor-pointer"
+                >
+                  مشغل G
+                </button>
+              </div>
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
               <input
                 type="text"
                 value={newLabel}
                 onChange={(e) => setNewLabel(e.target.value)}
-                placeholder="اسم المصدر (مثال: سيرفر 1080p)"
+                placeholder="اسم المصدر (مثال: مشغل GR أو مشغل G)"
                 className="sm:col-span-3 bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white"
               />
               <input
@@ -704,8 +723,8 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
                 onChange={(e) => {
                   const val = e.target.value;
                   setNewUrl(val);
-                  if (isYouTubeUrl(val)) {
-                    setNewFormat('youtube');
+                  if (val.trim()) {
+                    setNewFormat(resolveMediaFormat(val));
                   }
                 }}
                 placeholder="https://youtube.com/watch?v=... أو /uploads/videos/..."
@@ -719,6 +738,7 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
                 <option value="mp4">MP4</option>
                 <option value="hls">HLS (.m3u8)</option>
                 <option value="webm">WebM</option>
+                <option value="embed">مشغل مدمج (Embed)</option>
                 <option value="youtube">YouTube</option>
               </select>
               <input

@@ -39,6 +39,7 @@ import {
   YouTubeOEmbedMetadata,
 } from '../../../utils/youtube';
 import { analyzeMediaFromLinkAndMeta } from '../../../utils/mediaLinkAnalyzer';
+import { resolveMediaFormat } from '../../../utils/videoEngines';
 
 interface QueueVideoTask {
   id: string;
@@ -498,7 +499,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
         .map((s) => ({
           ...s,
           url: s.url.trim(),
-          format: isYouTubeUrl(s.url) ? 'youtube' : s.format || 'mp4',
+          format: isYouTubeUrl(s.url) ? 'youtube' : s.format || resolveMediaFormat(s.url),
         }));
 
       // 2. Coming soon teaser (no video uploaded yet — visitors can subscribe to 'تنبيهي عند الإضافة')
@@ -1606,19 +1607,59 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
 
       {/* 4. Additional Playback Sources */}
       <div className="p-4 rounded-2xl bg-[#111116] border border-white/[0.08] space-y-3">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2 text-xs font-black text-white">
             <Link2 className="w-4 h-4 text-amber-400" />
-            <span>روابط تشغيل متعددة (اختياري)</span>
+            <span>روابط تشغيل متعددة (مشغل GR / مشغل G / يوتيوب)</span>
           </div>
-          <button
-            type="button"
-            onClick={addExtraSource}
-            className="px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-amber-400 text-xs font-bold border border-white/10 flex items-center gap-1 cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>إضافة مصدر تشغيل</span>
-          </button>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() =>
+                setExtraSources((prev) => [
+                  ...prev,
+                  {
+                    id: `server-gr-${Date.now()}`,
+                    label: 'مشغل GR',
+                    url: '',
+                    format: 'mp4',
+                    quality: '1080p HD',
+                  },
+                ])
+              }
+              className="px-2.5 py-1.5 rounded-xl bg-amber-400/15 hover:bg-amber-400/25 text-amber-300 text-xs font-bold border border-amber-400/30 flex items-center gap-1 cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>مشغل GR</span>
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                setExtraSources((prev) => [
+                  ...prev,
+                  {
+                    id: `server-g-${Date.now()}`,
+                    label: 'مشغل G',
+                    url: '',
+                    format: 'embed',
+                    quality: 'HD',
+                  },
+                ])
+              }
+              className="px-2.5 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 text-xs font-bold border border-white/10 flex items-center gap-1 cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>مشغل G</span>
+            </button>
+            <button
+              type="button"
+              onClick={addExtraSource}
+              className="px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-amber-400 text-xs font-bold border border-white/10 flex items-center gap-1 cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>إضافة مصدر تشغيل</span>
+            </button>
+          </div>
         </div>
 
         {extraSources.map((src, idx) => (
@@ -1646,13 +1687,13 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
                       ? {
                           ...s,
                           url: nextUrl,
-                          format: isYouTubeUrl(nextUrl) ? 'youtube' : s.format,
+                          format: resolveMediaFormat(nextUrl),
                         }
                       : s
                   )
                 );
               }}
-              placeholder="https://..."
+              placeholder="https://... أو /uploads/videos/..."
               className="sm:col-span-5 bg-zinc-950 border border-white/10 rounded-xl px-2.5 py-2 text-xs text-white font-mono"
             />
             <select
@@ -1667,6 +1708,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
               <option value="mp4">MP4</option>
               <option value="hls">HLS (.m3u8)</option>
               <option value="webm">WebM</option>
+              <option value="embed">مشغل مدمج (Embed)</option>
               <option value="youtube">YouTube</option>
             </select>
             <input

@@ -165,6 +165,15 @@ export function getYouTubeEmbedUrl(
   return `https://www.youtube.com/embed/${id}?${params.toString()}`;
 }
 
+export function getYouTubeNoCookieEmbedUrl(
+  urlOrId?: string | null,
+  options?: { autoplay?: boolean; startSeconds?: number }
+): string | null {
+  const std = getYouTubeEmbedUrl(urlOrId, options);
+  if (!std) return null;
+  return std.replace('https://www.youtube.com/embed/', 'https://www.youtube-nocookie.com/embed/');
+}
+
 /**
  * Fetch public YouTube title, channel name, description, genre, keywords, duration, and thumbnail.
  * Prefers local Express /api/youtube-meta endpoint and falls back cleanly to YouTube oEmbed.
@@ -291,6 +300,7 @@ export interface YTNamespace {
     element: HTMLElement | string,
     options: {
       videoId: string;
+      host?: string;
       width?: string | number;
       height?: string | number;
       playerVars?: Record<string, string | number | undefined>;

@@ -2329,9 +2329,9 @@ app.get('/api/videos/:filename/streams', async (req: Request, res: Response) => 
       isDefault: boolean;
     }> = [
       {
-        id: 'server-direct-mp4',
-        label: 'المشغل 1 • السيرفر الرئيسي (MP4 مباشر)',
-        shortLabel: 'السيرفر الرئيسي MP4',
+        id: 'server-gr',
+        label: 'مشغل GR • سيرفر الموقع الرئيسي (MP4 مباشر)',
+        shortLabel: 'مشغل GR',
         url: baseUrl,
         format: 'mp4',
         isDefault: true,
@@ -2340,9 +2340,9 @@ app.get('/api/videos/:filename/streams', async (req: Request, res: Response) => 
 
     if (hlsMasterUrl) {
       servers.push({
-        id: 'server-hls-adaptive',
-        label: 'المشغل 2 • البث التكيفي السريع (HLS)',
-        shortLabel: 'البث التكيفي HLS',
+        id: 'server-g',
+        label: 'مشغل G • البث التكيفي السريع (HLS)',
+        shortLabel: 'مشغل G',
         url: hlsMasterUrl,
         format: 'hls',
         isDefault: false,
@@ -2361,6 +2361,58 @@ app.get('/api/videos/:filename/streams', async (req: Request, res: Response) => 
   } catch (err: any) {
     return res.status(500).json({ error: err.message || 'تعذر قراءة بيانات الجودات' });
   }
+});
+
+// Resolve real alternative non-YouTube sources stored across local uploads or media sources
+app.get('/api/stream/resolve', (req: Request, res: Response) => {
+  const mediaId = String(req.query.mediaId || '').trim();
+  const episodeId = String(req.query.episodeId || '').trim();
+  const rawUrl = String(req.query.url || '').trim();
+  const videoId = extractServerYouTubeId(rawUrl || String(req.query.v || '').trim());
+
+  const movies = readMovies();
+  const nonYtCandidates: Array<{ label: string; url: string; format: string }> = [];
+
+  const collectSources = (sources: any[], fallbackUrl?: string) => {
+    if (fallbackUrl && !extractServerYouTubeId(fallbackUrl)) {
+      nonYtCandidates.push({
+        label: 'مشغل GR',
+        url: fallbackUrl,
+        format: fallbackUrl.toLowerCase().includes('.m3u8') ? 'hls' : 'mp4',
+      });
+    }
+    if (Array.isArray(sources)) {
+      for (const s of sources) {
+        if (s?.url && !extractServerYouTubeId(s.url) && s.format !== 'youtube') {
+          nonYtCandidates.push({
+            label: s.label || 'مشغل GR',
+            url: s.url,
+            format: s.format || (s.url.toLowerCase().includes('.m3u8') ? 'hls' : 'mp4'),
+          });
+        }
+      }
+    }
+  };
+
+  for (const m of movies) {
+    if (mediaId && m.id !== mediaId) continue;
+    if (episodeId && Array.isArray(m.seasons)) {
+      for (const sn of m.seasons) {
+        const ep = (sn.episodes || []).find((e: any) => e.id === episodeId);
+        if (ep) {
+          collectSources(ep.sources || [], ep.videoUrl);
+        }
+      }
+    }
+    if (!episodeId) {
+      collectSources(m.sources || [], m.videoUrl);
+    }
+  }
+
+  return res.json({
+    videoId: videoId || null,
+    alternatives: nonYtCandidates,
+  });
 });
 
 // --- ULTRA-FAST HTTP 206 PARTIAL CONTENT RANGE STREAMING FOR VIDEOS (1MB buffer + ETag + Cache) ---
