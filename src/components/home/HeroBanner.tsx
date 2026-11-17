@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Play, Info, ChevronLeft, ChevronRight, Star } from 'lucide-react';
+import { Play, ChevronLeft, ChevronRight, Star, Calendar, Drama } from 'lucide-react';
 import { MediaItem } from '../../types';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { formatQualityLabel } from '../../utils/quality';
@@ -29,6 +29,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
   const [currentIndex, setCurrentIndex] = useState(0);
   const [welcomeIndex, setWelcomeIndex] = useState(0);
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
+  const touchStartXRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (currentIndex >= slides.length && slides.length > 0) {
@@ -199,22 +200,30 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
     currentSlide.imageUrl || linkedMedia?.bannerUrl || linkedMedia?.posterUrl || '';
   const hasImageError = !imageSrc || Boolean(failedImages[currentSlide.id]);
 
-  const typeLabel = linkedMedia
-    ? linkedMedia.type === 'series'
-      ? t('مسلسل', 'Series')
-      : linkedMedia.type === 'anime'
-      ? t('أنمي', 'Anime')
-      : t('فيلم', 'Movie')
-    : t('عرض مميز', 'Featured');
-
   const firstGenre =
     linkedMedia?.genres && linkedMedia.genres.length > 0 && typeof linkedMedia.genres[0] === 'string'
       ? translateGenre(linkedMedia.genres[0])
-      : '';
+      : linkedMedia?.type === 'series'
+      ? t('مسلسل', 'Series')
+      : linkedMedia?.type === 'anime'
+      ? t('أنمي', 'Anime')
+      : t('فيلم', 'Movie');
+
+  const qualityText = linkedMedia?.videoQuality
+    ? formatQualityLabel(linkedMedia.videoQuality).toUpperCase()
+    : '1080P';
 
   const headlineTitle = linkedMedia
     ? getMediaTitle(linkedMedia) || currentSlide.title
     : currentSlide.title;
+
+  const watchLabel =
+    dir === 'ltr'
+      ? linkedMedia?.type === 'series'
+        ? 'Watch Series'
+        : 'Watch Movie'
+      : currentSlide.ctaLabel ||
+        (linkedMedia?.type === 'series' ? 'مشاهدة المسلسل' : 'مشاهدة الفيلم');
 
   const goPrev = () => {
     setCurrentIndex((prev) => (prev - 1 + slides.length) % slides.length);
@@ -224,198 +233,236 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
     setCurrentIndex((prev) => (prev + 1) % slides.length);
   };
 
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartXRef.current = e.touches[0]?.clientX ?? null;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartXRef.current === null || slides.length <= 1) return;
+    const endX = e.changedTouches[0]?.clientX ?? touchStartXRef.current;
+    const diff = endX - touchStartXRef.current;
+    touchStartXRef.current = null;
+    if (Math.abs(diff) < 40) return;
+    if (dir === 'ltr') {
+      if (diff < 0) goNext();
+      else goPrev();
+    } else {
+      if (diff > 0) goNext();
+      else goPrev();
+    }
+  };
+
   return (
     <section
       aria-label={t('العروض السينمائية المميزة', 'Featured Cinema Releases')}
-      className="relative w-full h-[330px] sm:h-[410px] md:h-[470px] overflow-hidden rounded-2xl sm:rounded-3xl border border-amber-500/25 shadow-[0_28px_70px_rgba(0,0,0,0.85)] bg-[#09090d] group"
+      className="w-full select-none"
     >
-      {/* Background Backdrop Transition with Smooth Ken Burns Drift */}
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={currentSlide.id}
-          initial={{ opacity: 0.25 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0.15 }}
-          transition={{ duration: 0.65, ease: [0.16, 1, 0.3, 1] }}
-          className="absolute inset-0 overflow-hidden"
-        >
-          {!hasImageError ? (
-            <img
-              src={imageSrc}
-              alt={headlineTitle}
-              referrerPolicy="no-referrer"
-              onError={() =>
-                setFailedImages((prev) => ({ ...prev, [currentSlide.id]: true }))
-              }
-              className="w-full h-full object-cover object-center animate-ken-burns"
-            />
-          ) : (
-            <div className="w-full h-full bg-gradient-to-br from-[#1b150b] via-[#0b0b0f] to-[#060608]" />
-          )}
-
-          {/* Multi-layer obsidian cinematic scrims */}
-          <div className="absolute inset-0 bg-gradient-to-t from-[#070709] via-[#070709]/45 to-black/25" />
-          <div
-            className={`absolute inset-0 ${
-              dir === 'ltr'
-                ? 'bg-gradient-to-r from-[#070709]/92 via-[#070709]/45 to-transparent'
-                : 'bg-gradient-to-l from-[#070709]/92 via-[#070709]/45 to-transparent'
-            }`}
-          />
-        </motion.div>
-      </AnimatePresence>
-
-      {/* Subtle Desktop Arrow Controls */}
-      {slides.length > 1 && (
-        <>
-          <button
-            type="button"
-            onClick={goPrev}
-            aria-label={t('العرض السابق', 'Previous slide')}
-            className={`hidden sm:flex absolute top-1/2 -translate-y-1/2 ${
-              dir === 'ltr' ? 'left-4' : 'right-4'
-            } z-20 w-10 h-10 rounded-full bg-black/55 hover:bg-amber-400 text-white hover:text-black border border-white/15 items-center justify-center opacity-0 group-hover:opacity-100 transition-all cursor-pointer backdrop-blur-md active:scale-90`}
-          >
-            {dir === 'ltr' ? (
-              <ChevronLeft className="w-5 h-5" />
-            ) : (
-              <ChevronRight className="w-5 h-5" />
-            )}
-          </button>
-          <button
-            type="button"
-            onClick={goNext}
-            aria-label={t('العرض التالي', 'Next slide')}
-            className={`hidden sm:flex absolute top-1/2 -translate-y-1/2 ${
-              dir === 'ltr' ? 'right-4' : 'left-4'
-            } z-20 w-10 h-10 rounded-full bg-black/55 hover:bg-amber-400 text-white hover:text-black border border-white/15 items-center justify-center opacity-0 group-hover:opacity-100 transition-all cursor-pointer backdrop-blur-md active:scale-90`}
-          >
-            {dir === 'ltr' ? (
-              <ChevronRight className="w-5 h-5" />
-            ) : (
-              <ChevronLeft className="w-5 h-5" />
-            )}
-          </button>
-        </>
-      )}
-
-      {/* Text Content Overlay */}
+      {/* Golden-Bordered Featured Banner Card */}
       <div
-        className={`relative z-10 h-full flex flex-col justify-end p-5 sm:p-8 md:p-10 max-w-2xl ${
-          dir === 'ltr' ? 'text-left' : 'text-right'
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        onClick={() => {
+          if (linkedMedia) onSelectMedia(linkedMedia);
+        }}
+        className={`relative w-full h-[215px] sm:h-[310px] md:h-[380px] lg:h-[420px] overflow-hidden rounded-[22px] sm:rounded-[26px] border-[1.5px] border-[#F7C600]/75 shadow-[0_0_22px_rgba(247,198,0,0.28),0_22px_55px_rgba(0,0,0,0.88)] bg-[#09090d] group ${
+          linkedMedia ? 'cursor-pointer' : ''
         }`}
       >
+        {/* Background Artwork Transition */}
         <AnimatePresence mode="wait">
           <motion.div
-            key={`content-${currentSlide.id}`}
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-            className="space-y-2.5 sm:space-y-3"
+            key={currentSlide.id}
+            initial={{ opacity: 0.25 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0.15 }}
+            transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+            className="absolute inset-0 overflow-hidden"
           >
-            {/* Clean Metadata Line */}
-            <div className="flex flex-wrap items-center gap-2 text-xs sm:text-[13px] font-bold text-amber-300/95">
-              {linkedMedia?.videoQuality && (
-                <>
-                  <span className="text-amber-400 font-black tracking-wide uppercase">
-                    {formatQualityLabel(linkedMedia.videoQuality)}
-                  </span>
-                  <span className="text-white/30" aria-hidden="true">·</span>
-                </>
-              )}
-              <span className="text-zinc-200">{typeLabel}</span>
-              {firstGenre && (
-                <>
-                  <span className="text-white/30" aria-hidden="true">·</span>
-                  <span className="text-zinc-300">{firstGenre}</span>
-                </>
-              )}
-              {linkedMedia?.year && (
-                <>
-                  <span className="text-white/30" aria-hidden="true">·</span>
-                  <span className="text-zinc-300 tabular-nums">{linkedMedia.year}</span>
-                </>
-              )}
-              {typeof linkedMedia?.rating === 'number' && linkedMedia.rating > 0 && (
-                <>
-                  <span className="text-white/30" aria-hidden="true">·</span>
-                  <span className="inline-flex items-center gap-1 text-amber-400 tabular-nums">
-                    <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                    <span>{linkedMedia.rating.toFixed(1)}</span>
-                  </span>
-                </>
-              )}
-            </div>
-
-            {/* Primary Headline */}
-            <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-black text-white leading-tight tracking-tight drop-shadow-lg line-clamp-2">
-              {headlineTitle}
-            </h1>
-
-            {/* Subtitle / Description */}
-            {currentSlide.subtitle && (
-              <p className="text-xs sm:text-sm md:text-base text-zinc-300/95 line-clamp-2 max-w-xl leading-relaxed">
-                {currentSlide.subtitle}
-              </p>
+            {!hasImageError ? (
+              <img
+                src={imageSrc}
+                alt={headlineTitle}
+                referrerPolicy="no-referrer"
+                onError={() =>
+                  setFailedImages((prev) => ({ ...prev, [currentSlide.id]: true }))
+                }
+                className="w-full h-full object-cover object-center animate-ken-burns"
+              />
+            ) : (
+              <div className="w-full h-full bg-gradient-to-br from-[#1b150b] via-[#0b0b0f] to-[#060608]" />
             )}
 
-            {/* Action Buttons */}
-            {linkedMedia && (
-              <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 pt-1">
-                <motion.button
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.96 }}
-                  type="button"
-                  onClick={() => onPlayMedia(linkedMedia)}
-                  className="min-h-[44px] inline-flex items-center gap-2 bg-gradient-to-r from-amber-300 via-amber-400 to-amber-500 hover:from-amber-200 hover:to-amber-400 text-black font-black text-xs sm:text-sm px-5 sm:px-6 rounded-xl transition-shadow shadow-[0_10px_28px_rgba(245,158,11,0.35)] cursor-pointer"
-                >
-                  <Play className="w-4 h-4 fill-current" />
-                  <span>
-                    {dir === 'ltr'
-                      ? linkedMedia.type === 'series'
-                        ? 'Watch Series'
-                        : 'Watch Now'
-                      : currentSlide.ctaLabel || 'مشاهدة الآن'}
-                  </span>
-                </motion.button>
-
-                <motion.button
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.96 }}
-                  type="button"
-                  onClick={() => onSelectMedia(linkedMedia)}
-                  className="min-h-[44px] inline-flex items-center gap-2 bg-white/[0.08] hover:bg-white/[0.16] text-white border border-white/15 font-bold text-xs sm:text-sm px-4 sm:px-5 rounded-xl backdrop-blur-md transition-colors cursor-pointer"
-                >
-                  <Info className="w-4 h-4 text-amber-400" />
-                  <span>{t('التفاصيل', 'Details')}</span>
-                </motion.button>
-              </div>
-            )}
-          </motion.div>
-        </AnimatePresence>
-      </div>
-
-      {/* Slide Dot Indicators */}
-      {slides.length > 1 && (
-        <div
-          className={`absolute bottom-4 sm:bottom-6 ${
-            dir === 'ltr' ? 'right-5 sm:right-8' : 'left-5 sm:left-8'
-          } flex items-center gap-1.5 z-20`}
-        >
-          {slides.map((slide, idx) => (
-            <button
-              key={slide.id}
-              type="button"
-              onClick={() => setCurrentIndex(idx)}
-              aria-label={t(`عرض الشريحة ${idx + 1}`, `View slide ${idx + 1}`)}
-              className={`h-1.5 rounded-full transition-all duration-300 cursor-pointer ${
-                idx === currentIndex
-                  ? 'w-8 bg-amber-400 shadow-[0_0_12px_rgba(251,191,36,0.7)]'
-                  : 'w-2 bg-white/35 hover:bg-white/70'
+            {/* Subtle Edge Contrast Scrims */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/82 via-black/22 to-black/35" />
+            <div
+              className={`absolute inset-0 ${
+                dir === 'ltr'
+                  ? 'bg-gradient-to-r from-black/75 via-black/25 to-transparent'
+                  : 'bg-gradient-to-l from-black/75 via-black/25 to-transparent'
               }`}
             />
-          ))}
+          </motion.div>
+        </AnimatePresence>
+
+        {/* Subtle Desktop Prev/Next Arrows */}
+        {slides.length > 1 && (
+          <>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                goPrev();
+              }}
+              aria-label={t('العرض السابق', 'Previous slide')}
+              className={`hidden sm:flex absolute top-1/2 -translate-y-1/2 ${
+                dir === 'ltr' ? 'left-3.5' : 'right-3.5'
+              } z-20 w-9 h-9 rounded-full bg-black/55 hover:bg-[#F7C600] text-white hover:text-black border border-white/15 items-center justify-center opacity-0 group-hover:opacity-100 transition-all cursor-pointer backdrop-blur-md active:scale-90`}
+            >
+              {dir === 'ltr' ? (
+                <ChevronLeft className="w-4 h-4" />
+              ) : (
+                <ChevronRight className="w-4 h-4" />
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                goNext();
+              }}
+              aria-label={t('العرض التالي', 'Next slide')}
+              className={`hidden sm:flex absolute top-1/2 -translate-y-1/2 ${
+                dir === 'ltr' ? 'right-3.5' : 'left-3.5'
+              } z-20 w-9 h-9 rounded-full bg-black/55 hover:bg-[#F7C600] text-white hover:text-black border border-white/15 items-center justify-center opacity-0 group-hover:opacity-100 transition-all cursor-pointer backdrop-blur-md active:scale-90`}
+            >
+              {dir === 'ltr' ? (
+                <ChevronRight className="w-4 h-4" />
+              ) : (
+                <ChevronLeft className="w-4 h-4" />
+              )}
+            </button>
+          </>
+        )}
+
+        {/* Top Floating Corner Metadata Capsules */}
+        <div
+          dir="rtl"
+          className="relative z-10 flex items-center justify-between gap-2 px-3 pt-3 sm:px-5 sm:pt-4"
+        >
+          {/* Top-Right Capsule: Genre + Quality (e.g. كوميديا | 1080P) */}
+          <div className="inline-flex items-center gap-2 px-2.5 sm:px-3 py-1 rounded-full bg-black/55 backdrop-blur-md border border-white/[0.14] text-[10px] sm:text-xs font-bold shadow-md">
+            <span className="inline-flex items-center gap-1 text-zinc-100 whitespace-nowrap">
+              <Drama className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[#F7C600] shrink-0" />
+              <span>{firstGenre}</span>
+            </span>
+            <span className="h-3 w-px bg-white/25" aria-hidden="true" />
+            <span dir="ltr" className="text-[#F7C600] font-black tracking-wide whitespace-nowrap">
+              {qualityText}
+            </span>
+          </div>
+
+          {/* Top-Left Capsule: Year + Rating (e.g. 2000 | ★ 6.7) */}
+          {(linkedMedia?.year || (typeof linkedMedia?.rating === 'number' && linkedMedia.rating > 0)) && (
+            <div className="inline-flex items-center gap-2 px-2.5 sm:px-3 py-1 rounded-full bg-black/55 backdrop-blur-md border border-white/[0.14] text-[10px] sm:text-xs font-bold shadow-md tabular-nums">
+              {linkedMedia?.year && (
+                <span className="inline-flex items-center gap-1 text-zinc-100 whitespace-nowrap">
+                  <Calendar className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-zinc-300 shrink-0" />
+                  <span>{linkedMedia.year}</span>
+                </span>
+              )}
+              {linkedMedia?.year &&
+                typeof linkedMedia?.rating === 'number' &&
+                linkedMedia.rating > 0 && (
+                  <span className="h-3 w-px bg-white/25" aria-hidden="true" />
+                )}
+              {typeof linkedMedia?.rating === 'number' && linkedMedia.rating > 0 && (
+                <span className="inline-flex items-center gap-1 text-white whitespace-nowrap">
+                  <span>{linkedMedia.rating.toFixed(1)}</span>
+                  <Star className="w-3 h-3 sm:w-3.5 sm:h-3.5 fill-[#F7C600] text-[#F7C600] shrink-0" />
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Bottom Title & Action Row */}
+        <div
+          className={`absolute inset-x-0 bottom-0 z-10 px-3.5 pb-3.5 sm:px-6 sm:pb-6 flex flex-col justify-end ${
+            dir === 'ltr' ? 'items-start text-left' : 'items-start text-right'
+          }`}
+        >
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={`content-${currentSlide.id}`}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+              className="space-y-2.5 sm:space-y-3.5 max-w-[85%] sm:max-w-xl"
+            >
+              <h1 className="text-base sm:text-2xl md:text-3xl font-black text-white leading-snug tracking-tight drop-shadow-[0_2px_10px_rgba(0,0,0,0.92)] line-clamp-2">
+                {headlineTitle}
+              </h1>
+
+              {linkedMedia && (
+                <div className="flex items-center gap-2.5">
+                  <motion.button
+                    whileHover={{ scale: 1.03 }}
+                    whileTap={{ scale: 0.95 }}
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onPlayMedia(linkedMedia);
+                    }}
+                    className="h-9 sm:h-11 inline-flex items-center gap-1.5 px-4 sm:px-6 rounded-full bg-gradient-to-b from-[#FFE23A] via-[#F7C600] to-[#E6AD00] hover:from-[#ffe85c] hover:to-[#f0b900] text-black font-black text-xs sm:text-sm shadow-[0_0_20px_rgba(247,198,0,0.48),inset_0_1px_1px_rgba(255,255,255,0.65)] transition-all cursor-pointer whitespace-nowrap"
+                  >
+                    <span>{watchLabel}</span>
+                    {dir === 'ltr' ? (
+                      <ChevronRight className="w-4 h-4 stroke-[2.6]" />
+                    ) : (
+                      <ChevronLeft className="w-4 h-4 stroke-[2.6]" />
+                    )}
+                  </motion.button>
+
+                  <motion.button
+                    whileHover={{ scale: 1.06 }}
+                    whileTap={{ scale: 0.92 }}
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onPlayMedia(linkedMedia);
+                    }}
+                    aria-label={t('تشغيل الآن', 'Play now')}
+                    className="w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-black/55 hover:bg-black/75 border border-white/20 backdrop-blur-md flex items-center justify-center shadow-[0_6px_16px_rgba(0,0,0,0.65)] transition-all cursor-pointer shrink-0"
+                  >
+                    <Play className="w-4 h-4 sm:w-4.5 sm:h-4.5 fill-[#F7C600] text-[#F7C600]" />
+                  </motion.button>
+                </div>
+              )}
+            </motion.div>
+          </AnimatePresence>
+        </div>
+      </div>
+
+      {/* Centered Pagination Indicators Directly Below the Card */}
+      {slides.length > 1 && (
+        <div className="mt-3 flex items-center justify-center gap-2">
+          {slides.map((slide, idx) => {
+            const active = idx === currentIndex;
+            return (
+              <button
+                key={slide.id}
+                type="button"
+                onClick={() => setCurrentIndex(idx)}
+                aria-label={t(`عرض الشريحة ${idx + 1}`, `View slide ${idx + 1}`)}
+                className={`h-2 rounded-full transition-all duration-300 cursor-pointer ${
+                  active
+                    ? 'w-6 sm:w-7 bg-[#F7C600] shadow-[0_0_10px_rgba(247,198,0,0.7)]'
+                    : 'w-2 bg-zinc-600/80 hover:bg-zinc-400'
+                }`}
+              />
+            );
+          })}
         </div>
       )}
     </section>

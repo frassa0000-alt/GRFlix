@@ -156,7 +156,14 @@ export const SideMenuDrawer: React.FC<SideMenuDrawerProps> = ({
 
                   <div className="truncate flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
-                      <h4 className="text-xs sm:text-sm font-bold text-white group-hover:text-amber-300 transition-colors truncate">
+                      <h4
+                        dir={/^[A-Za-z0-9_.\s-]+$/.test(googleUser.name || '') ? 'ltr' : undefined}
+                        className={`text-white group-hover:text-amber-300 transition-colors truncate ${
+                          /^[A-Za-z0-9_.\s-]+$/.test(googleUser.name || '')
+                            ? 'text-[11px] sm:text-xs font-latin-slim font-normal'
+                            : 'text-xs sm:text-sm font-medium'
+                        }`}
+                      >
                         {googleUser.name}
                       </h4>
                       <span className="text-[9px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 font-bold border border-emerald-500/30">

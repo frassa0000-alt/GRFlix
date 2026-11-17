@@ -26,6 +26,12 @@
   }
 }
 
+.font-latin-slim {
+  font-family: var(--font-latin);
+  font-weight: 400;
+  letter-spacing: 0.01em;
+}
+
 /* Hide scrollbar */
 .no-scrollbar::-webkit-scrollbar,
 .scrollbar-none::-webkit-scrollbar {

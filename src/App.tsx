@@ -1801,6 +1801,7 @@ export default function App() {
         }}
         onOpenDeveloperAccount={handleOpenDeveloperSuite}
         onOpenEmailSettings={handleOpenEmailSettings}
+        onOpenInfoPage={handleOpenInfoPage}
       />
 
       {/* User Profile Modal */}

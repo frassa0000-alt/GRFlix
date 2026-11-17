@@ -27,6 +27,7 @@ import {
 } from '../../services/firebase';
 import { clearStoredVerifiedUser, setStoredVerifiedUser } from '../../services/api';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { validateUsername } from '../../utils/username';
 
 interface UserProfileModalProps {
   isOpen: boolean;
@@ -153,10 +154,23 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
-    setIsSaving(true);
     setEditError(null);
 
     const finalName = name.trim() || user.name;
+    const previousName = (user.displayName || user.name || '').trim();
+    if (finalName !== previousName) {
+      const check = validateUsername(finalName);
+      if (!check.valid) {
+        setEditError(
+          lang === 'en'
+            ? check.errorEn || 'Invalid username.'
+            : check.errorAr || 'اسم المستخدم غير صالح.'
+        );
+        return;
+      }
+    }
+
+    setIsSaving(true);
     const finalPhoto =
       photoUrl.trim() ||
       `https://ui-avatars.com/api/?name=${encodeURIComponent(
@@ -369,7 +383,14 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                   className="mt-3 space-y-1 max-w-full"
                 >
                   <div className="flex items-center justify-center gap-1.5 flex-wrap">
-                    <h3 className="text-lg sm:text-xl font-black text-white tracking-tight truncate max-w-[260px]">
+                    <h3
+                      dir={/^[A-Za-z0-9_.\s-]+$/.test(displayName) ? 'ltr' : undefined}
+                      className={`truncate max-w-[240px] text-white ${
+                        /^[A-Za-z0-9_.\s-]+$/.test(displayName)
+                          ? 'text-xs sm:text-sm font-latin-slim font-normal tracking-normal'
+                          : 'text-sm sm:text-base font-bold tracking-tight'
+                      }`}
+                    >
                       {displayName}
                     </h3>
                     <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-[#F7C600]/15 text-[#F7C600] font-bold border border-[#F7C600]/30">
@@ -568,14 +589,20 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
 
                       <div>
                         <label className="block text-[11px] font-bold text-zinc-300 mb-1">
-                          {t('الاسم المعروض:', 'Display Name:')}
+                          {t('اسم مستخدم:', 'Username:')}
                         </label>
                         <input
                           type="text"
+                          dir="ltr"
                           required
+                          maxLength={24}
+                          autoCapitalize="none"
+                          autoCorrect="off"
+                          spellCheck={false}
+                          placeholder={t('اسم مستخدم', 'Username')}
                           value={name}
                           onChange={(e) => setName(e.target.value)}
-                          className="w-full bg-zinc-900 border border-zinc-700 focus:border-[#F7C600] rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
+                          className="w-full bg-zinc-900 border border-zinc-700 focus:border-[#F7C600] rounded-xl px-3 py-2 text-[11px] font-latin-slim font-normal text-white focus:outline-none"
                         />
                       </div>
 

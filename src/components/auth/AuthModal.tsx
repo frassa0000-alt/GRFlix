@@ -14,7 +14,7 @@ import {
   ArrowLeft,
   Crown,
 } from 'lucide-react';
-import { AppUserProfile } from '../../types';
+import { AppUserProfile, InfoPageId } from '../../types';
 import {
   loginUserWithPassword,
   setStoredVerifiedUser,
@@ -27,6 +27,7 @@ import {
   getFirebaseAuthErrorMessage,
 } from '../../services/firebase';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { validateUsername } from '../../utils/username';
 
 export interface AuthModalProps {
   isOpen: boolean;
@@ -34,6 +35,7 @@ export interface AuthModalProps {
   onSuccess: (user: AppUserProfile) => void;
   onOpenDeveloperAccount: () => void;
   onOpenEmailSettings?: () => void;
+  onOpenInfoPage?: (page: InfoPageId) => void;
   initialTab?: 'login' | 'register';
   currentUserEmail?: string | null;
 }
@@ -45,6 +47,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onClose,
   onSuccess,
   onOpenDeveloperAccount,
+  onOpenInfoPage,
   initialTab = 'login',
   currentUserEmail,
 }) => {
@@ -57,6 +60,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [password, setPassword] = useState<string>('');
   const [confirmPassword, setConfirmPassword] = useState<string>('');
   const [showPassword, setShowPassword] = useState<boolean>(false);
+  const [acceptedTerms, setAcceptedTerms] = useState<boolean>(false);
 
   // Status & Feedback
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -70,6 +74,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setActiveTab(initialTab);
+      setAcceptedTerms(false);
       setErrorMessage(null);
       setSuccessMessage(null);
     }
@@ -96,6 +101,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     if (!cleanEmail || !password) {
       setErrorMessage(
         t('يرجى إدخال البريد الإلكتروني وكلمة المرور', 'Please enter your email and password.')
+      );
+      return;
+    }
+
+    if (!acceptedTerms) {
+      setErrorMessage(
+        t(
+          'يرجى الموافقة على شروط الموقع الخاصة بنا للمتابعة.',
+          'Please agree to our site terms to continue.'
+        )
       );
       return;
     }
@@ -150,6 +165,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
+    const usernameCheck = validateUsername(cleanName);
+    if (!usernameCheck.valid) {
+      setErrorMessage(
+        lang === 'en'
+          ? usernameCheck.errorEn || 'Invalid username.'
+          : usernameCheck.errorAr || 'اسم المستخدم غير صالح.'
+      );
+      return;
+    }
+
     if (password.length < 6) {
       setErrorMessage(
         t('كلمة المرور 6 أحرف على الأقل', 'Password must be at least 6 characters.')
@@ -159,6 +184,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     if (password !== confirmPassword) {
       setErrorMessage(t('كلمتا المرور غير متطابقتين', 'Passwords do not match.'));
+      return;
+    }
+
+    if (!acceptedTerms) {
+      setErrorMessage(
+        t(
+          'يرجى الموافقة على شروط الموقع الخاصة بنا للمتابعة.',
+          'Please agree to our site terms to continue.'
+        )
+      );
       return;
     }
 
@@ -215,6 +250,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   // 4. Google Sign-In
   const handleGoogleSignIn = async () => {
     resetFeedback();
+    if (!acceptedTerms) {
+      setErrorMessage(
+        t(
+          'يرجى الموافقة على شروط الموقع الخاصة بنا للمتابعة.',
+          'Please agree to our site terms to continue.'
+        )
+      );
+      return;
+    }
     setIsLoading(true);
     try {
       const user = await signInWithGoogle();
@@ -236,6 +280,53 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   };
 
   const isPasswordsMatching = confirmPassword ? password === confirmPassword : true;
+
+  const renderTermsConsent = () => (
+    <div className="p-2.5 rounded-xl bg-zinc-950/90 border border-zinc-800/90 space-y-1.5">
+      <label className="flex items-start gap-2 cursor-pointer select-none">
+        <input
+          type="checkbox"
+          checked={acceptedTerms}
+          onChange={(e) => {
+            setAcceptedTerms(e.target.checked);
+            if (e.target.checked && errorMessage) {
+              setErrorMessage(null);
+            }
+          }}
+          className="mt-0.5 w-3.5 h-3.5 rounded border-zinc-700 bg-zinc-900 accent-amber-400 cursor-pointer shrink-0"
+        />
+        <span className="text-[11px] font-bold text-zinc-200 leading-snug">
+          {t('هل توافق على شروط الموقع الخاصة بنا؟', 'Do you agree to our site terms?')}
+        </span>
+      </label>
+
+      {onOpenInfoPage && (
+        <div className="flex items-center gap-2 text-[10px] text-zinc-400 ps-5">
+          <button
+            type="button"
+            onClick={() => {
+              onClose();
+              onOpenInfoPage('terms');
+            }}
+            className="text-amber-400 hover:text-amber-300 hover:underline font-bold cursor-pointer"
+          >
+            {t('شروط الاستخدام', 'Terms of Use')}
+          </button>
+          <span aria-hidden="true">·</span>
+          <button
+            type="button"
+            onClick={() => {
+              onClose();
+              onOpenInfoPage('privacy');
+            }}
+            className="text-amber-400 hover:text-amber-300 hover:underline font-bold cursor-pointer"
+          >
+            {t('سياسة الخصوصية', 'Privacy Policy')}
+          </button>
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div
@@ -379,6 +470,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </div>
             </div>
 
+            {renderTermsConsent()}
+
             <button
               type="submit"
               disabled={isLoading}
@@ -397,23 +490,46 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         {/* 2. REGISTER */}
         {activeTab === 'register' && (
           <form onSubmit={handleRegisterSubmit} className="space-y-2">
-            <div className="relative">
-              <input
-                type="text"
-                required
-                placeholder={t('الاسم', 'Full name')}
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                className={`w-full bg-zinc-950 border border-zinc-800 focus:border-amber-400 rounded-xl py-2 text-xs text-white focus:outline-none ${
-                  dir === 'ltr' ? 'px-3 pr-8' : 'px-3 pl-8'
-                }`}
-              />
-              <User
-                className={`w-3.5 h-3.5 text-zinc-500 absolute top-2.5 ${
-                  dir === 'ltr' ? 'right-2.5' : 'left-2.5'
-                }`}
-              />
-            </div>
+            {(() => {
+              const liveCheck =
+                displayName.trim().length > 0 ? validateUsername(displayName) : null;
+              const hasLiveError = Boolean(liveCheck && !liveCheck.valid);
+              return (
+                <div className="space-y-1">
+                  <div className="relative">
+                    <input
+                      type="text"
+                      dir="ltr"
+                      required
+                      maxLength={24}
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      placeholder={t('اسم مستخدم', 'Username')}
+                      value={displayName}
+                      onChange={(e) => setDisplayName(e.target.value)}
+                      className={`w-full bg-zinc-950 border rounded-xl py-2 text-[11px] font-latin-slim font-normal tracking-normal text-white focus:outline-none transition-colors placeholder:text-[11px] placeholder:font-normal ${
+                        dir === 'rtl' && !displayName ? 'text-right' : 'text-left'
+                      } ${
+                        hasLiveError
+                          ? 'border-rose-500/70 focus:border-rose-400'
+                          : 'border-zinc-800 focus:border-amber-400'
+                      } ${dir === 'ltr' ? 'pl-3 pr-8' : 'pl-8 pr-3'}`}
+                    />
+                    <User
+                      className={`w-3.5 h-3.5 text-zinc-500 absolute top-2.5 ${
+                        dir === 'ltr' ? 'right-2.5' : 'left-2.5'
+                      }`}
+                    />
+                  </div>
+                  {hasLiveError && (
+                    <p className="text-[10px] text-rose-400 leading-snug px-1">
+                      {lang === 'en' ? liveCheck?.errorEn : liveCheck?.errorAr}
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
 
             <div className="relative">
               <input
@@ -469,6 +585,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   : 'border-zinc-800 focus:border-amber-400'
               }`}
             />
+
+            {renderTermsConsent()}
 
             <button
               type="submit"
