@@ -48,9 +48,17 @@ import {
   getYouTubeCanonicalUrl,
   isYouTubeUrl,
   loadYouTubeIframeApi,
+  qualityRankToYouTubeCode,
   YTPlayerInstance,
 } from '../../utils/youtube';
-import { formatQualityLabel } from '../../utils/quality';
+import {
+  formatQualityLabel,
+  getQualityNumericRank,
+  getSavedPreferredQuality,
+  PreferredQualityPref,
+  savePreferredQuality,
+  sortQualityOptions,
+} from '../../utils/quality';
 
 interface VideoPlayerProps {
   media: MediaItem;
@@ -66,6 +74,7 @@ interface FlattenedEpisode extends Episode {
 interface QualityOption {
   id: string;
   label: string;
+  ytCode?: string;
   hlsLevel?: number;
   url?: string;
   status?: 'ready' | 'processing';
@@ -91,11 +100,14 @@ type SettingsTab = 'speed' | 'subtitles' | 'servers';
 const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
 const YOUTUBE_PRESET_QUALITIES: QualityOption[] = [
-  { id: 'auto', label: 'تلقائي', status: 'ready', rank: 9999 },
-  { id: 'hd1080', label: '1080p', status: 'ready', rank: 1080 },
-  { id: 'hd720', label: '720p', status: 'ready', rank: 720 },
-  { id: 'large', label: '480p', status: 'ready', rank: 480 },
-  { id: 'medium', label: '360p', status: 'ready', rank: 360 },
+  { id: 'auto', ytCode: 'auto', label: 'تلقائي', status: 'ready', rank: 0 },
+  { id: 'yt-100', ytCode: 'tiny', label: '100p', status: 'ready', rank: 100 },
+  { id: 'tiny', ytCode: 'tiny', label: '144p', status: 'ready', rank: 144 },
+  { id: 'small', ytCode: 'small', label: '240p', status: 'ready', rank: 240 },
+  { id: 'medium', ytCode: 'medium', label: '360p', status: 'ready', rank: 360 },
+  { id: 'large', ytCode: 'large', label: '480p', status: 'ready', rank: 480 },
+  { id: 'hd720', ytCode: 'hd720', label: '720p', status: 'ready', rank: 720 },
+  { id: 'hd1080', ytCode: 'hd1080', label: '1080p', status: 'ready', rank: 1080 },
 ];
 
 function extractLocalVideoFilename(url: string | undefined): string | null {
@@ -114,16 +126,7 @@ function extractLocalVideoFilename(url: string | undefined): string | null {
 }
 
 function getQualityRank(labelOrUrl: string | undefined): number {
-  const s = (labelOrUrl || '').toLowerCase();
-  if (s.includes('2160') || s.includes('4k')) return 2160;
-  if (s.includes('1440') || s.includes('2k')) return 1440;
-  if (s.includes('1080') || s.includes('fhd')) return 1080;
-  if (s.includes('720') || s.includes('hd')) return 720;
-  if (s.includes('480') || s.includes('sd')) return 480;
-  if (s.includes('360')) return 360;
-  if (s.includes('240')) return 240;
-  if (s.includes('auto') || s.includes('تلقائي') || s.includes('hls')) return 1500;
-  return 900;
+  return getQualityNumericRank(labelOrUrl);
 }
 
 function isHlsSource(url: string): boolean {
@@ -259,6 +262,24 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
   const [isEnded, setIsEnded] = useState<boolean>(false);
 
   // Quality & loading state
+  const [preferredQualityPref, setPreferredQualityPref] = useState<PreferredQualityPref | null>(() => {
+    const saved = getSavedPreferredQuality();
+    if (saved) return saved;
+    const adminDefault = (playerDefaults?.defaultQuality || '').trim();
+    if (
+      adminDefault &&
+      !adminDefault.toLowerCase().includes('auto') &&
+      !adminDefault.includes('تلقائي')
+    ) {
+      const rank = getQualityNumericRank(adminDefault);
+      if (rank > 0 && rank < 5000) {
+        return { id: `${rank}p`, label: `${rank}p`, rank };
+      }
+    }
+    return null;
+  });
+  const preferredQualityRef = useRef<PreferredQualityPref | null>(preferredQualityPref);
+  const manualQualityChosenRef = useRef<boolean>(false);
   const [hlsQualityOptions, setHlsQualityOptions] = useState<QualityOption[]>([]);
   const [activeHlsQualityId, setActiveHlsQualityId] = useState<string>('auto');
   const [detectedResolution, setDetectedResolution] = useState<string | null>(null);
@@ -332,8 +353,43 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
     };
   }, [localVideoFilename, retryToken]);
 
+  useEffect(() => {
+    preferredQualityRef.current = preferredQualityPref;
+  }, [preferredQualityPref]);
+
+  // Apply preferred rendition on local uploaded multi-quality videos automatically once ready
+  useEffect(() => {
+    if (manualQualityChosenRef.current) return;
+    const pref = preferredQualityPref;
+    if (!pref || pref.rank <= 0) return;
+    if (!serverStreamData?.exists || !serverStreamData.qualities.length) return;
+    if (isYouTubeUrl(selectedSourceUrl) || isHlsSource(selectedSourceUrl)) return;
+
+    const readyQualities = serverStreamData.qualities.filter(
+      (q) => q.status === 'ready' && q.url && typeof q.height === 'number'
+    );
+    if (readyQualities.length === 0) return;
+
+    const exact = readyQualities.find((q) => q.height === pref.rank);
+    const closest =
+      exact ||
+      [...readyQualities].sort(
+        (a, b) => Math.abs((a.height || 0) - pref.rank) - Math.abs((b.height || 0) - pref.rank)
+      )[0];
+
+    if (closest?.url && closest.url !== selectedSourceUrl) {
+      const video = videoRef.current;
+      if (video && video.currentTime > 0) {
+        pendingSeekRef.current = video.currentTime;
+        resumeAutoplayRef.current = !video.paused;
+      }
+      setSelectedSourceUrl(closest.url);
+    }
+  }, [preferredQualityPref, selectedSourceUrl, serverStreamData]);
+
   // Sync source state when episode/media changes
   useEffect(() => {
+    manualQualityChosenRef.current = false;
     setSelectedSourceUrl(baseVideoUrl);
     setActiveServerId(extractLocalVideoFilename(baseVideoUrl) ? 'server-direct-mp4' : 'custom-0');
     setHlsQualityOptions([]);
@@ -632,35 +688,62 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
       let cancelled = false;
       let progressTimer: number | null = null;
 
+      const savedPref = preferredQualityRef.current;
+      const initialYtOptionId =
+        savedPref && savedPref.rank > 0
+          ? savedPref.rank <= 100
+            ? 'yt-100'
+            : qualityRankToYouTubeCode(savedPref.rank)
+          : 'auto';
+      const initialYtCode =
+        initialYtOptionId === 'auto' ? 'auto' : qualityRankToYouTubeCode(initialYtOptionId);
+
       setIsLoading(true);
       setIsPlaying(false);
       setHlsQualityOptions([]);
       setYtQualityOptions(YOUTUBE_PRESET_QUALITIES);
-      setActiveYtQualityId('auto');
+      setActiveYtQualityId(initialYtOptionId);
 
       const syncYouTubeQualities = (target: YTPlayerInstance) => {
         const rawLevels = target.getAvailableQualityLevels?.() || [];
-        const unique = new Map<string, QualityOption>();
-        rawLevels
-          .filter((lvl) => lvl && lvl !== 'auto' && lvl !== 'unknown')
-          .forEach((lvl) => {
-            const label = formatYouTubeQualityCode(lvl);
-            unique.set(lvl, {
-              id: lvl,
-              label,
-              status: 'ready',
-              rank: getQualityRank(label),
-            });
-          });
+        const uniqueByRank = new Map<number, QualityOption>();
 
-        if (unique.size > 0) {
-          const sorted = Array.from(unique.values()).sort(
-            (a, b) => (b.rank || 0) - (a.rank || 0)
+        if (rawLevels.length > 0) {
+          // Include low-bandwidth 100p preset (maps to YouTube 'tiny') + all reported levels
+          const hasTinyOrLower = rawLevels.some((lvl) =>
+            ['tiny', 'small', 'medium'].includes(lvl)
           );
-          setYtQualityOptions([
-            { id: 'auto', label: 'تلقائي', status: 'ready', rank: 9999 },
-            ...sorted,
+          if (hasTinyOrLower) {
+            uniqueByRank.set(100, {
+              id: 'yt-100',
+              ytCode: 'tiny',
+              label: '100p',
+              status: 'ready',
+              rank: 100,
+            });
+          }
+
+          rawLevels
+            .filter((lvl) => lvl && lvl !== 'auto' && lvl !== 'unknown')
+            .forEach((lvl) => {
+              const label = formatYouTubeQualityCode(lvl);
+              const rank = getQualityNumericRank(lvl);
+              if (rank > 0 && !uniqueByRank.has(rank)) {
+                uniqueByRank.set(rank, {
+                  id: lvl,
+                  ytCode: lvl,
+                  label,
+                  status: 'ready',
+                  rank,
+                });
+              }
+            });
+
+          const sorted = sortQualityOptions<QualityOption>([
+            { id: 'auto', ytCode: 'auto', label: 'تلقائي', status: 'ready', rank: 0 },
+            ...Array.from(uniqueByRank.values()),
           ]);
+          setYtQualityOptions(sorted);
         } else {
           setYtQualityOptions(YOUTUBE_PRESET_QUALITIES);
         }
@@ -707,6 +790,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
               rel: 0,
               playsinline: 1,
               origin: typeof window !== 'undefined' ? window.location.origin : undefined,
+              ...(initialYtCode !== 'auto' ? { vq: initialYtCode } : {}),
               ...(typeof startSeconds === 'number' && startSeconds > 0
                 ? { start: Math.floor(startSeconds) }
                 : {}),
@@ -732,6 +816,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
                 }
 
                 syncYouTubeQualities(target);
+
+                if (initialYtCode !== 'auto') {
+                  target.setPlaybackQualityRange?.(initialYtCode, initialYtCode);
+                  target.setPlaybackQuality?.(initialYtCode);
+                }
 
                 if (pendingSeekRef.current !== null) {
                   target.seekTo?.(pendingSeekRef.current, true);
@@ -859,6 +948,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
         const hls = new Hls({
           enableWorker: true,
           lowLatencyMode: false,
+          capLevelToPlayerSize: true,
           maxBufferLength: 30,
           maxMaxBufferLength: 60,
           startLevel: -1,
@@ -885,14 +975,30 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
             }
           });
 
-          const sortedLevels = Array.from(uniqueMap.values()).sort(
-            (a, b) => (b.rank || 0) - (a.rank || 0)
-          );
-
-          setHlsQualityOptions([
-            { id: 'auto', label: 'تلقائي', hlsLevel: -1, status: 'ready', rank: 9999 },
-            ...sortedLevels,
+          const sortedLevels = sortQualityOptions<QualityOption>([
+            { id: 'auto', label: 'تلقائي', hlsLevel: -1, status: 'ready', rank: 0 },
+            ...Array.from(uniqueMap.values()),
           ]);
+
+          setHlsQualityOptions(sortedLevels);
+
+          const pref = preferredQualityRef.current;
+          if (pref && pref.rank > 0) {
+            const concreteLevels = sortedLevels.filter((o) => typeof o.hlsLevel === 'number' && o.hlsLevel >= 0);
+            const exact = concreteLevels.find((o) => o.rank === pref.rank);
+            const closest =
+              exact ||
+              [...concreteLevels].sort(
+                (a, b) => Math.abs((a.rank || 0) - pref.rank) - Math.abs((b.rank || 0) - pref.rank)
+              )[0];
+            if (closest && typeof closest.hlsLevel === 'number') {
+              hls.currentLevel = closest.hlsLevel;
+              hls.nextLevel = closest.hlsLevel;
+              setActiveHlsQualityId(closest.id);
+              return;
+            }
+          }
+
           setActiveHlsQualityId('auto');
         });
 
@@ -1258,16 +1364,53 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
     (option: QualityOption) => {
       if (option.status === 'processing') return;
 
+      manualQualityChosenRef.current = true;
+      const numericRank =
+        option.id === 'auto'
+          ? 0
+          : typeof option.rank === 'number' && option.rank > 0
+          ? option.rank
+          : getQualityNumericRank(option.label);
+      const nextPref: PreferredQualityPref = {
+        id: option.id,
+        label: option.label,
+        rank: numericRank,
+      };
+      setPreferredQualityPref(nextPref);
+      savePreferredQuality(nextPref);
+
       if (isYouTubeSource) {
-        const yt = ytPlayerRef.current as
-          | (YTPlayerInstance & { setPlaybackQualityRange?: (min: string, max: string) => void })
-          | null;
-        if (yt) {
-          yt.setPlaybackQuality(option.id);
-          yt.setPlaybackQualityRange?.(option.id, option.id);
-          setActiveYtQualityId(option.id);
-          if (option.id !== 'auto') {
-            setDetectedResolution(option.label);
+        const yt = ytPlayerRef.current;
+        const targetYtCode = option.ytCode || qualityRankToYouTubeCode(option.id);
+        setActiveYtQualityId(option.id);
+        if (option.id === 'auto') {
+          setDetectedResolution(null);
+          if (yt) {
+            yt.setPlaybackQualityRange?.('tiny', 'highres');
+            yt.setPlaybackQuality?.('auto');
+          }
+        } else {
+          setDetectedResolution(option.label);
+          if (yt) {
+            yt.setPlaybackQualityRange?.(targetYtCode, targetYtCode);
+            yt.setPlaybackQuality?.(targetYtCode);
+            const videoId = extractYouTubeVideoId(selectedSourceUrl);
+            const curTime = yt.getCurrentTime?.() || currentTime || 0;
+            if (videoId) {
+              if (isPlayingRef.current && typeof yt.loadVideoById === 'function') {
+                yt.loadVideoById({
+                  videoId,
+                  startSeconds: curTime,
+                  suggestedQuality: targetYtCode,
+                });
+              } else if (!isPlayingRef.current && typeof yt.cueVideoById === 'function') {
+                yt.cueVideoById({
+                  videoId,
+                  startSeconds: curTime,
+                  suggestedQuality: targetYtCode,
+                });
+              }
+            }
           }
         }
         setActivePanel(null);
@@ -1280,7 +1423,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
 
       if (typeof option.hlsLevel === 'number' && hlsRef.current) {
         hlsRef.current.currentLevel = option.hlsLevel;
+        hlsRef.current.nextLevel = option.hlsLevel;
         setActiveHlsQualityId(option.id);
+        if (option.id === 'auto') {
+          setDetectedResolution(null);
+        } else {
+          setDetectedResolution(option.label);
+        }
         setActivePanel(null);
         revealControls();
         return;
@@ -1289,13 +1438,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
       if (option.url && option.url !== selectedSourceUrl) {
         pendingSeekRef.current = video.currentTime;
         resumeAutoplayRef.current = !video.paused;
+        setDetectedResolution(option.label);
         setSelectedSourceUrl(option.url);
       }
 
       setActivePanel(null);
       revealControls();
     },
-    [isYouTubeSource, revealControls, selectedSourceUrl]
+    [currentTime, isYouTubeSource, revealControls, selectedSourceUrl]
   );
 
   const switchServer = useCallback(
@@ -1704,12 +1854,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
 
   const effectiveQualityOptions = useMemo<QualityOption[]>(() => {
     if (isYouTubeSource) {
-      return ytQualityOptions.length > 0 ? ytQualityOptions : YOUTUBE_PRESET_QUALITIES;
+      return sortQualityOptions(
+        ytQualityOptions.length > 0 ? ytQualityOptions : YOUTUBE_PRESET_QUALITIES
+      );
     }
 
     if (isHlsSource(selectedSourceUrl)) {
-      if (hlsQualityOptions.length > 0) return hlsQualityOptions;
-      return [{ id: 'auto', label: 'تلقائي', hlsLevel: -1, status: 'ready', rank: 9999 }];
+      if (hlsQualityOptions.length > 0) return sortQualityOptions(hlsQualityOptions);
+      return [{ id: 'auto', label: 'تلقائي', hlsLevel: -1, status: 'ready', rank: 0 }];
     }
 
     if (
@@ -1718,27 +1870,27 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
       serverStreamData.qualities.length > 0 &&
       (serverStreamData.qualities.length > 1 || availableCustomSources.length <= 1)
     ) {
-      return [...serverStreamData.qualities]
-        .map((q) => ({
+      return sortQualityOptions(
+        serverStreamData.qualities.map((q) => ({
           id: q.id,
           label: formatQualityLabel(q.label),
           url: q.url,
           status: q.status,
-          rank: q.height || 900,
+          rank: q.height || getQualityRank(q.label),
         }))
-        .sort((a, b) => (b.rank || 0) - (a.rank || 0));
+      );
     }
 
     if (availableCustomSources.length > 1) {
-      return [...availableCustomSources]
-        .map((src, index) => ({
+      return sortQualityOptions(
+        availableCustomSources.map((src, index) => ({
           id: `src-${index}`,
           label: formatQualityLabel(src.label),
           url: src.url,
           status: 'ready' as const,
           rank: getQualityRank(src.label),
         }))
-        .sort((a, b) => (b.rank || 0) - (a.rank || 0));
+      );
     }
 
     return [
@@ -1773,11 +1925,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
 
   const activeQualityLabel = useMemo(() => {
     const matched = effectiveQualityOptions.find((q) => q.id === activeQualityId);
-    if (matched?.id === 'auto' && detectedResolution) {
-      return detectedResolution;
+    if (matched) {
+      if (matched.id === 'auto') {
+        return detectedResolution || 'تلقائي';
+      }
+      return matched.label;
     }
-    const raw = matched?.label || detectedResolution || media.videoQuality;
-    return raw ? formatQualityLabel(raw) : '1080p';
+    const raw = detectedResolution || media.videoQuality;
+    return raw ? formatQualityLabel(raw) : 'تلقائي';
   }, [activeQualityId, detectedResolution, effectiveQualityOptions, media.videoQuality]);
 
   const showNextEpisodePrompt =

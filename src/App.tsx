@@ -10,6 +10,7 @@ import {
   NotificationItem,
   MediaAlertSubscription,
   UserReleaseNotification,
+  InfoPageId,
 } from './types';
 import {
   fetchAllMoviesUnified,
@@ -74,6 +75,11 @@ import { HistoryView } from './components/views/HistoryView';
 import { FavoritesView } from './components/views/FavoritesView';
 import { MediaCard } from './components/cards/MediaCard';
 import { EmptyCinemaState } from './components/common/EmptyCinemaState';
+import { SiteFooter } from './components/layout/SiteFooter';
+import { SupportPage } from './components/pages/SupportPage';
+import { PrivacyPage } from './components/pages/PrivacyPage';
+import { AboutPage } from './components/pages/AboutPage';
+import { TermsPage } from './components/pages/TermsPage';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Search,
@@ -321,6 +327,51 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('home');
   const [bottomNavTab, setBottomNavTab] = useState<BottomNavTab>('home');
   const [selectedTabYear, setSelectedTabYear] = useState<string>('all');
+  const [activeInfoPage, setActiveInfoPage] = useState<InfoPageId | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const slug = window.location.pathname.replace(/^\/+|\/+$/g, '').toLowerCase();
+    if (slug === 'support' || slug === 'privacy' || slug === 'about' || slug === 'terms') {
+      return slug;
+    }
+    return null;
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handlePopState = () => {
+      const slug = window.location.pathname.replace(/^\/+|\/+$/g, '').toLowerCase();
+      if (slug === 'support' || slug === 'privacy' || slug === 'about' || slug === 'terms') {
+        setActiveInfoPage(slug);
+      } else {
+        setActiveInfoPage(null);
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const handleOpenInfoPage = useCallback((page: InfoPageId) => {
+    setSearchQuery('');
+    setIsSideMenuOpen(false);
+    setActiveInfoPage(page);
+    if (typeof window !== 'undefined') {
+      const targetPath = `/${page}`;
+      if (window.location.pathname !== targetPath) {
+        window.history.pushState({ infoPage: page }, '', targetPath);
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, []);
+
+  const handleCloseInfoPage = useCallback(() => {
+    setActiveInfoPage(null);
+    if (typeof window !== 'undefined') {
+      const slug = window.location.pathname.replace(/^\/+|\/+$/g, '').toLowerCase();
+      if (slug === 'support' || slug === 'privacy' || slug === 'about' || slug === 'terms') {
+        window.history.pushState({}, '', '/');
+      }
+    }
+  }, []);
 
   useEffect(() => {
     setSelectedTabYear('all');
@@ -341,7 +392,11 @@ export default function App() {
     if (cfg) {
       setSiteSettings(cfg);
       if (cfg.siteName) {
-        document.title = cfg.siteName;
+        const cleanSiteTitle = cfg.siteName
+          .replace(/\s+cinema\b/gi, '')
+          .replace(/\s+(سينما|سيما)\b/g, '')
+          .trim();
+        document.title = cleanSiteTitle || 'GoldenFlix';
       }
     }
   }, []);
@@ -448,18 +503,22 @@ export default function App() {
   );
 
   // Synchronized navigation between Top Header, Category Capsules, Side Drawer, and Mobile Bottom Nav
-  const handleTopTabSelect = useCallback((tab: ActiveTab) => {
-    setActiveTab(tab);
-    if (tab === 'favorites') {
-      setBottomNavTab('favorites');
-    } else if (tab === 'movies') {
-      setBottomNavTab('movies');
-    } else if (tab === 'series') {
-      setBottomNavTab('series');
-    } else {
-      setBottomNavTab('home');
-    }
-  }, []);
+  const handleTopTabSelect = useCallback(
+    (tab: ActiveTab) => {
+      handleCloseInfoPage();
+      setActiveTab(tab);
+      if (tab === 'favorites') {
+        setBottomNavTab('favorites');
+      } else if (tab === 'movies') {
+        setBottomNavTab('movies');
+      } else if (tab === 'series') {
+        setBottomNavTab('series');
+      } else {
+        setBottomNavTab('home');
+      }
+    },
+    [handleCloseInfoPage]
+  );
 
   const handleBottomTabSelect = useCallback(
     (tab: BottomNavTab) => {
@@ -476,6 +535,8 @@ export default function App() {
         }
         return;
       }
+
+      handleCloseInfoPage();
 
       if (tab === 'search') {
         setBottomNavTab('search');
@@ -495,7 +556,7 @@ export default function App() {
         setActiveTab('home');
       }
     },
-    [authUser, handleOpenLogin]
+    [authUser, handleOpenLogin, handleCloseInfoPage]
   );
 
   const handleToggleFav = (id?: string) => {
@@ -624,7 +685,7 @@ export default function App() {
 
       slides.push({
         id: `banner-${banner.id}`,
-        title: banner.title || linked?.titleAr || linked?.title || 'GoldenFlix Cinema',
+        title: banner.title || linked?.titleAr || linked?.title || 'GoldenFlix',
         subtitle: banner.subtitle || linked?.description || '',
         imageUrl,
         ctaLabel: banner.ctaLabel || 'مشاهدة الآن',
@@ -827,36 +888,156 @@ export default function App() {
   return (
     <div
       dir={dir}
-      className="relative min-h-screen w-full bg-[#070709] text-zinc-100 flex flex-col overflow-x-hidden selection:bg-[#F7C600] selection:text-black"
+      className="relative min-h-screen w-full bg-[#050507] text-zinc-100 flex flex-col overflow-x-hidden selection:bg-[#F7C600] selection:text-black"
     >
-      {/* Subtle Curved Obsidian & Golden Wave Backdrop Matching Reference Visual */}
-      <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden" aria-hidden="true">
-        <div className="absolute -top-24 -left-24 w-[440px] h-[440px] rounded-full bg-[#F7C600]/[0.07] blur-[110px]" />
-        <div className="absolute bottom-8 -right-24 w-[460px] h-[460px] rounded-full bg-[#F7C600]/[0.08] blur-[120px]" />
-        <div className="absolute top-[14%] -inset-x-[20%] h-[58%] rounded-[50%] bg-gradient-to-br from-white/[0.025] via-transparent to-[#F7C600]/[0.03] -rotate-12" />
+      {/* Cinema Obsidian Backdrop with Golden Light Curves & Translucent 35mm Film Strips */}
+      <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden bg-[#050507]" aria-hidden="true">
+        {/* Ambient Deep Gold Corner Glows */}
+        <div
+          className="absolute -top-28 -right-24 w-[420px] h-[420px] rounded-full opacity-60"
+          style={{
+            background:
+              'radial-gradient(circle, rgba(247,198,0,0.16) 0%, rgba(180,125,0,0.06) 42%, transparent 72%)',
+          }}
+        />
+        <div
+          className="absolute -bottom-28 -left-24 w-[480px] h-[480px] rounded-full opacity-75"
+          style={{
+            background:
+              'radial-gradient(circle, rgba(247,198,0,0.19) 0%, rgba(180,125,0,0.07) 44%, transparent 74%)',
+          }}
+        />
+
+        {/* Full-Viewport SVG: Luminous Golden Arcs + Perforated 35mm Cinema Film Strips */}
         <svg
-          viewBox="0 0 1200 220"
-          preserveAspectRatio="none"
-          className="absolute bottom-10 md:bottom-0 inset-x-0 w-full h-36 opacity-50"
+          viewBox="0 0 1440 900"
+          preserveAspectRatio="xMidYMid slice"
+          className="absolute inset-0 w-full h-full"
         >
           <defs>
-            <linearGradient id="gfBottomWave" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#F7C600" stopOpacity="0.04" />
-              <stop offset="35%" stopColor="#F7C600" stopOpacity="0.22" />
-              <stop offset="70%" stopColor="#F7C600" stopOpacity="0.16" />
-              <stop offset="100%" stopColor="#F7C600" stopOpacity="0.03" />
+            {/* Golden Rim Line Gradients */}
+            <linearGradient id="gfGoldCurveTop" x1="0%" y1="65%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#F7C600" stopOpacity="0.85" />
+              <stop offset="42%" stopColor="#F7C600" stopOpacity="0.22" />
+              <stop offset="78%" stopColor="#F7C600" stopOpacity="0.68" />
+              <stop offset="100%" stopColor="#F7C600" stopOpacity="0.95" />
             </linearGradient>
+
+            <linearGradient id="gfGoldCurveBottom" x1="0%" y1="100%" x2="100%" y2="25%">
+              <stop offset="0%" stopColor="#F7C600" stopOpacity="0.95" />
+              <stop offset="32%" stopColor="#F7C600" stopOpacity="0.28" />
+              <stop offset="75%" stopColor="#F7C600" stopOpacity="0.52" />
+              <stop offset="100%" stopColor="#F7C600" stopOpacity="0.12" />
+            </linearGradient>
+
+            <linearGradient id="gfArcSurfaceWash" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#F7C600" stopOpacity="0.06" />
+              <stop offset="50%" stopColor="#ffffff" stopOpacity="0.025" />
+              <stop offset="100%" stopColor="#F7C600" stopOpacity="0.05" />
+            </linearGradient>
+
+            {/* Diagonal 35mm Perforated Film Strip Pattern */}
+            <pattern id="gfFilmStripPattern" width="76" height="58" patternUnits="userSpaceOnUse">
+              {/* Outer film rails */}
+              <rect x="0" y="0" width="76" height="58" fill="rgba(225, 162, 20, 0.21)" />
+              {/* Top sprocket holes */}
+              <rect x="5" y="4" width="7" height="5.5" rx="1" fill="#050507" />
+              <rect x="19" y="4" width="7" height="5.5" rx="1" fill="#050507" />
+              <rect x="33" y="4" width="7" height="5.5" rx="1" fill="#050507" />
+              <rect x="47" y="4" width="7" height="5.5" rx="1" fill="#050507" />
+              <rect x="61" y="4" width="7" height="5.5" rx="1" fill="#050507" />
+              {/* Main cinema frame */}
+              <rect x="4" y="13.5" width="32" height="31" rx="2" fill="#050507" />
+              <rect x="42" y="13.5" width="32" height="31" rx="2" fill="#050507" />
+              {/* Bottom sprocket holes */}
+              <rect x="5" y="48.5" width="7" height="5.5" rx="1" fill="#050507" />
+              <rect x="19" y="48.5" width="7" height="5.5" rx="1" fill="#050507" />
+              <rect x="33" y="48.5" width="7" height="5.5" rx="1" fill="#050507" />
+              <rect x="47" y="48.5" width="7" height="5.5" rx="1" fill="#050507" />
+              <rect x="61" y="48.5" width="7" height="5.5" rx="1" fill="#050507" />
+            </pattern>
+
+            <radialGradient id="gfFadeTopLeft" cx="15%" cy="10%" r="44%">
+              <stop offset="0%" stopColor="white" stopOpacity="1" />
+              <stop offset="60%" stopColor="white" stopOpacity="0.45" />
+              <stop offset="100%" stopColor="white" stopOpacity="0" />
+            </radialGradient>
+            <mask id="gfMaskTopLeft">
+              <rect width="1440" height="900" fill="url(#gfFadeTopLeft)" />
+            </mask>
+
+            <radialGradient id="gfFadeBottomRight" cx="88%" cy="88%" r="46%">
+              <stop offset="0%" stopColor="white" stopOpacity="1" />
+              <stop offset="60%" stopColor="white" stopOpacity="0.45" />
+              <stop offset="100%" stopColor="white" stopOpacity="0" />
+            </radialGradient>
+            <mask id="gfMaskBottomRight">
+              <rect width="1440" height="900" fill="url(#gfFadeBottomRight)" />
+            </mask>
+
+            <filter id="gfSoftGlow" x="-10%" y="-10%" width="120%" height="120%">
+              <feGaussianBlur stdDeviation="4" result="blur" />
+              <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
           </defs>
+
+          {/* Subtle Diagonal Curved Light Wash */}
           <path
-            d="M0,145 C240,65 520,185 840,95 C1000,50 1120,90 1200,120 L1200,220 L0,220 Z"
-            fill="url(#gfBottomWave)"
+            d="M -120 420 Q 520 120 1560 90 L 1560 720 Q 740 820 -120 790 Z"
+            fill="url(#gfArcSurfaceWash)"
+          />
+
+          {/* Top-Left Translucent Diagonal Film Strip */}
+          <g mask="url(#gfMaskTopLeft)" opacity="0.9">
+            <g transform="translate(-80, 140) rotate(-26)">
+              <rect x="0" y="0" width="740" height="58" fill="url(#gfFilmStripPattern)" />
+            </g>
+          </g>
+
+          {/* Bottom-Right Translucent Diagonal Film Strip */}
+          <g mask="url(#gfMaskBottomRight)" opacity="0.9">
+            <g transform="translate(820, 860) rotate(-32)">
+              <rect x="0" y="0" width="840" height="58" fill="url(#gfFilmStripPattern)" />
+            </g>
+          </g>
+
+          {/* Upper Sweeping Golden Curve */}
+          <path
+            d="M -60 400 Q 480 150 1490 95"
+            fill="none"
+            stroke="url(#gfGoldCurveTop)"
+            strokeWidth="2.4"
+            filter="url(#gfSoftGlow)"
+          />
+
+          {/* Lower Sweeping Golden Curve & Light Flare */}
+          <path
+            d="M -80 790 Q 640 620 1500 500"
+            fill="none"
+            stroke="url(#gfGoldCurveBottom)"
+            strokeWidth="2.6"
+            filter="url(#gfSoftGlow)"
+          />
+          <path
+            d="M 680 920 Q 1080 835 1480 810"
+            fill="none"
+            stroke="url(#gfGoldCurveTop)"
+            strokeWidth="1.8"
+            opacity="0.7"
+            filter="url(#gfSoftGlow)"
           />
         </svg>
       </div>
       {/* Top Cinema Header */}
       <TopHeader
         searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
+        onSearchChange={(q) => {
+          setSearchQuery(q);
+          if (q.trim()) handleCloseInfoPage();
+        }}
         onOpenSideMenu={() => setIsSideMenuOpen(true)}
         onOpenGoogleLogin={() => {
           if (authUser) {
@@ -946,7 +1127,7 @@ export default function App() {
       )}
 
       {/* Main Content Stage */}
-      <main className="flex-1 w-full max-w-7xl mx-auto px-3 sm:px-6 pt-4 pb-28 md:pb-14">
+      <main className="flex-1 w-full max-w-7xl mx-auto px-3 sm:px-6 pt-4 pb-10 md:pb-14">
         {/* A. Active Search View or Results */}
         {searchQuery.trim().length > 0 || bottomNavTab === 'search' ? (
           <div className="py-3 space-y-5">
@@ -1077,6 +1258,38 @@ export default function App() {
             onToggleAlert={handleToggleMediaAlert}
             history={history}
             onBrowseContent={() => handleTopTabSelect('home')}
+          />
+        ) : activeInfoPage === 'support' ? (
+          <SupportPage
+            onBackHome={() => {
+              handleTopTabSelect('home');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            onNavigatePage={handleOpenInfoPage}
+          />
+        ) : activeInfoPage === 'privacy' ? (
+          <PrivacyPage
+            onBackHome={() => {
+              handleTopTabSelect('home');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            onNavigatePage={handleOpenInfoPage}
+          />
+        ) : activeInfoPage === 'about' ? (
+          <AboutPage
+            onBackHome={() => {
+              handleTopTabSelect('home');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            onNavigatePage={handleOpenInfoPage}
+          />
+        ) : activeInfoPage === 'terms' ? (
+          <TermsPage
+            onBackHome={() => {
+              handleTopTabSelect('home');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            onNavigatePage={handleOpenInfoPage}
           />
         ) : activeTab !== 'home' ? (
           /* E. Top/Mobile Category Tab Filtered View */
@@ -1541,60 +1754,16 @@ export default function App() {
         )}
       </main>
 
-      {/* Luxury Cinema Footer */}
-      <footer className="hidden md:block w-full border-t border-white/[0.06] bg-[#050507]">
-        <div className="max-w-7xl mx-auto px-6 py-7 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-zinc-400">
-          <div className="flex items-center gap-2.5">
-            <span className="text-sm font-black text-white">
-              Golden<span className="text-amber-400">Flix</span>
-            </span>
-            <span className="text-zinc-600" aria-hidden="true">|</span>
-            <span>
-              {lang === 'en'
-                ? 'Luxury Cinema Streaming Platform'
-                : siteSettings?.siteTagline || 'منصة المشاهدة السينمائية الفاخرة'}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-5 font-bold">
-            <button
-              type="button"
-              onClick={() => handleTopTabSelect('home')}
-              className="hover:text-amber-400 transition-colors cursor-pointer"
-            >
-              {t('الرئيسية', 'Home')}
-            </button>
-            <button
-              type="button"
-              onClick={() => handleTopTabSelect('movies')}
-              className="hover:text-amber-400 transition-colors cursor-pointer"
-            >
-              {t('الأفلام', 'Movies')}
-            </button>
-            <button
-              type="button"
-              onClick={() => handleTopTabSelect('series')}
-              className="hover:text-amber-400 transition-colors cursor-pointer"
-            >
-              {t('المسلسلات', 'Series')}
-            </button>
-            <button
-              type="button"
-              onClick={() => handleBottomTabSelect('categories')}
-              className="hover:text-amber-400 transition-colors cursor-pointer"
-            >
-              {t('التصنيفات', 'Categories')}
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsSideMenuOpen(true)}
-              className="hover:text-amber-400 transition-colors cursor-pointer"
-            >
-              {t('الإعدادات', 'Settings')}
-            </button>
-          </div>
-        </div>
-      </footer>
+      {/* GoldenFlix Footer across all pages & viewports */}
+      <SiteFooter
+        activePage={activeInfoPage}
+        onOpenPage={handleOpenInfoPage}
+        onGoHome={() => {
+          handleTopTabSelect('home');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
+        siteName={siteSettings?.siteName}
+      />
 
       {/* Mobile Bottom Navigation: الرئيسية · البحث · المفضلة · الإعدادات */}
       <BottomNavigation

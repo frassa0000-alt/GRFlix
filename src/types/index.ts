@@ -146,6 +146,8 @@ export type BottomNavTab =
   | 'profile'
   | 'history';
 
+export type InfoPageId = 'support' | 'privacy' | 'about' | 'terms';
+
 export type AdminSectionId =
   | 'dashboard'
   | 'movies'

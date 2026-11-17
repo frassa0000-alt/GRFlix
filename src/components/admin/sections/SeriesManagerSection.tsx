@@ -483,9 +483,14 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
                 onChange={(e) => setVideoQuality(e.target.value)}
                 className="w-full bg-zinc-950 border border-white/10 rounded-xl px-2.5 py-2 text-white"
               >
-                <option value="4K Ultra HD">4K Ultra HD</option>
+                <option value="100p">100p</option>
+                <option value="144p">144p</option>
+                <option value="240p">240p</option>
+                <option value="360p">360p</option>
+                <option value="480p">480p</option>
+                <option value="720p">720p</option>
                 <option value="1080p">1080p</option>
-                <option value="720p HD">720p HD</option>
+                <option value="4K Ultra HD">4K Ultra HD</option>
               </select>
             </div>
             <div>

@@ -64,7 +64,7 @@ interface MediaUploadSectionProps {
   onNavigateManage: () => void;
 }
 
-const QUALITY_OPTIONS = ['4K Ultra HD', '1080p', '720p HD', '480p SD'];
+const QUALITY_OPTIONS = ['100p', '144p', '240p', '360p', '480p', '720p', '1080p', '4K Ultra HD'];
 const AGE_RATING_OPTIONS = ['عام', '+13', '+16', '+18'];
 
 export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({

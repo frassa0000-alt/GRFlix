@@ -68,7 +68,7 @@ const DEFAULT_CATEGORIES = [
 ];
 
 const DEFAULT_SITE_SETTINGS = {
-  siteName: 'GoldenFlix Cinema',
+  siteName: 'GoldenFlix',
   siteTagline: 'عالم السينما والترفيه بين يديك',
   logoText: 'GoldenFlix',
   accentColor: '#facc15',
@@ -85,7 +85,7 @@ const DEFAULT_SITE_SETTINGS = {
   banners: [],
   playerSettings: {
     defaultSpeed: 1,
-    defaultQuality: '1080p Full HD',
+    defaultQuality: 'auto',
     autoPlayNextEpisode: true,
     allowExternalSubtitles: true,
     defaultSubtitleColor: '#ffffff',
@@ -550,7 +550,7 @@ let activeSmtpPort = 465;
 let activeSmtpUser = '';
 let activeSmtpPass = '';
 let activeSmtpSecure = true;
-let activeSmtpFrom = '"GoldenFlix Cinema" <noreply@goldenflix.cinema>';
+let activeSmtpFrom = '"GoldenFlix" <noreply@goldenflix.app>';
 let mailTransporter: any = null;
 let isSmtpConfigured = false;
 let isSmtpVerified = false;
@@ -630,8 +630,8 @@ const getEffectiveMailConfig = (): RuntimeMailConfig => {
   const smtpFrom = isValidFromHeader(rawFrom)
     ? rawFrom
     : isValidEmailLike(smtpUser)
-    ? `"GoldenFlix Cinema" <${smtpUser}>`
-    : '"GoldenFlix Cinema" <noreply@goldenflix.cinema>';
+    ? `"GoldenFlix" <${smtpUser}>`
+    : '"GoldenFlix" <noreply@goldenflix.app>';
 
   const resendApiKey = (hasSavedConfig ? (saved.resendApiKey ?? '') : (saved.resendApiKey ?? envResendKey)).trim();
   const supabaseUrl = (hasSavedConfig ? (saved.supabaseUrl ?? '') : (saved.supabaseUrl ?? envSupabaseUrl)).trim();
@@ -695,7 +695,7 @@ const reloadMailProviders = async (): Promise<void> => {
   activeSmtpUser = cfg.smtpUser || '';
   activeSmtpPass = cfg.smtpPass || '';
   activeSmtpSecure = Boolean(cfg.smtpSecure);
-  activeSmtpFrom = cfg.smtpFrom || '"GoldenFlix Cinema" <noreply@goldenflix.cinema>';
+  activeSmtpFrom = cfg.smtpFrom || '"GoldenFlix" <noreply@goldenflix.app>';
 
   mailTransporter = null;
   isSmtpConfigured = false;
@@ -804,17 +804,17 @@ const sendVerificationLinkEmail = async (
     throw new Error(`عنوان البريد الإلكتروني غير صالح: ${cleanEmail}`);
   }
 
-  const subject = `رابط الدخول المباشر إلى منصة GoldenFlix Cinema`;
+  const subject = `رابط الدخول المباشر إلى منصة GoldenFlix`;
   const htmlContent = `
       <div dir="rtl" style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0c0c0e; color: #ffffff; padding: 30px; border-radius: 16px; max-width: 540px; margin: 0 auto; border: 1px solid #27272a;">
         <div style="text-align: center; margin-bottom: 24px;">
-          <h1 style="color: #facc15; font-size: 26px; margin: 0; font-weight: 900; letter-spacing: -0.5px;">Golden<span style="color: #ffffff;">Flix</span> Cinema</h1>
-          <p style="color: #a1a1aa; font-size: 13px; margin-top: 6px;">عالم الترفيه والسينما بين يديك</p>
+          <h1 style="color: #facc15; font-size: 26px; margin: 0; font-weight: 900; letter-spacing: -0.5px;">Golden<span style="color: #ffffff;">Flix</span></h1>
+          <p style="color: #a1a1aa; font-size: 13px; margin-top: 6px;">عالم الترفيه بين يديك</p>
         </div>
         <div style="background-color: #18181b; padding: 24px; border-radius: 12px; border: 1px solid #3f3f46; text-align: center;">
           <h2 style="color: #ffffff; font-size: 18px; margin-top: 0;">مرحباً ${recipientName || 'بك'}</h2>
           <p style="color: #d4d4d8; font-size: 14px; line-height: 1.7;">
-            اضغط على الزر التالي ليتم ${purposeLabel} مباشرة وبشكل تلقائي في منصة GoldenFlix Cinema بدون الحاجة لإدخال أي رموز:
+            اضغط على الزر التالي ليتم ${purposeLabel} مباشرة وبشكل تلقائي في منصة GoldenFlix بدون الحاجة لإدخال أي رموز:
           </p>
           <div style="margin: 28px 0;">
             <a href="${verificationUrl}" target="_blank" rel="noopener noreferrer" style="display: inline-block; font-size: 15px; font-weight: 900; color: #000000; background: linear-gradient(135deg, #facc15, #eab308); padding: 14px 32px; border-radius: 12px; text-decoration: none; box-shadow: 0 4px 18px rgba(250, 204, 21, 0.35);">
@@ -832,7 +832,7 @@ const sendVerificationLinkEmail = async (
         <p style="color: #71717a; font-size: 11px; text-align: center; margin-top: 24px; line-height: 1.5;">
           تم إرسال هذه الرسالة إلى: ${cleanEmail}<br/>
           إذا لم تطلب هذا الرابط، يمكنك تجاهل هذه الرسالة بأمان.<br/>
-          GoldenFlix Cinema © ${new Date().getFullYear()} - جميع الحقوق محفوظة.
+          GoldenFlix © ${new Date().getFullYear()} - جميع الحقوق محفوظة.
         </p>
       </div>
     `;
@@ -877,7 +877,7 @@ const sendVerificationLinkEmail = async (
         lowerFrom.includes('@hotmail.') ||
         lowerFrom.includes('@icloud.');
       const fromAddress = usesUnverifiedPublicDomain
-        ? 'GoldenFlix Cinema <onboarding@resend.dev>'
+        ? 'GoldenFlix <onboarding@resend.dev>'
         : activeSmtpFrom;
       const resendRes = await fetch('https://api.resend.com/emails', {
         method: 'POST',
@@ -1061,7 +1061,7 @@ app.post('/api/auth/register', async (req: Request, res: Response) => {
       joinedAt: existing ? existing.joinedAt : Date.now(),
       role: cleanEmail === PRIMARY_ADMIN_EMAIL ? 'مشرف المنصة' : 'عضو مسجل',
       favoriteGenre: 'أفلام سينمائية',
-      bio: 'مستمتع بمشاهدة أحدث الأعمال السينمائية على GoldenFlix Cinema.',
+      bio: 'مستمتع بمشاهدة أحدث الأعمال على GoldenFlix.',
       watchTimeMinutes: 0,
     };
 
@@ -1158,7 +1158,7 @@ app.post('/api/auth/send-login-link', async (req: Request, res: Response) => {
         joinedAt: Date.now(),
         role: cleanEmail === PRIMARY_ADMIN_EMAIL ? 'مشرف المنصة' : 'عضو مسجل',
         favoriteGenre: 'أفلام سينمائية',
-        bio: 'مستمتع بمشاهدة أحدث الأعمال السينمائية على GoldenFlix Cinema.',
+        bio: 'مستمتع بمشاهدة أحدث الأعمال على GoldenFlix.',
         watchTimeMinutes: 0,
       };
       isNewProvisional = true;
@@ -1347,7 +1347,7 @@ app.post('/api/auth/supabase-session', async (req: Request, res: Response) => {
         joinedAt: Date.now(),
         role: cleanEmail === PRIMARY_ADMIN_EMAIL ? 'مشرف المنصة' : 'عضو مسجل',
         favoriteGenre: 'أفلام سينمائية',
-        bio: 'مستمتع بمشاهدة أحدث الأعمال السينمائية على GoldenFlix Cinema.',
+        bio: 'مستمتع بمشاهدة أحدث الأعمال على GoldenFlix.',
         watchTimeMinutes: 0,
       };
       users.push(user);
@@ -1581,7 +1581,7 @@ app.post('/api/admin/mail-config', requireAdmin, async (req: Request, res: Respo
       smtpSecure: effectiveSecure,
       smtpUser: cleanUser,
       smtpPass: cleanUser ? cleanPass : '',
-      smtpFrom: cleanFrom || (cleanUser ? `"GoldenFlix Cinema" <${cleanUser}>` : ''),
+      smtpFrom: cleanFrom || (cleanUser ? `"GoldenFlix" <${cleanUser}>` : ''),
       resendApiKey: cleanResendKey,
       supabaseUrl: cleanSupabaseUrl,
       supabaseAnonKey: cleanSupabaseKey,
@@ -1902,7 +1902,7 @@ app.post('/api/admin/upload-poster', requireAdmin, (req: Request, res: Response)
 });
 
 // --- REAL FFMPEG MULTI-QUALITY MP4 & ADAPTIVE HLS ENGINE ---
-const TARGET_RENDITION_HEIGHTS = [1080, 720, 480, 360] as const;
+const TARGET_RENDITION_HEIGHTS = [100, 144, 240, 360, 480, 720, 1080] as const;
 
 interface RenditionJobState {
   filename: string;
@@ -1923,9 +1923,7 @@ const renditionJobs = new Map<string, RenditionJobState>();
 const formatHeightDisplay = (height: number | null): string => {
   if (!height || height <= 0) return 'الجودة الأصلية';
   if (height >= 2160) return '2160p 4K';
-  if (height >= 1440) return '1440p QHD';
-  if (height >= 1080) return '1080p Full HD';
-  if (height >= 720) return '720p HD';
+  if (height >= 1440) return '1440p';
   return `${height}p`;
 };
 
@@ -2000,7 +1998,10 @@ const writeMasterHlsPlaylist = (
     if (h >= 1080) return 4800000;
     if (h >= 720) return 2600000;
     if (h >= 480) return 1300000;
-    return 750000;
+    if (h >= 360) return 750000;
+    if (h >= 240) return 420000;
+    if (h >= 144) return 220000;
+    return 140000;
   };
 
   const lines: string[] = ['#EXTM3U', '#EXT-X-VERSION:3'];
@@ -2288,15 +2289,6 @@ app.get('/api/videos/:filename/streams', async (req: Request, res: Response) => 
     }> = [];
 
     if (state.valid && state.sourceHeight) {
-      qualities.push({
-        id: `mp4-${state.sourceHeight}`,
-        height: state.sourceHeight,
-        label: formatHeightDisplay(state.sourceHeight),
-        url: baseUrl,
-        status: 'ready',
-        isOriginal: true,
-      });
-
       const lowerHeights = TARGET_RENDITION_HEIGHTS.filter((h) => h < state.sourceHeight!);
       for (const h of lowerHeights) {
         const isReady = state.readyHeights.includes(h);
@@ -2308,6 +2300,15 @@ app.get('/api/videos/:filename/streams', async (req: Request, res: Response) => 
           status: isReady ? 'ready' : 'processing',
         });
       }
+
+      qualities.push({
+        id: `mp4-${state.sourceHeight}`,
+        height: state.sourceHeight,
+        label: formatHeightDisplay(state.sourceHeight),
+        url: baseUrl,
+        status: 'ready',
+        isOriginal: true,
+      });
     } else {
       qualities.push({
         id: 'mp4-original',
@@ -3720,7 +3721,7 @@ async function startServer() {
   }
 
   const server = app.listen(PORT, '0.0.0.0', () => {
-    console.log(`GoldenFlix Cinema server running on http://0.0.0.0:${PORT}`);
+    console.log(`GoldenFlix server running on http://0.0.0.0:${PORT}`);
   });
   server.requestTimeout = 0;
   server.keepAliveTimeout = 65000;

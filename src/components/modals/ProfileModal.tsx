@@ -40,12 +40,12 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           </div>
           <div>
             <div className="flex items-center gap-1.5">
-              <h3 className="text-white font-bold text-base">منصة GoldenFlix Cinema</h3>
+              <h3 className="text-white font-bold text-base">منصة GoldenFlix</h3>
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 font-bold">
                 PRO
               </span>
             </div>
-            <p className="text-xs text-zinc-400 font-mono">GoldenFlix Cinema Platform</p>
+            <p className="text-xs text-zinc-400 font-mono">GoldenFlix Platform</p>
           </div>
         </div>
 

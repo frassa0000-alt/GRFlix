@@ -1,0 +1,41 @@
+{
+  "siteName": "GoldenFlix",
+  "siteTagline": "عالم السينما والترفيه بين يديك",
+  "logoText": "GoldenFlix",
+  "accentColor": "#facc15",
+  "backgroundColor": "#0c0c0e",
+  "homeSections": {
+    "showHeroBanner": true,
+    "showCategories": true,
+    "showQuickExplore": true,
+    "showLatestMovies": true,
+    "showRecommendations": true,
+    "showSeries": true,
+    "showMostWatched": true
+  },
+  "banners": [],
+  "playerSettings": {
+    "defaultSpeed": 1,
+    "defaultQuality": "auto",
+    "autoPlayNextEpisode": true,
+    "allowExternalSubtitles": true,
+    "defaultSubtitleColor": "#ffffff",
+    "defaultSubtitleSize": "md",
+    "skipIntroEnabled": true
+  },
+  "securitySettings": {
+    "requireEmailVerification": true,
+    "allowNewRegistrations": true,
+    "strictAdminVerification": true
+  },
+  "storageSettings": {
+    "maxVideoSizeMb": 4096,
+    "maxPosterSizeMb": 25,
+    "chunkSizeMb": 4,
+    "parallelStreams": 4
+  },
+  "notificationsSettings": {
+    "enableGlobalBanner": true,
+    "notifyOnNewRelease": true
+  }
+}

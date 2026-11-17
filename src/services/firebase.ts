@@ -230,7 +230,7 @@ export function formatUserProfile(
     favoriteGenre: firestoreData?.favoriteGenre || 'أفلام سينمائية',
     bio:
       firestoreData?.bio ||
-      'مستمتع بمشاهدة أحدث الأعمال السينمائية بجودة فائقة على منصة GoldenFlix Cinema.',
+      'مستمتع بمشاهدة أحدث الأعمال بجودة فائقة على منصة GoldenFlix.',
     watchTimeMinutes: firestoreData?.watchTimeMinutes || 0,
   };
 }
@@ -314,7 +314,7 @@ async function ensureFirestoreUserDocument(
       joinedAt: Date.now(),
       role: isVerifiedAdmin ? 'مشرف المنصة' : 'عضو مسجل',
       favoriteGenre: 'أفلام سينمائية',
-      bio: 'مستمتع بمشاهدة أحدث الأعمال السينمائية على GoldenFlix Cinema.',
+      bio: 'مستمتع بمشاهدة أحدث الأعمال على GoldenFlix.',
       watchTimeMinutes: 0,
     };
     try {

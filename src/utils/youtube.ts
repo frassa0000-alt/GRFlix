@@ -270,6 +270,17 @@ export interface YTPlayerInstance {
   setPlaybackRate: (suggestedRate: number) => void;
   getAvailablePlaybackRates: () => number[];
   setPlaybackQuality: (suggestedQuality: string) => void;
+  setPlaybackQualityRange?: (min: string, max: string) => void;
+  loadVideoById?: (
+    opts:
+      | string
+      | { videoId: string; startSeconds?: number; endSeconds?: number; suggestedQuality?: string }
+  ) => void;
+  cueVideoById?: (
+    opts:
+      | string
+      | { videoId: string; startSeconds?: number; endSeconds?: number; suggestedQuality?: string }
+  ) => void;
   getAvailableQualityLevels: () => string[];
   getPlaybackQuality: () => string;
   destroy: () => void;
@@ -373,17 +384,16 @@ export function loadYouTubeIframeApi(): Promise<YTNamespace> {
 export function formatYouTubeQualityCode(code: string): string {
   switch (code) {
     case 'highres':
-      return '4K / 2160p';
     case 'hd2160':
-      return '4K (2160p)';
+      return '2160p (4K)';
     case 'hd1440':
       return '1440p';
     case 'hd1080':
       return '1080p';
     case 'hd720':
-      return '720p HD';
+      return '720p';
     case 'large':
-      return '480p SD';
+      return '480p';
     case 'medium':
       return '360p';
     case 'small':
@@ -391,9 +401,41 @@ export function formatYouTubeQualityCode(code: string): string {
     case 'tiny':
       return '144p';
     case 'auto':
-      return 'تلقائي (Auto)';
+      return 'تلقائي';
     default:
       return code;
   }
 }
 
+export function qualityRankToYouTubeCode(rankOrId: number | string): string {
+  if (typeof rankOrId === 'string') {
+    const clean = rankOrId.trim().toLowerCase();
+    if (
+      clean === 'auto' ||
+      clean === 'tiny' ||
+      clean === 'small' ||
+      clean === 'medium' ||
+      clean === 'large' ||
+      clean === 'hd720' ||
+      clean === 'hd1080' ||
+      clean === 'hd1440' ||
+      clean === 'hd2160' ||
+      clean === 'highres'
+    ) {
+      return clean;
+    }
+    if (clean === 'yt-100') return 'tiny';
+    const numMatch = clean.match(/\d+/);
+    if (!numMatch) return 'auto';
+    rankOrId = Number(numMatch[0]);
+  }
+  if (!Number.isFinite(rankOrId) || rankOrId <= 0) return 'auto';
+  if (rankOrId <= 144) return 'tiny';
+  if (rankOrId <= 240) return 'small';
+  if (rankOrId <= 360) return 'medium';
+  if (rankOrId <= 480) return 'large';
+  if (rankOrId <= 720) return 'hd720';
+  if (rankOrId <= 1080) return 'hd1080';
+  if (rankOrId <= 1440) return 'hd1440';
+  return 'hd2160';
+}

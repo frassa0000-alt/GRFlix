@@ -269,7 +269,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         {/* Compact Brand Header */}
         <div className="text-center pb-3">
           <h2 className="text-base font-black text-white tracking-tight">
-            Golden<span className="text-amber-400">Flix</span> Cinema
+            Golden<span className="text-amber-400">Flix</span>
           </h2>
           <p className="text-[11px] text-zinc-400 mt-0.5">
             {activeTab === 'login' && t('تسجيل الدخول', 'Sign In')}

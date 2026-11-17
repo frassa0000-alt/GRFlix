@@ -380,7 +380,7 @@ export const SideMenuDrawer: React.FC<SideMenuDrawerProps> = ({
               )}
 
               <div className="text-center text-[10px] text-zinc-500 font-mono pb-2">
-                GoldenFlix Cinema v2.5
+                GoldenFlix v2.5
               </div>
             </div>
           </motion.div>

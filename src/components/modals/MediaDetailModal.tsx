@@ -341,8 +341,8 @@ export const MediaDetailModal: React.FC<MediaDetailModalProps> = ({
             <p className="text-xs sm:text-sm text-zinc-300 leading-relaxed">
               {media.description ||
                 t(
-                  'عمل سينمائي مميز متاح للمشاهدة بجودة عالية على منصة GoldenFlix Cinema.',
-                  'A premium cinema release available to stream in high quality on GoldenFlix Cinema.'
+                  'عمل مميز متاح للمشاهدة بجودة عالية على منصة GoldenFlix.',
+                  'A premium release available to stream on GoldenFlix.'
                 )}
             </p>
           </div>
