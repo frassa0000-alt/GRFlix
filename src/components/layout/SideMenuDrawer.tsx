@@ -53,10 +53,45 @@ export const SideMenuDrawer: React.FC<SideMenuDrawerProps> = ({
   hasAdminAccess = false,
 }) => {
   const { lang, dir, setLang, t } = useLanguage();
+  const [copiedLink, setCopiedLink] = React.useState(false);
+  const copyTimerRef = React.useRef<number | null>(null);
 
   const isDeveloperUser =
     (googleUser?.email || '').trim().toLowerCase() === 'frassa.wwindows@gmail.com';
   const canAccessAdmin = isDeveloperUser || Boolean(hasAdminAccess);
+
+  const handleCopySiteLink = async () => {
+    const siteUrl = 'https://gr-flix.vercel.app/';
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(siteUrl);
+      } else {
+        throw new Error('Clipboard API unavailable');
+      }
+    } catch {
+      const textarea = document.createElement('textarea');
+      textarea.value = siteUrl;
+      textarea.setAttribute('readonly', '');
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      try {
+        document.execCommand('copy');
+      } catch {
+        // Ignore fallback failure
+      }
+      document.body.removeChild(textarea);
+    }
+
+    setCopiedLink(true);
+    if (copyTimerRef.current) {
+      window.clearTimeout(copyTimerRef.current);
+    }
+    copyTimerRef.current = window.setTimeout(() => {
+      setCopiedLink(false);
+    }, 1800);
+  };
 
   const handleNav = (tab: ActiveTab) => {
     onSelectTab(tab);
@@ -425,8 +460,39 @@ export const SideMenuDrawer: React.FC<SideMenuDrawerProps> = ({
               </div>
 
               {/* Quiet Footer Version */}
-              <div className="pt-1 pb-3 text-center text-[10px] text-zinc-500 font-mono">
+              <div className="pt-1 text-center text-[10px] text-zinc-500 font-mono">
                 GoldenFlix v2.5
+              </div>
+
+              {/* Miniature Looping Site-Link Video at Very Bottom */}
+              <div className="pb-4 flex flex-col items-center justify-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={handleCopySiteLink}
+                  title={t('اضغط لنسخ رابط الموقع', 'Click to copy site link')}
+                  aria-label={t(
+                    'نسخ رابط الموقع https://gr-flix.vercel.app/',
+                    'Copy site link https://gr-flix.vercel.app/'
+                  )}
+                  className="relative w-[128px] aspect-video rounded-xl overflow-hidden border border-white/10 hover:border-[#F7C600]/45 shadow-md transition-colors cursor-pointer active:scale-[0.98] bg-[#17181f]"
+                >
+                  <video
+                    src="/assets/settings-site-link.mp4"
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    disablePictureInPicture
+                    controls={false}
+                    className="w-full h-full object-cover pointer-events-none select-none"
+                  />
+                </button>
+
+                {copiedLink && (
+                  <span className="text-[10px] font-bold text-[#F7C600]">
+                    {t('تم نسخ الرابط ✓', 'Link copied ✓')}
+                  </span>
+                )}
               </div>
             </div>
           </motion.div>
