@@ -12,15 +12,17 @@ import {
 } from 'lucide-react';
 import {
   AdminSectionId,
+  AdminSessionInfo,
   CategoryItem,
   MediaItem,
   PersonItem,
 } from '../../types';
 import {
   clearStoredAdminSession,
+  getStoredAdminSession,
   getStoredAdminToken,
   loginAdmin,
-  verifyAdminToken,
+  verifyAdminSession,
 } from '../../services/api';
 import {
   AdminAnalyticsResponse,
@@ -29,7 +31,11 @@ import {
   fetchPeople,
 } from '../../services/adminService';
 import { fetchAllMoviesUnified } from '../../services/movieService';
-import { ADMIN_NAV_ITEMS, AdminSidebar } from './AdminSidebar';
+import {
+  ADMIN_NAV_ITEMS,
+  AdminSidebar,
+  canViewAdminSection,
+} from './AdminSidebar';
 import { DashboardOverviewSection } from './sections/DashboardOverviewSection';
 import { MediaUploadSection } from './sections/MediaUploadSection';
 import { MediaCatalogSection } from './sections/MediaCatalogSection';
@@ -47,6 +53,7 @@ interface AdminDashboardModalProps {
   onPlayMovie?: (movie: MediaItem) => void;
   initialTab?: 'upload' | 'manage' | 'email_settings' | AdminSectionId;
   currentUserEmail?: string | null;
+  allowAdminAccess?: boolean;
 }
 
 const PRIMARY_ADMIN_EMAIL = 'frassa.wwindows@gmail.com';
@@ -69,15 +76,22 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   onPlayMovie,
   initialTab = 'dashboard',
   currentUserEmail,
+  allowAdminAccess = false,
 }) => {
-  const isAuthorizedDeveloper =
-    (currentUserEmail || '').trim().toLowerCase() === PRIMARY_ADMIN_EMAIL;
+  const normalizedUserEmail = (currentUserEmail || '').trim().toLowerCase();
+  const isPrimaryDeveloper = normalizedUserEmail === PRIMARY_ADMIN_EMAIL;
+  const canOpenAdmin = isPrimaryDeveloper || Boolean(allowAdminAccess);
 
   // Auth State
   const [token, setToken] = useState<string | null>(getStoredAdminToken());
+  const [adminSession, setAdminSession] = useState<AdminSessionInfo | null>(() =>
+    getStoredAdminSession()
+  );
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [isCheckingAuth, setIsCheckingAuth] = useState<boolean>(true);
-  const [loginEmail, setLoginEmail] = useState<string>(PRIMARY_ADMIN_EMAIL);
+  const [loginEmail, setLoginEmail] = useState<string>(
+    normalizedUserEmail || PRIMARY_ADMIN_EMAIL
+  );
   const [loginPassword, setLoginPassword] = useState<string>('');
   const [loginError, setLoginError] = useState<string | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState<boolean>(false);
@@ -101,50 +115,74 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setActiveSection(mapInitialTabToSection(initialTab));
+      setLoginEmail(normalizedUserEmail || PRIMARY_ADMIN_EMAIL);
+      setLoginError(null);
     }
-  }, [isOpen, initialTab]);
+  }, [isOpen, initialTab, normalizedUserEmail]);
 
   // Verify admin session on open
   useEffect(() => {
     if (!isOpen) return;
 
     const verifyAuth = async () => {
-      if (!isAuthorizedDeveloper) {
+      if (!canOpenAdmin) {
         clearStoredAdminSession();
         setToken(null);
+        setAdminSession(null);
         setIsAuthenticated(false);
         setIsCheckingAuth(false);
         return;
       }
 
       setIsCheckingAuth(true);
+      const storedSession = getStoredAdminSession();
       let curToken = getStoredAdminToken();
 
-      if (!curToken) {
+      // Never reuse another user's cached admin token
+      if (
+        storedSession?.email &&
+        normalizedUserEmail &&
+        storedSession.email.trim().toLowerCase() !== normalizedUserEmail
+      ) {
+        clearStoredAdminSession();
+        curToken = null;
+      }
+
+      // Only the primary owner auto-authenticates without prompt
+      if (!curToken && isPrimaryDeveloper) {
         try {
           const res = await loginAdmin(PRIMARY_ADMIN_EMAIL, 'fr010020');
           curToken = res.token;
+          setAdminSession(res);
         } catch {
           // require manual login
         }
       }
 
       if (curToken) {
-        const valid = await verifyAdminToken(curToken);
-        if (valid) {
+        const verified = await verifyAdminSession(curToken);
+        if (
+          verified &&
+          (!normalizedUserEmail ||
+            verified.email.trim().toLowerCase() === normalizedUserEmail)
+        ) {
           setToken(curToken);
+          setAdminSession(verified);
           setIsAuthenticated(true);
           setIsCheckingAuth(false);
           return;
         }
+        clearStoredAdminSession();
       }
 
+      setToken(null);
+      setAdminSession(null);
       setIsAuthenticated(false);
       setIsCheckingAuth(false);
     };
 
     verifyAuth();
-  }, [isOpen, isAuthorizedDeveloper]);
+  }, [isOpen, canOpenAdmin, isPrimaryDeveloper, normalizedUserEmail]);
 
   const loadCoreData = async (activeToken = token) => {
     if (!activeToken) return;
@@ -171,18 +209,45 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
     }
   }, [isOpen, isAuthenticated, token]);
 
+  // Redirect collaborator away from restricted tabs automatically
+  useEffect(() => {
+    if (!adminSession) return;
+    if (
+      !canViewAdminSection(
+        activeSection,
+        adminSession.isSuperAdmin,
+        adminSession.permissions
+      )
+    ) {
+      const firstAllowed = ADMIN_NAV_ITEMS.find((item) =>
+        canViewAdminSection(item.id, adminSession.isSuperAdmin, adminSession.permissions)
+      );
+      setActiveSection(firstAllowed?.id || 'dashboard');
+    }
+  }, [activeSection, adminSession]);
+
   if (!isOpen) return null;
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError(null);
-    if (!isAuthorizedDeveloper || loginEmail.trim().toLowerCase() !== PRIMARY_ADMIN_EMAIL) {
-      setLoginError(`لوحة الإدارة محصورة بحساب المطور ${PRIMARY_ADMIN_EMAIL}`);
+    const enteredEmail = loginEmail.trim().toLowerCase();
+    if (!enteredEmail || !loginPassword.trim()) {
+      setLoginError('يرجى إدخال البريد الإلكتروني وكلمة مرور الإدارة');
+      return;
+    }
+    if (!canOpenAdmin) {
+      setLoginError(`لوحة الإدارة محصورة بحساب المطور ${PRIMARY_ADMIN_EMAIL} والمشرفين المعتمدين`);
+      return;
+    }
+    if (!isPrimaryDeveloper && enteredEmail !== normalizedUserEmail) {
+      setLoginError(`يجب استخدام البريد المسجل حالياً (${normalizedUserEmail})`);
       return;
     }
     setIsLoggingIn(true);
     try {
-      const res = await loginAdmin(loginEmail, loginPassword);
+      const res = await loginAdmin(enteredEmail, loginPassword);
+      setAdminSession(res);
       setToken(res.token);
       setIsAuthenticated(true);
       setLoginPassword('');
@@ -196,6 +261,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   const handleLogout = () => {
     clearStoredAdminSession();
     setToken(null);
+    setAdminSession(null);
     setIsAuthenticated(false);
     onClose();
   };
@@ -213,7 +279,21 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
   const seriesCount = mediaItems.filter((m) => m.type === 'series').length;
 
   // --- UNAUTHORIZED OR LOGIN SCREEN ---
-  if (!isAuthorizedDeveloper || isCheckingAuth || !isAuthenticated || !token) {
+  if (!canOpenAdmin || !isAuthenticated || !token) {
+    if (canOpenAdmin && isCheckingAuth) {
+      return (
+        <div
+          className="fixed inset-0 z-[110] bg-[#07070a]/95 backdrop-blur-md flex items-center justify-center p-4"
+          dir="rtl"
+        >
+          <div className="flex flex-col items-center gap-3 text-xs text-zinc-400">
+            <RefreshCw className="w-6 h-6 animate-spin text-amber-400" />
+            <span>جارٍ التحقق من صلاحية الإدارة...</span>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div
         className="fixed inset-0 z-[110] bg-[#07070a]/95 backdrop-blur-md flex items-center justify-center p-4"
@@ -227,7 +307,9 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
               </div>
               <div>
                 <h2 className="text-sm font-black text-white">لوحة إدارة GoldenFlix</h2>
-                <p className="text-[11px] font-mono text-zinc-400">{PRIMARY_ADMIN_EMAIL}</p>
+                <p className="text-[11px] font-mono text-zinc-400">
+                  {normalizedUserEmail || PRIMARY_ADMIN_EMAIL}
+                </p>
               </div>
             </div>
             <button
@@ -239,14 +321,14 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
             </button>
           </div>
 
-          {!isAuthorizedDeveloper ? (
+          {!canOpenAdmin ? (
             <div className="py-4 text-center space-y-3">
               <div className="w-12 h-12 rounded-2xl bg-rose-500/15 text-rose-400 flex items-center justify-center mx-auto">
                 <Lock className="w-6 h-6" />
               </div>
-              <h3 className="text-sm font-black text-white">وصول مقتصر على المطور الرئيسي</h3>
+              <h3 className="text-sm font-black text-white">وصول مقتصر على الإدارة</h3>
               <p className="text-xs text-zinc-400 leading-relaxed">
-                يرجى تسجيل الدخول في المنصة بالبريد المعتمد:{' '}
+                يرجى تسجيل الدخول في المنصة بحساب المطور أو بريد مشرف معتمد:{' '}
                 <span className="text-amber-400 font-mono">{PRIMARY_ADMIN_EMAIL}</span>
               </p>
               <button
@@ -257,11 +339,6 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                 إغلاق
               </button>
             </div>
-          ) : isCheckingAuth ? (
-            <div className="py-12 text-center text-zinc-400 space-y-2">
-              <RefreshCw className="w-7 h-7 animate-spin mx-auto text-amber-400" />
-              <p className="text-xs">جارٍ التحقق من جلسة الإدارة...</p>
-            </div>
           ) : (
             <form onSubmit={handleLogin} className="space-y-3.5 text-xs">
               {loginError && (
@@ -271,18 +348,21 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                 </div>
               )}
               <div>
-                <label className="block text-zinc-300 font-bold mb-1">بريد المطور</label>
+                <label className="block text-zinc-300 font-bold mb-1">البريد الإلكتروني للمشرف</label>
                 <input
                   type="email"
                   dir="ltr"
                   required
+                  readOnly={!isPrimaryDeveloper && Boolean(normalizedUserEmail)}
                   value={loginEmail}
                   onChange={(e) => setLoginEmail(e.target.value)}
                   className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3.5 py-2.5 text-amber-300 font-mono"
                 />
               </div>
               <div>
-                <label className="block text-zinc-300 font-bold mb-1">كلمة مرور الإدارة</label>
+                <label className="block text-zinc-300 font-bold mb-1">
+                  كلمة مرور الإدارة {!isPrimaryDeveloper && '(تتضمن VBL/9)'}
+                </label>
                 <input
                   type="password"
                   dir="ltr"
@@ -290,7 +370,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                   autoFocus
                   value={loginPassword}
                   onChange={(e) => setLoginPassword(e.target.value)}
-                  placeholder="••••••••"
+                  placeholder={!isPrimaryDeveloper ? 'أدخل كلمة المرور المحتوية على VBL/9' : '••••••••'}
                   className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3.5 py-2.5 text-white"
                 />
               </div>
@@ -324,6 +404,8 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
         onToggleCollapse={() => setSidebarCollapsed((v) => !v)}
         mobileOpen={mobileDrawerOpen}
         onCloseMobile={() => setMobileDrawerOpen(false)}
+        isSuperAdmin={adminSession?.isSuperAdmin ?? isPrimaryDeveloper}
+        permissions={adminSession?.permissions}
         counts={{
           movies: movieCount,
           series: seriesCount,
@@ -363,7 +445,12 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
           <div className="flex items-center gap-2 shrink-0">
             <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white/[0.04] border border-white/[0.08] text-[11px] font-mono text-zinc-300">
               <Shield className="w-3.5 h-3.5 text-amber-400" />
-              <span>{PRIMARY_ADMIN_EMAIL}</span>
+              <span>{adminSession?.email || normalizedUserEmail || PRIMARY_ADMIN_EMAIL}</span>
+              {adminSession?.roleTitle && !adminSession.isSuperAdmin && (
+                <span className="px-1.5 py-0.5 rounded bg-amber-400/15 text-amber-300 font-sans text-[10px] font-bold">
+                  {adminSession.roleTitle}
+                </span>
+              )}
             </div>
 
             <button
@@ -526,15 +613,23 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                     token={token}
                     categories={categories}
                     people={people}
-                    onRefreshCategories={() => fetchCategories(token).then(setCategories).catch(() => {})}
+                    onRefreshCategories={() => {
+                      fetchCategories(token).then(setCategories).catch(() => {});
+                      onSettingsChanged?.();
+                    }}
                     onRefreshPeople={() => fetchPeople(token).then(setPeople).catch(() => {})}
+                    onCategoriesUpdated={() => onSettingsChanged?.()}
                   />
                 )}
 
                 {(activeSection === 'users' ||
                   activeSection === 'analytics' ||
                   activeSection === 'views_management') && (
-                  <UsersAnalyticsSections mode={activeSection} token={token} />
+                  <UsersAnalyticsSections
+                    mode={activeSection}
+                    token={token}
+                    onViewsReset={handleMediaUpdated}
+                  />
                 )}
 
                 {(activeSection === 'banners_home' ||
@@ -546,7 +641,9 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                     mode={activeSection}
                     token={token}
                     mediaItems={mediaItems}
+                    isSuperAdmin={Boolean(adminSession?.isSuperAdmin ?? isPrimaryDeveloper)}
                     onSettingsUpdated={() => onSettingsChanged?.()}
+                    onAdminsChanged={() => onSettingsChanged?.()}
                   />
                 )}
               </motion.div>

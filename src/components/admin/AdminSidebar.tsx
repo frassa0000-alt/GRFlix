@@ -25,7 +25,49 @@ import {
   UserCheck,
   X,
 } from 'lucide-react';
-import { AdminSectionId } from '../../types';
+import { AdminPermissions, AdminSectionId } from '../../types';
+
+export const canViewAdminSection = (
+  id: AdminSectionId,
+  isSuperAdmin: boolean = true,
+  permissions?: AdminPermissions
+): boolean => {
+  if (isSuperAdmin || !permissions) return true;
+  switch (id) {
+    case 'admins_permissions':
+      return false;
+    case 'users':
+      return Boolean(permissions.canManageUsers);
+    case 'add_movie':
+    case 'add_series':
+    case 'seasons_episodes':
+    case 'video_library':
+      return Boolean(permissions.canUpload);
+    case 'movies':
+    case 'series':
+    case 'categories':
+    case 'cast_directors':
+    case 'playback_links':
+      return Boolean(
+        permissions.canUpload || permissions.canEditMedia || permissions.canDeleteMedia
+      );
+    case 'comments_ratings':
+    case 'notifications':
+      return Boolean(
+        permissions.canEditMedia || permissions.canManageUsers || permissions.canManageSettings
+      );
+    case 'banners_home':
+    case 'player_settings':
+    case 'site_settings':
+    case 'audit_logs':
+      return Boolean(permissions.canManageSettings);
+    case 'dashboard':
+    case 'analytics':
+    case 'views_management':
+    default:
+      return true;
+  }
+};
 
 export interface AdminNavItem {
   id: AdminSectionId;
@@ -76,6 +118,8 @@ interface AdminSidebarProps {
   mobileOpen: boolean;
   onCloseMobile: () => void;
   counts?: Partial<Record<AdminSectionId, number>>;
+  isSuperAdmin?: boolean;
+  permissions?: AdminPermissions;
 }
 
 export const AdminSidebar: React.FC<AdminSidebarProps> = ({
@@ -86,8 +130,13 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   mobileOpen,
   onCloseMobile,
   counts = {},
+  isSuperAdmin = true,
+  permissions,
 }) => {
-  const groups = Array.from(new Set(ADMIN_NAV_ITEMS.map((item) => item.group)));
+  const visibleItems = ADMIN_NAV_ITEMS.filter((item) =>
+    canViewAdminSection(item.id, isSuperAdmin, permissions)
+  );
+  const groups = Array.from(new Set(visibleItems.map((item) => item.group)));
 
   const renderNavBody = (isMobileDrawer: boolean) => {
     const showLabels = isMobileDrawer || !collapsed;
@@ -136,7 +185,8 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
         {/* Navigation Links */}
         <nav className="flex-1 overflow-y-auto py-3 px-2.5 space-y-4 no-scrollbar">
           {groups.map((group) => {
-            const items = ADMIN_NAV_ITEMS.filter((i) => i.group === group);
+            const items = visibleItems.filter((i) => i.group === group);
+            if (items.length === 0) return null;
             return (
               <div key={group} className="space-y-1">
                 {showLabels && (

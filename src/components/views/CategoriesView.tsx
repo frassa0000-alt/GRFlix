@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { MediaItem, MediaType, WatchProgress } from '../../types';
+import { CategoryItem, MediaItem, MediaType, WatchProgress } from '../../types';
 import { MediaCard } from '../cards/MediaCard';
 import { useLanguage } from '../../contexts/LanguageContext';
 import {
@@ -22,6 +22,7 @@ import {
   SlidersHorizontal,
   Sparkles,
   Calendar,
+  Tags,
 } from 'lucide-react';
 
 interface CategoriesViewProps {
@@ -32,6 +33,7 @@ interface CategoriesViewProps {
   alertSubscribedIds?: string[];
   onToggleAlert?: (id: string) => void;
   history?: WatchProgress[];
+  categories?: CategoryItem[];
 }
 
 interface GenreConfig {
@@ -51,6 +53,7 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({
   alertSubscribedIds = [],
   onToggleAlert,
   history = [],
+  categories = [],
 }) => {
   const { lang, dir, t } = useLanguage();
   const [selectedType, setSelectedType] = useState<MediaType | 'all'>('all');
@@ -58,19 +61,51 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({
   const [selectedYear, setSelectedYear] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'latest' | 'rating'>('latest');
 
-  const genresList: GenreConfig[] = [
-    { id: 'all', labelAr: 'جميع التصنيفات', labelEn: 'All Genres', subtitleAr: 'استكشف كافة الأعمال', subtitleEn: 'Explore every title', icon: Layers },
-    { id: 'action', labelAr: 'أكشن وحركة', labelEn: 'Action', subtitleAr: 'إثارة ومطاردات سينمائية', subtitleEn: 'High-octane thrills', icon: Zap },
-    { id: 'sci-fi', labelAr: 'خيال علمي', labelEn: 'Sci-Fi', subtitleAr: 'عوالم مستقبلية وفضاء', subtitleEn: 'Futuristic worlds & space', icon: Rocket },
-    { id: 'drama', labelAr: 'دراما وسينما', labelEn: 'Drama', subtitleAr: 'قصص إنسانية ومشاعر عميقة', subtitleEn: 'Compelling stories', icon: Clapperboard },
-    { id: 'horror', labelAr: 'رعب وتشويق', labelEn: 'Horror & Thriller', subtitleAr: 'غموض ولحظات حبس أنفاس', subtitleEn: 'Chilling suspense', icon: Ghost },
-    { id: 'comedy', labelAr: 'كوميديا ومرح', labelEn: 'Comedy', subtitleAr: 'ضحك وأوقات عائلية ممتعة', subtitleEn: 'Laughs & good times', icon: Laugh },
-    { id: 'adventure', labelAr: 'مغامرات', labelEn: 'Adventure', subtitleAr: 'رحلات واستكشافات ملحمية', subtitleEn: 'Epic journeys', icon: Compass },
-    { id: 'crime', labelAr: 'جريمة وغموض', labelEn: 'Crime & Mystery', subtitleAr: 'تحقيقات وألغاز مثيرة', subtitleEn: 'Detectives & intrigue', icon: ShieldAlert },
-    { id: 'history', labelAr: 'تاريخ وحضارة', labelEn: 'History', subtitleAr: 'أحداث وشخصيات ملهمة', subtitleEn: 'True events & eras', icon: Hourglass },
-    { id: 'romance', labelAr: 'رومانسي', labelEn: 'Romance', subtitleAr: 'عواطف وعلاقات مؤثرة', subtitleEn: 'Heartfelt stories', icon: Heart },
-    { id: 'anime', labelAr: 'أنمي وفانتازيا', labelEn: 'Fantasy', subtitleAr: 'رسوم يابانية وأساطير', subtitleEn: 'Myth & fantasy worlds', icon: Flame },
-  ];
+  const genresList: GenreConfig[] = useMemo(() => {
+    const defaultGenres: GenreConfig[] = [
+      { id: 'action', labelAr: 'أكشن وحركة', labelEn: 'Action', subtitleAr: 'إثارة ومطاردات سينمائية', subtitleEn: 'High-octane thrills', icon: Zap },
+      { id: 'sci-fi', labelAr: 'خيال علمي', labelEn: 'Sci-Fi', subtitleAr: 'عوالم مستقبلية وفضاء', subtitleEn: 'Futuristic worlds & space', icon: Rocket },
+      { id: 'drama', labelAr: 'دراما وسينما', labelEn: 'Drama', subtitleAr: 'قصص إنسانية ومشاعر عميقة', subtitleEn: 'Compelling stories', icon: Clapperboard },
+      { id: 'horror', labelAr: 'رعب وتشويق', labelEn: 'Horror & Thriller', subtitleAr: 'غموض ولحظات حبس أنفاس', subtitleEn: 'Chilling suspense', icon: Ghost },
+      { id: 'comedy', labelAr: 'كوميديا ومرح', labelEn: 'Comedy', subtitleAr: 'ضحك وأوقات عائلية ممتعة', subtitleEn: 'Laughs & good times', icon: Laugh },
+      { id: 'adventure', labelAr: 'مغامرات', labelEn: 'Adventure', subtitleAr: 'رحلات واستكشافات ملحمية', subtitleEn: 'Epic journeys', icon: Compass },
+      { id: 'crime', labelAr: 'جريمة وغموض', labelEn: 'Crime & Mystery', subtitleAr: 'تحقيقات وألغاز مثيرة', subtitleEn: 'Detectives & intrigue', icon: ShieldAlert },
+      { id: 'history', labelAr: 'تاريخ وحضارة', labelEn: 'History', subtitleAr: 'أحداث وشخصيات ملهمة', subtitleEn: 'True events & eras', icon: Hourglass },
+      { id: 'romance', labelAr: 'رومانسي', labelEn: 'Romance', subtitleAr: 'عواطف وعلاقات مؤثرة', subtitleEn: 'Heartfelt stories', icon: Heart },
+      { id: 'anime', labelAr: 'أنمي وفانتازيا', labelEn: 'Fantasy', subtitleAr: 'رسوم يابانية وأساطير', subtitleEn: 'Myth & fantasy worlds', icon: Flame },
+    ];
+    const allCard: GenreConfig = {
+      id: 'all',
+      labelAr: 'جميع التصنيفات',
+      labelEn: 'All Genres',
+      subtitleAr: 'استكشف كافة الأعمال',
+      subtitleEn: 'Explore every title',
+      icon: Layers,
+    };
+
+    if (!Array.isArray(categories) || categories.length === 0) {
+      return [allCard, ...defaultGenres];
+    }
+
+    const defaultMap = new Map(defaultGenres.map((g) => [g.id, g]));
+    const visibleDynamic: GenreConfig[] = [...categories]
+      .filter((c) => c.isVisible !== false)
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+      .map((cat) => {
+        const slug = String(cat.slug || cat.id).toLowerCase().trim();
+        const preset = defaultMap.get(slug);
+        return {
+          id: slug,
+          labelAr: cat.nameAr || preset?.labelAr || slug,
+          labelEn: cat.nameEn || preset?.labelEn || slug,
+          subtitleAr: cat.description || preset?.subtitleAr || 'تصنيف سينمائي مميز',
+          subtitleEn: cat.description || preset?.subtitleEn || 'Curated cinema genre',
+          icon: preset?.icon || Tags,
+        };
+      });
+
+    return [allCard, ...visibleDynamic];
+  }, [categories]);
 
   const genreCounts = useMemo(() => {
     const counts: Record<string, number> = { all: 0 };
@@ -95,7 +130,7 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({
     });
 
     return counts;
-  }, [mediaItems, selectedType]);
+  }, [mediaItems, selectedType, genresList]);
 
   const baseFilteredItems = useMemo(() => {
     return mediaItems.filter((item) => {

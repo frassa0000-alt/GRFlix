@@ -1,0 +1,18 @@
+[
+  {
+    "id": "admin-super-1",
+    "email": "frassa.wwindows@gmail.com",
+    "name": "مطور المنصة الرئيسي",
+    "roleTitle": "مالك المنصة (Super Admin)",
+    "isSuperAdmin": true,
+    "isActive": true,
+    "permissions": {
+      "canUpload": true,
+      "canEditMedia": true,
+      "canDeleteMedia": true,
+      "canManageUsers": true,
+      "canManageSettings": true
+    },
+    "createdAt": 1795011867228
+  }
+]

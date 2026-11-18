@@ -291,8 +291,11 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
       return;
     }
 
-    if (!epVideoFile && !epVideoUrl.trim()) {
-      setSeasonFeedback({ type: 'error', msg: 'يرجى اختيار ملف فيديو للحلقة أو إدخال رابط تشغيل' });
+    if (!epVideoFile && !epVideoUrl.trim() && !epGrUrl.trim() && !epGUrl.trim()) {
+      setSeasonFeedback({
+        type: 'error',
+        msg: 'يرجى اختيار ملف فيديو للحلقة أو إدخال رابط تشغيل (الرئيسي أو مشغل GR / G)',
+      });
       return;
     }
 
@@ -319,6 +322,16 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
     const episodeSources: VideoSourceOption[] = [];
     const trimmedGr = epGrUrl.trim();
     const trimmedG = epGUrl.trim();
+    if (finalVideoUrl && (trimmedGr || trimmedG)) {
+      episodeSources.push({
+        id: 'primary',
+        label: 'المصدر الرئيسي',
+        url: finalVideoUrl,
+        format: resolveMediaFormat(finalVideoUrl),
+        quality: activeSeries.videoQuality || '1080p HD',
+        isDefault: true,
+      });
+    }
     if (trimmedGr) {
       episodeSources.push({
         id: 'server-gr',
@@ -336,7 +349,7 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
         url: trimmedG,
         format: resolveMediaFormat(trimmedG),
         quality: 'HD',
-        isDefault: false,
+        isDefault: !finalVideoUrl && !trimmedGr,
       });
     }
 

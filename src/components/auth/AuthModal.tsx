@@ -38,6 +38,8 @@ export interface AuthModalProps {
   onOpenInfoPage?: (page: InfoPageId) => void;
   initialTab?: 'login' | 'register';
   currentUserEmail?: string | null;
+  hasAdminAccess?: boolean;
+  allowNewRegistrations?: boolean;
 }
 
 type AuthTab = 'login' | 'register' | 'forgot_password';
@@ -50,6 +52,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onOpenInfoPage,
   initialTab = 'login',
   currentUserEmail,
+  hasAdminAccess = false,
+  allowNewRegistrations = true,
 }) => {
   const { lang, dir, t } = useLanguage();
   const [activeTab, setActiveTab] = useState<AuthTab>(initialTab);
@@ -69,7 +73,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   const isDeveloperEmail =
     email.trim().toLowerCase() === 'frassa.wwindows@gmail.com' ||
-    (currentUserEmail || '').trim().toLowerCase() === 'frassa.wwindows@gmail.com';
+    (currentUserEmail || '').trim().toLowerCase() === 'frassa.wwindows@gmail.com' ||
+    Boolean(hasAdminAccess);
 
   useEffect(() => {
     if (isOpen) {
@@ -156,6 +161,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     resetFeedback();
+
+    if (!allowNewRegistrations) {
+      setErrorMessage(
+        t(
+          'تسجيل الحسابات الجديدة متوقف مؤقتاً من قبل الإدارة.',
+          'New account registrations are temporarily closed.'
+        )
+      );
+      return;
+    }
 
     const cleanName = displayName.trim();
     const cleanEmail = email.trim().toLowerCase();
@@ -358,11 +373,34 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         </button>
 
         {/* Compact Brand Header */}
-        <div className="text-center pb-3">
+        <div className="text-center pb-2.5">
           <h2 className="text-base font-black text-white tracking-tight">
             Golden<span className="text-amber-400">Flix</span>
           </h2>
-          <p className="text-[11px] text-zinc-400 mt-0.5">
+
+          {/* Transparent Frameless Looping Video Preview */}
+          <div className="mt-2 flex items-center justify-center gap-2.5 bg-transparent">
+            <video
+              src="/assets/auth-phone-preview.mp4"
+              autoPlay
+              muted
+              loop
+              playsInline
+              preload="auto"
+              aria-label="GoldenFlix"
+              className="w-[100px] h-[55px] shrink-0 object-contain bg-transparent pointer-events-none select-none"
+            />
+            <div className={`min-w-0 flex-1 ${dir === 'ltr' ? 'text-left' : 'text-right'}`}>
+              <p className="text-[11px] font-black text-amber-400 leading-tight">
+                {t('تصفح في موقعنا الان', 'Browse on our site now')}
+              </p>
+              <p className="text-[10.5px] font-bold text-zinc-200 leading-snug mt-0.5">
+                {t('متاح على جميع المنصات', 'Available on all platforms')}
+              </p>
+            </div>
+          </div>
+
+          <p className="text-[11px] text-zinc-400 mt-2">
             {activeTab === 'login' && t('تسجيل الدخول', 'Sign In')}
             {activeTab === 'register' && t('إنشاء حساب جديد', 'Create Account')}
             {activeTab === 'forgot_password' && t('استعادة كلمة المرور', 'Reset Password')}

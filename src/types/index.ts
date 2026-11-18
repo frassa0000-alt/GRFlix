@@ -305,6 +305,23 @@ export interface AuditLogEntry {
   createdAt: number;
 }
 
+export interface AdminPermissions {
+  canUpload: boolean;
+  canEditMedia: boolean;
+  canDeleteMedia: boolean;
+  canManageUsers: boolean;
+  canManageSettings: boolean;
+}
+
+export interface AdminSessionInfo {
+  token: string;
+  email: string;
+  name?: string;
+  roleTitle?: string;
+  isSuperAdmin: boolean;
+  permissions: AdminPermissions;
+}
+
 export interface AdminMember {
   id: string;
   email: string;
@@ -312,13 +329,10 @@ export interface AdminMember {
   roleTitle: string;
   isSuperAdmin: boolean;
   isActive: boolean;
-  permissions: {
-    canUpload: boolean;
-    canEditMedia: boolean;
-    canDeleteMedia: boolean;
-    canManageUsers: boolean;
-    canManageSettings: boolean;
-  };
+  hasPassword?: boolean;
+  password?: string;
+  passwordHint?: string;
+  permissions: AdminPermissions;
   createdAt: number;
 }
 

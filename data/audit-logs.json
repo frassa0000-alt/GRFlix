@@ -1,5 +1,85 @@
 [
   {
+    "id": "log-1795013357160-81973",
+    "action": "سحب صلاحية إدارية",
+    "category": "security",
+    "details": "تم سحب صلاحية coeditor-test@goldenflix.test",
+    "adminEmail": "frassa.wwindows@gmail.com",
+    "createdAt": 1795013357160
+  },
+  {
+    "id": "log-1795013357006-56292",
+    "action": "تسجيل دخول مشرف مساعد",
+    "category": "auth",
+    "details": "دخول Test CoEditor (محرر متعاون)",
+    "adminEmail": "coeditor-test@goldenflix.test",
+    "createdAt": 1795013357006
+  },
+  {
+    "id": "log-1795013356859-58534",
+    "action": "إضافة صلاحية مدير",
+    "category": "security",
+    "details": "تمت إضافة coeditor-test@goldenflix.test بدور محرر متعاون",
+    "adminEmail": "frassa.wwindows@gmail.com",
+    "createdAt": 1795013356859
+  },
+  {
+    "id": "log-1795013356254-3976",
+    "action": "تسجيل دخول لوحة التحكم",
+    "category": "auth",
+    "details": "دخول المشرف frassa.wwindows@gmail.com",
+    "adminEmail": "frassa.wwindows@gmail.com",
+    "createdAt": 1795013356254
+  },
+  {
+    "id": "log-1795013346739-4263",
+    "action": "سحب صلاحية إدارية",
+    "category": "security",
+    "details": "تم سحب صلاحية coeditor-test@goldenflix.test",
+    "adminEmail": "frassa.wwindows@gmail.com",
+    "createdAt": 1795013346739
+  },
+  {
+    "id": "log-1795013346699-44522",
+    "action": "تسجيل دخول لوحة التحكم",
+    "category": "auth",
+    "details": "دخول المشرف frassa.wwindows@gmail.com",
+    "adminEmail": "frassa.wwindows@gmail.com",
+    "createdAt": 1795013346699
+  },
+  {
+    "id": "log-1795013332241-1444",
+    "action": "تسجيل دخول مشرف مساعد",
+    "category": "auth",
+    "details": "دخول Test CoEditor (محرر متعاون)",
+    "adminEmail": "coeditor-test@goldenflix.test",
+    "createdAt": 1795013332241
+  },
+  {
+    "id": "log-1795013332113-21798",
+    "action": "محاولة دخول إدارية فاشلة",
+    "category": "security",
+    "details": "كلمة مرور خاطئة للمشرف المساعد coeditor-test@goldenflix.test",
+    "adminEmail": "coeditor-test@goldenflix.test",
+    "createdAt": 1795013332113
+  },
+  {
+    "id": "log-1795013331972-42447",
+    "action": "إضافة صلاحية مدير",
+    "category": "security",
+    "details": "تمت إضافة coeditor-test@goldenflix.test بدور محرر متعاون",
+    "adminEmail": "frassa.wwindows@gmail.com",
+    "createdAt": 1795013331972
+  },
+  {
+    "id": "log-1795013331775-63772",
+    "action": "تسجيل دخول لوحة التحكم",
+    "category": "auth",
+    "details": "دخول المشرف frassa.wwindows@gmail.com",
+    "adminEmail": "frassa.wwindows@gmail.com",
+    "createdAt": 1795013331775
+  },
+  {
     "id": "log-1794865293295-799",
     "action": "تسجيل دخول لوحة التحكم",
     "category": "auth",

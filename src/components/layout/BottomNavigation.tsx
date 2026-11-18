@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Home, Search, Heart, Settings } from 'lucide-react';
+import { Home, LayoutGrid, Heart, Settings } from 'lucide-react';
 import { BottomNavTab } from '../../types';
 import { useLanguage } from '../../contexts/LanguageContext';
 
@@ -24,7 +24,7 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
     icon: React.ComponentType<{ className?: string }>;
   }[] = [
     { id: 'home', labelAr: 'الرئيسية', labelEn: 'Home', icon: Home },
-    { id: 'search', labelAr: 'البحث', labelEn: 'Search', icon: Search },
+    { id: 'categories', labelAr: 'التصنيفات', labelEn: 'Categories', icon: LayoutGrid },
     { id: 'favorites', labelAr: 'المفضلة', labelEn: 'Favorites', icon: Heart },
     { id: 'settings', labelAr: 'الإعدادات', labelEn: 'Settings', icon: Settings },
   ];
@@ -35,10 +35,10 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
   };
 
   return (
-    <div className="fixed bottom-2.5 inset-x-0 z-40 md:hidden pb-[env(safe-area-inset-bottom)] flex justify-center px-4 pointer-events-none select-none">
+    <div className="fixed bottom-3 inset-x-0 z-40 md:hidden pb-[env(safe-area-inset-bottom)] flex justify-center px-4 pointer-events-none select-none">
       <nav
         aria-label={t('التنقل السفلي للموبايل', 'Mobile bottom navigation')}
-        className="pointer-events-auto relative inline-flex items-center gap-1 rounded-full bg-[#101116]/75 backdrop-blur-xl border border-white/[0.12] p-1 shadow-[0_12px_32px_rgba(0,0,0,0.65),inset_0_1px_0_rgba(255,255,255,0.14)]"
+        className="pointer-events-auto relative inline-flex items-center gap-2 sm:gap-3 rounded-full bg-[#151619]/95 backdrop-blur-xl border border-white/[0.1] p-1.5 shadow-[0_14px_34px_rgba(0,0,0,0.78)]"
       >
         {tabs.map((tab) => {
           const Icon = tab.icon;
@@ -52,40 +52,24 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
               whileTap={{ scale: 0.92 }}
               transition={{ type: 'spring', stiffness: 520, damping: 30 }}
               onClick={() => onSelectTab(tab.id)}
-              className={`relative min-w-[66px] min-h-[42px] px-3 py-1 flex flex-col items-center justify-center gap-0.5 rounded-full transition-colors duration-200 cursor-pointer ${
-                active ? 'text-[#F7C600]' : 'text-zinc-400 hover:text-zinc-200'
-              }`}
+              aria-label={label}
+              title={label}
+              className="relative w-12 h-12 rounded-full flex items-center justify-center transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
             >
               {active && (
                 <motion.div
-                  layoutId="bottomNavActivePill"
-                  transition={{ type: 'spring', stiffness: 440, damping: 34 }}
-                  className="absolute inset-0 rounded-full bg-[#F7C600]/[0.13] border border-[#F7C600]/30 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]"
+                  layoutId="bottomNavActiveCircle"
+                  transition={{ type: 'spring', stiffness: 460, damping: 32 }}
+                  className="absolute inset-0 rounded-full bg-white shadow-[0_4px_14px_rgba(0,0,0,0.35)]"
                 />
               )}
 
-              <span
-                className={`relative z-10 flex items-center justify-center transition-transform duration-200 ${
-                  active ? '-translate-y-[0.5px]' : ''
-                }`}
-              >
+              <span className="relative z-10 flex items-center justify-center">
                 <Icon
-                  className={`w-[17px] h-[17px] transition-all duration-200 ${
-                    active
-                      ? tab.id === 'favorites'
-                        ? 'fill-[#F7C600] text-[#F7C600] stroke-[1.9]'
-                        : 'text-[#F7C600] stroke-[2.2]'
-                      : 'stroke-[1.9]'
+                  className={`w-[21px] h-[21px] transition-colors duration-200 stroke-[2.1] ${
+                    active ? 'text-[#151619]' : 'text-white'
                   }`}
                 />
-              </span>
-
-              <span
-                className={`relative z-10 text-[9.5px] leading-none whitespace-nowrap transition-all ${
-                  active ? 'font-bold text-[#F7C600]' : 'font-medium text-zinc-400'
-                }`}
-              >
-                {label}
               </span>
             </motion.button>
           );

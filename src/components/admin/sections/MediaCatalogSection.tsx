@@ -704,6 +704,50 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
               />
             </div>
 
+            <div className="text-xs">
+              <label className="block text-zinc-400 mb-1.5 font-bold">التصنيفات</label>
+              <div className="flex flex-wrap gap-1.5">
+                {(categories.length > 0
+                  ? categories.map((c) => ({ slug: c.slug, nameAr: c.nameAr }))
+                  : [
+                      { slug: 'action', nameAr: 'أكشن' },
+                      { slug: 'drama', nameAr: 'دراما' },
+                      { slug: 'sci-fi', nameAr: 'خيال علمي' },
+                      { slug: 'horror', nameAr: 'رعب وتشويق' },
+                      { slug: 'comedy', nameAr: 'كوميديا' },
+                      { slug: 'adventure', nameAr: 'مغامرات' },
+                      { slug: 'crime', nameAr: 'جريمة' },
+                      { slug: 'romance', nameAr: 'رومانسي' },
+                      { slug: 'anime', nameAr: 'أنمي' },
+                    ]
+                ).map((g) => {
+                  const curGenres = Array.isArray(editingItem.genres) ? editingItem.genres : [];
+                  const active = curGenres.includes(g.slug);
+                  return (
+                    <button
+                      key={g.slug}
+                      type="button"
+                      onClick={() => {
+                        const next = active
+                          ? curGenres.length > 1
+                            ? curGenres.filter((x) => x !== g.slug)
+                            : curGenres
+                          : [...curGenres, g.slug];
+                        setEditingItem({ ...editingItem, genres: next });
+                      }}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border cursor-pointer ${
+                        active
+                          ? 'bg-amber-400 text-black border-amber-400'
+                          : 'bg-zinc-950 text-zinc-400 border-white/10 hover:text-white'
+                      }`}
+                    >
+                      {g.nameAr}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             <div className="flex flex-wrap gap-4 text-xs text-zinc-200 pt-1">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input

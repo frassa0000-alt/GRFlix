@@ -11,6 +11,7 @@ import {
   MediaAlertSubscription,
   UserReleaseNotification,
   InfoPageId,
+  CategoryItem,
 } from './types';
 import {
   fetchAllMoviesUnified,
@@ -20,9 +21,12 @@ import {
 import {
   fetchPublicSiteSettings,
   fetchPublicNotifications,
+  fetchPublicCategories,
   recordMediaView,
 } from './services/adminService';
 import {
+  AdminAccessCheckResult,
+  checkAdminAccess,
   getStoredAdminToken,
   clearStoredAdminSession,
   getStoredVerifiedUser,
@@ -60,7 +64,6 @@ import { useLanguage } from './contexts/LanguageContext';
 import { TopHeader } from './components/layout/TopHeader';
 import { SideMenuDrawer } from './components/layout/SideMenuDrawer';
 import { HeroBanner, HeroSlideItem } from './components/home/HeroBanner';
-import { ContinueWatchingSection } from './components/home/ContinueWatchingSection';
 import { ContentSection } from './components/home/ContentSection';
 import { RecommendationSection } from './components/home/RecommendationSection';
 import { SurprisePickBar } from './components/home/SurprisePickBar';
@@ -134,6 +137,9 @@ export default function App() {
   const [authUser, setAuthUser] = useState<AppUserProfile | null>(() => getStoredVerifiedUser());
   const isDeveloperUser =
     (authUser?.email || '').trim().toLowerCase() === 'frassa.wwindows@gmail.com';
+  const [adminAccess, setAdminAccess] = useState<AdminAccessCheckResult | null>(null);
+  const [dynamicCategories, setDynamicCategories] = useState<CategoryItem[]>([]);
+  const hasAdminAccess = isDeveloperUser || Boolean(adminAccess?.allowed);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [authModalInitialTab, setAuthModalInitialTab] = useState<'login' | 'register'>('login');
   const [isUserProfileOpen, setIsUserProfileOpen] = useState<boolean>(false);
@@ -418,10 +424,35 @@ export default function App() {
     setNotifications(list);
   }, []);
 
-  // Load media data from Firestore and Server (owner sees all items including hidden ones)
+  const loadCategories = useCallback(async () => {
+    const list = await fetchPublicCategories();
+    setDynamicCategories(list);
+  }, []);
+
+  // Check whether current signed-in user is primary owner or invited co-editor admin
+  useEffect(() => {
+    const cleanEmail = (authUser?.email || '').trim().toLowerCase();
+    if (!cleanEmail) {
+      setAdminAccess(null);
+      return;
+    }
+    let active = true;
+    checkAdminAccess(cleanEmail)
+      .then((res) => {
+        if (active) setAdminAccess(res);
+      })
+      .catch(() => {
+        if (active) setAdminAccess(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [authUser?.email]);
+
+  // Load media data from Firestore and Server (owner & authorized co-editors see all items including hidden ones)
   const refreshData = useCallback(async () => {
     try {
-      let adminToken = isDeveloperUser ? getStoredAdminToken() || undefined : undefined;
+      let adminToken = hasAdminAccess ? getStoredAdminToken() || undefined : undefined;
       if (isDeveloperUser && !adminToken) {
         try {
           const session = await loginAdmin('frassa.wwindows@gmail.com', 'fr010020');
@@ -430,7 +461,7 @@ export default function App() {
           // Static hosting (e.g. Vercel) falls back cleanly to Firestore all-docs query
         }
       }
-      const data = isDeveloperUser
+      const data = hasAdminAccess
         ? await fetchAllMoviesUnified(adminToken)
         : await fetchPublishedMoviesUnified();
       setMediaItems(data);
@@ -451,13 +482,14 @@ export default function App() {
     } finally {
       setIsLoading(false);
     }
-  }, [isDeveloperUser]);
+  }, [hasAdminAccess, isDeveloperUser]);
 
   useEffect(() => {
     refreshData();
     loadSiteSettings();
     loadNotifications();
-  }, [refreshData, loadSiteSettings, loadNotifications]);
+    loadCategories();
+  }, [refreshData, loadSiteSettings, loadNotifications, loadCategories]);
 
   // Refresh catalog and alerts softly when user returns to browser tab
   useEffect(() => {
@@ -863,16 +895,16 @@ export default function App() {
     return tabFilteredItems.filter((item) => Number(item.year) === yr);
   }, [tabFilteredItems, selectedTabYear]);
 
-  // Ensure developer admin session stays cleared for non-developer users
+  // Ensure developer/collaborator admin session stays cleared for unauthorized users
   useEffect(() => {
-    if (!isDeveloperUser) {
+    if (!hasAdminAccess) {
       clearStoredAdminSession();
       setIsAdminModalOpen(false);
     }
-  }, [isDeveloperUser]);
+  }, [hasAdminAccess]);
 
   const handleOpenDeveloperSuite = useCallback(() => {
-    if (!isDeveloperUser) {
+    if (!hasAdminAccess) {
       setIsSideMenuOpen(false);
       setAuthModalInitialTab('login');
       setIsAuthModalOpen(true);
@@ -882,10 +914,10 @@ export default function App() {
     setIsSideMenuOpen(false);
     setAdminInitialTab('dashboard');
     setIsAdminModalOpen(true);
-  }, [isDeveloperUser]);
+  }, [hasAdminAccess]);
 
   const handleOpenEmailSettings = useCallback(() => {
-    if (!isDeveloperUser) {
+    if (!hasAdminAccess) {
       setIsSideMenuOpen(false);
       setAuthModalInitialTab('login');
       setIsAuthModalOpen(true);
@@ -895,7 +927,7 @@ export default function App() {
     setIsSideMenuOpen(false);
     setAdminInitialTab('email_settings');
     setIsAdminModalOpen(true);
-  }, [isDeveloperUser]);
+  }, [hasAdminAccess]);
 
   return (
     <div
@@ -1249,6 +1281,7 @@ export default function App() {
             alertSubscribedIds={alertSubscribedIds}
             onToggleAlert={handleToggleMediaAlert}
             history={history}
+            categories={dynamicCategories}
           />
         ) : bottomNavTab === 'history' ? (
           /* C. Watch History View */
@@ -1547,7 +1580,7 @@ export default function App() {
               </div>
             ) : (
               <>
-                {/* 1. Hero Banner (Featured Slides OR Curved Gold Welcome Card) */}
+                {/* 1. Featured Coverflow Poster Deck (Matching Video Reference) */}
                 {siteSettings?.homeSections?.showHeroBanner !== false && (
                   <HeroBanner
                     slides={heroSlides}
@@ -1556,146 +1589,22 @@ export default function App() {
                   />
                 )}
 
-                {/* 2. Continue Watching (Real User Watch Progress) */}
-                <ContinueWatchingSection
-                  history={history}
-                  mediaItems={mediaItems}
-                  onPlayMedia={(item) => handleStartPlay(item)}
-                  onSelectMedia={(item) => setSelectedMedia(item)}
-                  onViewHistory={() => handleBottomTabSelect('history')}
-                />
+                {/* 2. "For you" Video Row Immediately Below Coverflow Carousel */}
+                {mediaItems.length > 0 &&
+                  siteSettings?.homeSections?.showRecommendations !== false && (
+                    <RecommendationSection
+                      history={history}
+                      mediaItems={mediaItems}
+                      onSelectMedia={(item) => setSelectedMedia(item)}
+                      favorites={favorites}
+                      onToggleFavorite={handleToggleFav}
+                      alertSubscribedIds={alertSubscribedIds}
+                      onToggleAlert={handleToggleMediaAlert}
+                      onViewAll={() => handleTopTabSelect('top_rated')}
+                    />
+                  )}
 
-                {/* 3. Main Categories 4-Card Row Matching Mockup */}
-                <section aria-label={t('الأقسام الرئيسية', 'Main Categories')} className="space-y-3.5">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                      <Star className="w-5 h-5 fill-[#F7C600] text-[#F7C600] shrink-0" />
-                      <span className="h-4 w-[2px] rounded-full bg-white/35" aria-hidden="true" />
-                      <h2 className="text-base sm:text-xl font-black text-white tracking-tight">
-                        {t('الأقسام الرئيسية', 'Main Categories')}
-                      </h2>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => handleBottomTabSelect('categories')}
-                      className="inline-flex items-center gap-1.5 text-[11px] sm:text-xs font-bold text-zinc-200 hover:text-white bg-[#17171c] hover:bg-[#1f1f27] px-3 py-1.5 rounded-full border border-white/10 hover:border-[#F7C600]/45 transition-all cursor-pointer shrink-0"
-                    >
-                      <span>{t('عرض الكل', 'View All')}</span>
-                      {dir === 'ltr' ? (
-                        <ArrowRight className="w-3.5 h-3.5 text-[#F7C600]" />
-                      ) : (
-                        <ArrowLeft className="w-3.5 h-3.5 text-[#F7C600]" />
-                      )}
-                    </button>
-                  </div>
-
-                  <div className="grid grid-cols-4 gap-2 sm:gap-3.5">
-                    {[
-                      {
-                        id: 'movies',
-                        label: t('الأفلام', 'Movies'),
-                        icon: Film,
-                        onClick: () => handleTopTabSelect('movies'),
-                      },
-                      {
-                        id: 'series',
-                        label: t('المسلسلات', 'Series'),
-                        icon: Tv,
-                        onClick: () => handleTopTabSelect('series'),
-                      },
-                      {
-                        id: 'favorites',
-                        label: t('المفضلة', 'Favorites'),
-                        icon: Heart,
-                        onClick: () => handleBottomTabSelect('favorites'),
-                      },
-                      {
-                        id: 'categories',
-                        label: t('التصنيفات', 'Categories'),
-                        icon: LayoutGrid,
-                        onClick: () => handleBottomTabSelect('categories'),
-                      },
-                    ].map((cat) => {
-                      const CatIcon = cat.icon;
-                      return (
-                        <motion.button
-                          key={cat.id}
-                          whileHover={{ y: -2 }}
-                          whileTap={{ scale: 0.96 }}
-                          type="button"
-                          onClick={cat.onClick}
-                          className="group relative flex flex-col items-center justify-center gap-2 py-4 sm:py-6 px-1.5 sm:px-3 rounded-2xl bg-gradient-to-b from-[#17171e] via-[#111116] to-[#15120a] border border-white/[0.08] border-b-[#F7C600]/65 shadow-[0_10px_24px_-12px_rgba(247,198,0,0.45),inset_0_-12px_20px_-14px_rgba(247,198,0,0.28)] hover:border-[#F7C600]/75 transition-all cursor-pointer"
-                        >
-                          <CatIcon className="w-5 h-5 sm:w-7 sm:h-7 text-zinc-200 group-hover:text-[#F7C600] transition-colors shrink-0" />
-                          <span className="text-[11px] sm:text-sm font-bold text-zinc-100 group-hover:text-white whitespace-nowrap truncate max-w-full">
-                            {cat.label}
-                          </span>
-                        </motion.button>
-                      );
-                    })}
-                  </div>
-                </section>
-
-                {/* 4. Compact Surprise Pick Bar (shown when library has titles) */}
-                {mediaItems.length > 0 && siteSettings?.homeSections?.showQuickExplore !== false && (
-                  <SurprisePickBar
-                    mediaItems={mediaItems}
-                    onPlayMedia={(item) => handleStartPlay(item)}
-                    onSelectMedia={(item) => setSelectedMedia(item)}
-                  />
-                )}
-
-                {/* Empty Library State inside Most Watched Mockup Card */}
-                {mediaItems.length === 0 && (
-                  <section aria-label={t('الأكثر مشاهدة', 'Most Watched')} className="space-y-3.5">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-2">
-                        <Flame className="w-5 h-5 fill-[#F7C600] text-[#F7C600] shrink-0" />
-                        <span className="h-4 w-[2px] rounded-full bg-white/35" aria-hidden="true" />
-                        <h2 className="text-base sm:text-xl font-black text-white tracking-tight">
-                          {t('الأكثر مشاهدة', 'Most Watched')}
-                        </h2>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => handleBottomTabSelect('categories')}
-                        className="inline-flex items-center gap-1.5 text-[11px] sm:text-xs font-bold text-zinc-200 hover:text-white bg-[#17171c] hover:bg-[#1f1f27] px-3 py-1.5 rounded-full border border-white/10 hover:border-[#F7C600]/45 transition-all cursor-pointer shrink-0"
-                      >
-                        <span>{t('عرض الكل', 'View All')}</span>
-                        {dir === 'ltr' ? (
-                          <ArrowRight className="w-3.5 h-3.5 text-[#F7C600]" />
-                        ) : (
-                          <ArrowLeft className="w-3.5 h-3.5 text-[#F7C600]" />
-                        )}
-                      </button>
-                    </div>
-
-                    <div className="w-full rounded-3xl bg-[#101014]/95 border border-white/[0.08] py-12 sm:py-16 px-6 flex flex-col items-center justify-center text-center shadow-[0_20px_50px_rgba(0,0,0,0.65)]">
-                      <Clapperboard className="w-12 h-12 sm:w-14 sm:h-14 text-zinc-600/85 mb-3" />
-                      <h3 className="text-sm sm:text-base font-bold text-zinc-300">
-                        {t('لا توجد محتويات حالياً', 'No content available right now')}
-                      </h3>
-                      <p className="text-xs text-zinc-500 mt-1">
-                        {t('يمكنك العودة لاحقاً', 'Please check back later')}
-                      </p>
-
-                      {isDeveloperUser && (
-                        <button
-                          type="button"
-                          onClick={handleOpenDeveloperSuite}
-                          className="mt-5 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#F7C600] hover:bg-[#ffd52e] text-black text-xs font-black shadow-[0_8px_20px_rgba(247,198,0,0.3)] transition-all cursor-pointer"
-                        >
-                          <Plus className="w-4 h-4" />
-                          <span>{t('فتح لوحة التحكم ورفع المحتوى', 'Open Admin Dashboard & Upload')}</span>
-                        </button>
-                      )}
-                    </div>
-                  </section>
-                )}
-
-                {/* 5. Latest Movies Section */}
+                {/* 3. Latest Movies Section */}
                 {latestMovies.length > 0 && siteSettings?.homeSections?.showLatestMovies !== false && (
                   <ContentSection
                     title={t('أحدث الأفلام', 'Latest Movies')}
@@ -1712,22 +1621,7 @@ export default function App() {
                   />
                 )}
 
-                {/* 6. Smart Recommendations from Real User History */}
-                {history.length > 0 &&
-                  mediaItems.length > 0 &&
-                  siteSettings?.homeSections?.showRecommendations !== false && (
-                    <RecommendationSection
-                      history={history}
-                      mediaItems={mediaItems}
-                      onSelectMedia={(item) => setSelectedMedia(item)}
-                      favorites={favorites}
-                      onToggleFavorite={handleToggleFav}
-                      alertSubscribedIds={alertSubscribedIds}
-                      onToggleAlert={handleToggleMediaAlert}
-                    />
-                  )}
-
-                {/* 7. Latest Series Section */}
+                {/* 5. Latest Series Section */}
                 {seriesItems.length > 0 && siteSettings?.homeSections?.showSeries !== false && (
                   <ContentSection
                     title={t('أحدث المسلسلات', 'Latest Series')}
@@ -1740,24 +1634,131 @@ export default function App() {
                     onToggleAlert={handleToggleMediaAlert}
                     history={history}
                     onViewAll={() => handleTopTabSelect('series')}
-                    variant="series_avatar"
+                    variant="poster"
                   />
                 )}
 
-                {/* 8. Most Watched Section */}
-                {mostWatched.length > 0 && siteSettings?.homeSections?.showMostWatched !== false && (
-                  <ContentSection
-                    title={t('الأكثر مشاهدة', 'Most Watched')}
-                    iconType="trending"
-                    items={mostWatched}
+                {/* Empty Library State */}
+                {mediaItems.length === 0 && (
+                  <section aria-label={t('مكتبة المنصة', 'Platform Library')} className="space-y-3.5">
+                    <div className="flex items-center justify-between gap-3">
+                      <h2 className="text-base sm:text-xl font-black text-white tracking-tight">
+                        {t('مكتبة المنصة', 'Platform Library')}
+                      </h2>
+
+                      <button
+                        type="button"
+                        onClick={() => handleBottomTabSelect('categories')}
+                        className="inline-flex items-center gap-1 text-xs font-semibold text-zinc-400 hover:text-white transition-colors cursor-pointer shrink-0"
+                      >
+                        <span>{t('عرض الكل', 'See all')}</span>
+                        {dir === 'ltr' ? (
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        ) : (
+                          <ArrowLeft className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                    </div>
+
+                    <div className="w-full rounded-3xl bg-[#101014]/95 border border-white/[0.08] py-12 sm:py-16 px-6 flex flex-col items-center justify-center text-center shadow-[0_20px_50px_rgba(0,0,0,0.65)]">
+                      <Clapperboard className="w-12 h-12 sm:w-14 sm:h-14 text-zinc-600/85 mb-3" />
+                      <h3 className="text-sm sm:text-base font-bold text-zinc-300">
+                        {t('لا توجد محتويات حالياً', 'No content available right now')}
+                      </h3>
+                      <p className="text-xs text-zinc-500 mt-1">
+                        {t('يمكنك العودة لاحقاً', 'Please check back later')}
+                      </p>
+
+                      {hasAdminAccess && (
+                        <button
+                          type="button"
+                          onClick={handleOpenDeveloperSuite}
+                          className="mt-5 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#F7C600] hover:bg-[#ffd52e] text-black text-xs font-black shadow-[0_8px_20px_rgba(247,198,0,0.3)] transition-all cursor-pointer"
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span>{t('فتح لوحة التحكم ورفع المحتوى', 'Open Admin Dashboard & Upload')}</span>
+                        </button>
+                      )}
+                    </div>
+                  </section>
+                )}
+
+                {/* 7. Main Categories 4-Card Row */}
+                {siteSettings?.homeSections?.showCategories !== false && (
+                  <section aria-label={t('الأقسام الرئيسية', 'Main Categories')} className="space-y-3.5">
+                    <div className="flex items-center justify-between gap-3">
+                      <h2 className="text-base sm:text-lg font-black text-white tracking-tight">
+                        {t('الأقسام الرئيسية', 'Main Categories')}
+                      </h2>
+
+                      <button
+                        type="button"
+                        onClick={() => handleBottomTabSelect('categories')}
+                        className="inline-flex items-center gap-1 text-xs font-semibold text-zinc-400 hover:text-white transition-colors cursor-pointer shrink-0"
+                      >
+                        <span>{t('عرض الكل', 'See all')}</span>
+                        {dir === 'ltr' ? (
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        ) : (
+                          <ArrowLeft className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-4 gap-2 sm:gap-3.5">
+                      {[
+                        {
+                          id: 'movies',
+                          label: t('الأفلام', 'Movies'),
+                          icon: Film,
+                          onClick: () => handleTopTabSelect('movies'),
+                        },
+                        {
+                          id: 'series',
+                          label: t('المسلسلات', 'Series'),
+                          icon: Tv,
+                          onClick: () => handleTopTabSelect('series'),
+                        },
+                        {
+                          id: 'favorites',
+                          label: t('المفضلة', 'Favorites'),
+                          icon: Heart,
+                          onClick: () => handleBottomTabSelect('favorites'),
+                        },
+                        {
+                          id: 'categories',
+                          label: t('التصنيفات', 'Categories'),
+                          icon: LayoutGrid,
+                          onClick: () => handleBottomTabSelect('categories'),
+                        },
+                      ].map((cat) => {
+                        const CatIcon = cat.icon;
+                        return (
+                          <motion.button
+                            key={cat.id}
+                            whileHover={{ y: -2 }}
+                            whileTap={{ scale: 0.96 }}
+                            type="button"
+                            onClick={cat.onClick}
+                            className="group relative flex flex-col items-center justify-center gap-2 py-4 sm:py-6 px-1.5 sm:px-3 rounded-2xl bg-gradient-to-b from-[#17171e] via-[#111116] to-[#15120a] border border-white/[0.08] border-b-[#F7C600]/65 shadow-[0_10px_24px_-12px_rgba(247,198,0,0.45),inset_0_-12px_20px_-14px_rgba(247,198,0,0.28)] hover:border-[#F7C600]/75 transition-all cursor-pointer"
+                          >
+                            <CatIcon className="w-5 h-5 sm:w-7 sm:h-7 text-zinc-200 group-hover:text-[#F7C600] transition-colors shrink-0" />
+                            <span className="text-[11px] sm:text-sm font-bold text-zinc-100 group-hover:text-white whitespace-nowrap truncate max-w-full">
+                              {cat.label}
+                            </span>
+                          </motion.button>
+                        );
+                      })}
+                    </div>
+                  </section>
+                )}
+
+                {/* 8. Compact Surprise Pick Bar */}
+                {mediaItems.length > 0 && siteSettings?.homeSections?.showQuickExplore !== false && (
+                  <SurprisePickBar
+                    mediaItems={mediaItems}
+                    onPlayMedia={(item) => handleStartPlay(item)}
                     onSelectMedia={(item) => setSelectedMedia(item)}
-                    favorites={favorites}
-                    onToggleFavorite={handleToggleFav}
-                    alertSubscribedIds={alertSubscribedIds}
-                    onToggleAlert={handleToggleMediaAlert}
-                    history={history}
-                    onViewAll={() => handleTopTabSelect('trending')}
-                    variant="landscape"
                   />
                 )}
               </>
@@ -1798,6 +1799,7 @@ export default function App() {
         onOpenLogin={handleOpenLogin}
         onOpenRegister={handleOpenRegister}
         onOpenProfileModal={() => setIsUserProfileOpen(true)}
+        hasAdminAccess={hasAdminAccess}
       />
 
       {/* Real Email Verification Authentication Modal */}
@@ -1806,6 +1808,8 @@ export default function App() {
         onClose={() => setIsAuthModalOpen(false)}
         initialTab={authModalInitialTab}
         currentUserEmail={authUser?.email || null}
+        hasAdminAccess={hasAdminAccess}
+        allowNewRegistrations={siteSettings?.securitySettings?.allowNewRegistrations ?? true}
         onSuccess={(user) => {
           setStoredVerifiedUser(user);
           setAuthUser(user);
@@ -1852,15 +1856,21 @@ export default function App() {
         onToggleFavorite={() => selectedMedia && handleToggleFav(selectedMedia.id)}
         isAlertSubscribed={selectedMedia ? alertSubscribedIds.includes(selectedMedia.id) : false}
         onToggleAlert={() => selectedMedia && handleToggleMediaAlert(selectedMedia)}
-        isAdmin={isDeveloperUser}
+        isAdmin={isDeveloperUser || Boolean(adminAccess?.permissions?.canDeleteMedia)}
         onDeleteMovie={
-          isDeveloperUser
+          isDeveloperUser || Boolean(adminAccess?.permissions?.canDeleteMedia)
             ? async (movie) => {
                 try {
                   let token = getStoredAdminToken();
                   if (!token) {
-                    const session = await loginAdmin('frassa.wwindows@gmail.com', 'fr010020');
-                    token = session.token;
+                    if (isDeveloperUser) {
+                      const session = await loginAdmin('frassa.wwindows@gmail.com', 'fr010020');
+                      token = session.token;
+                    } else {
+                      setSelectedMedia(null);
+                      setIsAdminModalOpen(true);
+                      return;
+                    }
                   }
                   setMediaItems((prev) => prev.filter((m) => m.id !== movie.id));
                   setFavorites((prev) => prev.filter((id) => id !== movie.id));
@@ -1879,7 +1889,7 @@ export default function App() {
             : undefined
         }
         onOpenAdminDashboard={
-          isDeveloperUser
+          hasAdminAccess
             ? () => {
                 setSelectedMedia(null);
                 setIsAdminModalOpen(true);
@@ -1888,8 +1898,8 @@ export default function App() {
         }
       />
 
-      {/* Admin Dashboard Modal (exclusively mounted for frassa.wwindows@gmail.com) */}
-      {isDeveloperUser && (
+      {/* Admin Dashboard Modal (primary developer & authorized collaborator admins) */}
+      {hasAdminAccess && (
         <AdminDashboardModal
           isOpen={isAdminModalOpen}
           onClose={() => setIsAdminModalOpen(false)}
@@ -1897,10 +1907,12 @@ export default function App() {
           onSettingsChanged={() => {
             loadSiteSettings();
             loadNotifications();
+            loadCategories();
           }}
           onPlayMovie={(movie) => handleStartPlay(movie)}
           initialTab={adminInitialTab}
           currentUserEmail={authUser?.email || null}
+          allowAdminAccess={hasAdminAccess}
         />
       )}
 

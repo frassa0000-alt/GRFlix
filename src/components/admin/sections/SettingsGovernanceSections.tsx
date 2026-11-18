@@ -1,10 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import {
   AlertCircle,
+  ArrowDown,
+  ArrowUp,
   CheckCircle2,
   Clapperboard,
+  Eye,
+  EyeOff,
   History,
   KeyRound,
+  Lock,
   Mail,
   MonitorPlay,
   Plus,
@@ -14,6 +19,7 @@ import {
   Settings,
   Shield,
   Trash2,
+  Unlock,
 } from 'lucide-react';
 import {
   clearAuditLogs,
@@ -44,14 +50,18 @@ interface SettingsGovernanceSectionsProps {
   mode: 'banners_home' | 'player_settings' | 'admins_permissions' | 'audit_logs' | 'site_settings';
   token: string;
   mediaItems: MediaItem[];
+  isSuperAdmin?: boolean;
   onSettingsUpdated?: () => void;
+  onAdminsChanged?: () => void;
 }
 
 export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProps> = ({
   mode,
   token,
   mediaItems,
+  isSuperAdmin = true,
   onSettingsUpdated,
+  onAdminsChanged,
 }) => {
   const [settings, setSettings] = useState<SiteSettingsConfig | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -63,6 +73,10 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
   const [newAdminName, setNewAdminName] = useState<string>('');
   const [newAdminEmail, setNewAdminEmail] = useState<string>('');
   const [newAdminRole, setNewAdminRole] = useState<string>('محرر محتوى');
+  const [newAdminPassword, setNewAdminPassword] = useState<string>('VBL/9');
+  const [showNewAdminPass, setShowNewAdminPass] = useState<boolean>(false);
+  const [resetPasswords, setResetPasswords] = useState<Record<string, string>>({});
+  const [savingAdminId, setSavingAdminId] = useState<string | null>(null);
   const [confirmRemoveAdmin, setConfirmRemoveAdmin] = useState<AdminMember | null>(null);
 
   // Audit Logs
@@ -73,6 +87,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
   // Banner Draft
   const [bannerTitle, setBannerTitle] = useState<string>('');
   const [bannerSubtitle, setBannerSubtitle] = useState<string>('');
+  const [bannerCtaLabel, setBannerCtaLabel] = useState<string>('مشاهدة الآن');
   const [bannerImage, setBannerImage] = useState<string>('');
   const [bannerMediaId, setBannerMediaId] = useState<string>('');
 
@@ -173,6 +188,10 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
 
   // --- 1. BANNERS & HOME ---
   if (mode === 'banners_home') {
+    const sortedBanners = [...(settings?.banners || [])].sort(
+      (a, b) => (a.order ?? 999) - (b.order ?? 999)
+    );
+
     const handleAddBanner = async (e: React.FormEvent) => {
       e.preventDefault();
       if (!settings || !bannerTitle.trim() || !bannerImage.trim()) return;
@@ -180,6 +199,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
         id: `bn-${Date.now()}`,
         title: bannerTitle.trim(),
         subtitle: bannerSubtitle.trim(),
+        ctaLabel: bannerCtaLabel.trim() || 'مشاهدة الآن',
         imageUrl: bannerImage.trim(),
         mediaId: bannerMediaId || undefined,
         isActive: true,
@@ -189,8 +209,19 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
       await handleSaveSettingsPayload({ banners: nextBanners }, 'تمت إضافة البنر وحفظ إعدادات الواجهة');
       setBannerTitle('');
       setBannerSubtitle('');
+      setBannerCtaLabel('مشاهدة الآن');
       setBannerImage('');
       setBannerMediaId('');
+    };
+
+    const handleMoveBanner = async (idx: number, direction: -1 | 1) => {
+      if (!settings) return;
+      const targetIdx = idx + direction;
+      if (targetIdx < 0 || targetIdx >= sortedBanners.length) return;
+      const reordered = [...sortedBanners];
+      [reordered[idx], reordered[targetIdx]] = [reordered[targetIdx], reordered[idx]];
+      const normalized = reordered.map((b, i) => ({ ...b, order: i + 1 }));
+      await handleSaveSettingsPayload({ banners: normalized }, 'تم تحديث ترتيب البنرات');
     };
 
     return (
@@ -290,10 +321,17 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
                   placeholder="رابط صورة البنر (16:9) *"
                   className="bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono"
                 />
+                <input
+                  type="text"
+                  value={bannerCtaLabel}
+                  onChange={(e) => setBannerCtaLabel(e.target.value)}
+                  placeholder="نص زر التشغيل (مثال: مشاهدة الآن)"
+                  className="bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white"
+                />
                 <select
                   value={bannerMediaId}
                   onChange={(e) => setBannerMediaId(e.target.value)}
-                  className="bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white"
+                  className="sm:col-span-2 bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white"
                 >
                   <option value="">ربط بعمل معين (اختياري)</option>
                   {mediaItems.map((m) => (
@@ -312,12 +350,12 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
                 <span>إضافة البنر</span>
               </button>
 
-              {settings.banners?.length > 0 && (
+              {sortedBanners.length > 0 && (
                 <div className="space-y-2 pt-2 border-t border-white/[0.06]">
-                  {settings.banners.map((b) => (
+                  {sortedBanners.map((b, idx) => (
                     <div
                       key={b.id}
-                      className="p-2.5 rounded-xl bg-zinc-950 border border-white/[0.06] flex items-center justify-between gap-3"
+                      className="p-2.5 rounded-xl bg-zinc-950 border border-white/[0.06] flex flex-wrap items-center justify-between gap-3"
                     >
                       <div className="flex items-center gap-3 min-w-0">
                         <img
@@ -326,22 +364,75 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
                           className="w-16 h-10 rounded-lg object-cover shrink-0"
                         />
                         <div className="min-w-0">
-                          <p className="font-bold text-white truncate">{b.title}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="font-bold text-white truncate">{b.title}</p>
+                            {b.ctaLabel && (
+                              <span className="px-1.5 py-0.5 rounded bg-zinc-900 text-amber-300 text-[10px]">
+                                {b.ctaLabel}
+                              </span>
+                            )}
+                          </div>
                           <p className="text-[10px] text-zinc-400 truncate">{b.subtitle}</p>
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          handleSaveSettingsPayload(
-                            { banners: settings.banners.filter((x) => x.id !== b.id) },
-                            'تم حذف البنر'
-                          )
-                        }
-                        className="w-7 h-7 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 flex items-center justify-center cursor-pointer"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          disabled={idx === 0 || isSaving}
+                          onClick={() => handleMoveBanner(idx, -1)}
+                          className="w-7 h-7 rounded-lg bg-zinc-900 hover:bg-zinc-800 disabled:opacity-40 text-zinc-300 flex items-center justify-center cursor-pointer"
+                          title="تقديم للأعلى"
+                        >
+                          <ArrowUp className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={idx === sortedBanners.length - 1 || isSaving}
+                          onClick={() => handleMoveBanner(idx, 1)}
+                          className="w-7 h-7 rounded-lg bg-zinc-900 hover:bg-zinc-800 disabled:opacity-40 text-zinc-300 flex items-center justify-center cursor-pointer"
+                          title="تأخير للأسفل"
+                        >
+                          <ArrowDown className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isSaving}
+                          onClick={() => {
+                            const updated = sortedBanners.map((x) =>
+                              x.id === b.id ? { ...x, isActive: !(x.isActive !== false) } : x
+                            );
+                            handleSaveSettingsPayload(
+                              { banners: updated },
+                              b.isActive !== false ? 'تم إخفاء البنر مؤقتاً' : 'تم تفعيل البنر بنجاح'
+                            );
+                          }}
+                          className={`px-2 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer border ${
+                            b.isActive !== false
+                              ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                              : 'bg-zinc-900 text-zinc-400 border-white/10'
+                          }`}
+                        >
+                          {b.isActive !== false ? (
+                            <Eye className="w-3 h-3" />
+                          ) : (
+                            <EyeOff className="w-3 h-3" />
+                          )}
+                          <span>{b.isActive !== false ? 'مفعل' : 'مخفي'}</span>
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isSaving}
+                          onClick={() =>
+                            handleSaveSettingsPayload(
+                              { banners: sortedBanners.filter((x) => x.id !== b.id) },
+                              'تم حذف البنر'
+                            )
+                          }
+                          className="w-7 h-7 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 flex items-center justify-center cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -534,19 +625,60 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
   if (mode === 'admins_permissions') {
     const handleAddAdmin = async (e: React.FormEvent) => {
       e.preventDefault();
+      if (!isSuperAdmin) {
+        setFeedback({ type: 'error', msg: 'إضافة المديرين متاحة للمطور الرئيسي فقط' });
+        return;
+      }
       if (!newAdminName.trim() || !newAdminEmail.trim()) return;
+      const trimmedPass = newAdminPassword.trim();
+      if (!trimmedPass.includes('VBL/9')) {
+        setFeedback({
+          type: 'error',
+          msg: 'يجب أن تحتوي كلمة مرور دخول المشرف على الرمز VBL/9 (مثل: VBL/9 أو AdminVBL/9)',
+        });
+        return;
+      }
+      setIsSaving(true);
+      setFeedback(null);
       try {
         await createAdminMember(token, {
           name: newAdminName.trim(),
-          email: newAdminEmail.trim(),
-          roleTitle: newAdminRole,
+          email: newAdminEmail.trim().toLowerCase(),
+          roleTitle: newAdminRole.trim() || 'محرر محتوى',
+          password: trimmedPass,
         });
         setNewAdminName('');
         setNewAdminEmail('');
-        loadAdmins();
-        setFeedback({ type: 'success', msg: 'تمت إضافة المشرف بنجاح' });
+        setNewAdminPassword('VBL/9');
+        await loadAdmins();
+        onAdminsChanged?.();
+        setFeedback({
+          type: 'success',
+          msg: 'تمت إضافة المشرف بكلمة مرور تحتوي على VBL/9 بنجاح — يمكنه الآن الدخول بالبريد وكلمة المرور المحددة',
+        });
       } catch (err: any) {
         setFeedback({ type: 'error', msg: err?.message || 'فشل إضافة المشرف' });
+      } finally {
+        setIsSaving(false);
+      }
+    };
+
+    const handleUpdateCollaborator = async (
+      adm: AdminMember,
+      payload: Partial<AdminMember>,
+      successMsg: string
+    ) => {
+      setSavingAdminId(adm.id);
+      setFeedback(null);
+      try {
+        await updateAdminMember(token, adm.id, payload);
+        await loadAdmins();
+        onAdminsChanged?.();
+        setFeedback({ type: 'success', msg: successMsg });
+      } catch (err: any) {
+        setFeedback({ type: 'error', msg: err?.message || 'تعذر تحديث بيانات المشرف' });
+      } finally {
+        setSavingAdminId(null);
       }
     };
 
@@ -555,12 +687,18 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
         <div>
           <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
             <KeyRound className="w-5 h-5 text-amber-400" />
-            <span>إدارة الصلاحيات والمديرين ({admins.length})</span>
+            <span>إدارة الصلاحيات والمديرين المتعاونين ({admins.length})</span>
           </h2>
           <p className="text-xs text-zinc-400 mt-0.5">
-            تخصيص صلاحيات الرفع والتعديل والحذف وإدارة المستخدمين لكل مشرف بالمنصة
+            أضف مشرفاً عبر بريده الإلكتروني مع كلمة مرور دخول تتضمن الرمز الإلزامي <span className="text-amber-400 font-mono font-bold">VBL/9</span> وحدد صلاحياته بدقة
           </p>
         </div>
+
+        {!isSuperAdmin && (
+          <div className="p-3 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs">
+            هذا القسم للمطور الرئيسي فقط. يمكنك استعراض صلاحياتك من القائمة الجانبية.
+          </div>
+        )}
 
         {feedback && (
           <div
@@ -574,104 +712,218 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
           </div>
         )}
 
-        <form
-          onSubmit={handleAddAdmin}
-          className="p-4 rounded-2xl bg-[#111116] border border-white/[0.08] grid grid-cols-1 sm:grid-cols-4 gap-2.5 text-xs"
-        >
-          <input
-            type="text"
-            required
-            value={newAdminName}
-            onChange={(e) => setNewAdminName(e.target.value)}
-            placeholder="اسم المشرف *"
-            className="bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white"
-          />
-          <input
-            type="email"
-            dir="ltr"
-            required
-            value={newAdminEmail}
-            onChange={(e) => setNewAdminEmail(e.target.value)}
-            placeholder="email@example.com *"
-            className="bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono"
-          />
-          <input
-            type="text"
-            value={newAdminRole}
-            onChange={(e) => setNewAdminRole(e.target.value)}
-            placeholder="المسمى الوظيفي"
-            className="bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white"
-          />
-          <button
-            type="submit"
-            className="py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black font-black cursor-pointer"
+        {isSuperAdmin && (
+          <form
+            onSubmit={handleAddAdmin}
+            className="p-4 rounded-2xl bg-[#111116] border border-white/[0.08] space-y-3 text-xs"
           >
-            إضافة صلاحية مدير
-          </button>
-        </form>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
+              <input
+                type="text"
+                required
+                value={newAdminName}
+                onChange={(e) => setNewAdminName(e.target.value)}
+                placeholder="اسم المشرف *"
+                className="bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white"
+              />
+              <input
+                type="email"
+                dir="ltr"
+                required
+                value={newAdminEmail}
+                onChange={(e) => setNewAdminEmail(e.target.value)}
+                placeholder="email@example.com *"
+                className="bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono"
+              />
+              <input
+                type="text"
+                value={newAdminRole}
+                onChange={(e) => setNewAdminRole(e.target.value)}
+                placeholder="المسمى الوظيفي"
+                className="bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white"
+              />
+              <div className="relative">
+                <input
+                  type={showNewAdminPass ? 'text' : 'password'}
+                  dir="ltr"
+                  required
+                  value={newAdminPassword}
+                  onChange={(e) => setNewAdminPassword(e.target.value)}
+                  placeholder="كلمة مرور تتضمن VBL/9 *"
+                  className={`w-full bg-zinc-950 border rounded-xl pl-3 pr-8 py-2 text-white font-mono ${
+                    newAdminPassword.includes('VBL/9')
+                      ? 'border-emerald-500/40'
+                      : 'border-rose-500/50'
+                  }`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNewAdminPass((v) => !v)}
+                  className="absolute right-2.5 top-2.5 text-zinc-400 hover:text-white cursor-pointer"
+                >
+                  {showNewAdminPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+              <button
+                type="submit"
+                disabled={isSaving || !newAdminPassword.includes('VBL/9')}
+                className="py-2 rounded-xl bg-amber-400 hover:bg-amber-300 disabled:opacity-50 text-black font-black cursor-pointer flex items-center justify-center gap-1"
+              >
+                <Plus className="w-4 h-4" />
+                <span>إضافة مشرف</span>
+              </button>
+            </div>
+            <p className="text-[11px] text-zinc-400">
+              شرط كلمة المرور: يجب أن تتضمن الرمز <span className="font-mono text-amber-400 font-bold">VBL/9</span> (القيمة الافتراضية <span className="font-mono text-white">VBL/9</span> أو يمكنك إضافة بادئة مثل <span className="font-mono text-white">Editor@VBL/9</span>).
+            </p>
+          </form>
+        )}
 
         <div className="space-y-3">
-          {admins.map((adm) => (
-            <div
-              key={adm.id}
-              className="p-4 rounded-2xl bg-[#111116] border border-white/[0.08] space-y-3 text-xs"
-            >
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-xl bg-amber-400/15 text-amber-400 flex items-center justify-center">
-                    <Shield className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-black text-white">{adm.name}</span>
-                      <span className="px-2 py-0.5 rounded bg-zinc-800 text-amber-300 text-[10px] font-bold">
-                        {adm.roleTitle}
-                      </span>
+          {admins.map((adm) => {
+            const draftPass = resetPasswords[adm.id] ?? '';
+            const isBusy = savingAdminId === adm.id;
+            return (
+              <div
+                key={adm.id}
+                className="p-4 rounded-2xl bg-[#111116] border border-white/[0.08] space-y-3 text-xs"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-xl bg-amber-400/15 text-amber-400 flex items-center justify-center">
+                      <Shield className="w-4 h-4" />
                     </div>
-                    <p className="font-mono text-[11px] text-zinc-400">{adm.email}</p>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-black text-white">{adm.name}</span>
+                        <span className="px-2 py-0.5 rounded bg-zinc-800 text-amber-300 text-[10px] font-bold">
+                          {adm.roleTitle}
+                        </span>
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                            adm.isActive !== false
+                              ? 'bg-emerald-500/15 text-emerald-300'
+                              : 'bg-rose-500/15 text-rose-300'
+                          }`}
+                        >
+                          {adm.isActive !== false ? 'مفعل' : 'موقوف'}
+                        </span>
+                      </div>
+                      <p className="font-mono text-[11px] text-zinc-400">{adm.email}</p>
+                    </div>
                   </div>
+
+                  {!adm.isSuperAdmin && isSuperAdmin && (
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        disabled={isBusy}
+                        onClick={() =>
+                          handleUpdateCollaborator(
+                            adm,
+                            { isActive: adm.isActive === false },
+                            adm.isActive === false
+                              ? `تم تفعيل حساب المشرف ${adm.email}`
+                              : `تم إيقاف حساب المشرف ${adm.email} مؤقتاً`
+                          )
+                        }
+                        className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1 cursor-pointer ${
+                          adm.isActive === false
+                            ? 'bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25'
+                            : 'bg-amber-500/15 text-amber-300 hover:bg-amber-500/25'
+                        }`}
+                      >
+                        {adm.isActive === false ? (
+                          <>
+                            <Unlock className="w-3.5 h-3.5" />
+                            <span>تفعيل</span>
+                          </>
+                        ) : (
+                          <>
+                            <Lock className="w-3.5 h-3.5" />
+                            <span>إيقاف مؤقت</span>
+                          </>
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={isBusy}
+                        onClick={() => setConfirmRemoveAdmin(adm)}
+                        className="px-3 py-1.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 font-bold cursor-pointer"
+                      >
+                        سحب الصلاحية
+                      </button>
+                    </div>
+                  )}
                 </div>
 
-                {!adm.isSuperAdmin && (
-                  <button
-                    type="button"
-                    onClick={() => setConfirmRemoveAdmin(adm)}
-                    className="px-3 py-1.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 font-bold cursor-pointer"
-                  >
-                    سحب الصلاحية
-                  </button>
+                <div className="flex flex-wrap gap-3 pt-2 border-t border-white/[0.05]">
+                  {(
+                    [
+                      ['canUpload', 'رفع الفيديوهات'],
+                      ['canEditMedia', 'تعديل المحتوى'],
+                      ['canDeleteMedia', 'حذف المحتوى'],
+                      ['canManageUsers', 'إدارة المستخدمين'],
+                      ['canManageSettings', 'إعدادات الموقع'],
+                    ] as const
+                  ).map(([permKey, label]) => (
+                    <label key={permKey} className="flex items-center gap-1.5 text-zinc-300 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        disabled={adm.isSuperAdmin || !isSuperAdmin || isBusy}
+                        checked={adm.permissions[permKey]}
+                        onChange={(e) =>
+                          handleUpdateCollaborator(
+                            adm,
+                            {
+                              permissions: { ...adm.permissions, [permKey]: e.target.checked },
+                            },
+                            `تم تحديث صلاحية "${label}" للمشرف ${adm.name}`
+                          )
+                        }
+                        className="accent-amber-400"
+                      />
+                      <span>{label}</span>
+                    </label>
+                  ))}
+                </div>
+
+                {!adm.isSuperAdmin && isSuperAdmin && (
+                  <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-white/[0.05]">
+                    <span className="text-[11px] text-zinc-400 font-bold">
+                      تحديث كلمة مرور الدخول ({adm.passwordHint || 'تتضمن VBL/9'}):
+                    </span>
+                    <input
+                      type="text"
+                      dir="ltr"
+                      value={draftPass}
+                      onChange={(e) =>
+                        setResetPasswords((prev) => ({ ...prev, [adm.id]: e.target.value }))
+                      }
+                      placeholder="كلمة مرور جديدة تتضمن VBL/9"
+                      className="bg-zinc-950 border border-white/10 rounded-lg px-2.5 py-1.5 text-white font-mono text-[11px] w-56"
+                    />
+                    <button
+                      type="button"
+                      disabled={isBusy || !draftPass.includes('VBL/9')}
+                      onClick={async () => {
+                        await handleUpdateCollaborator(
+                          adm,
+                          { password: draftPass.trim() },
+                          `تم تحديث كلمة مرور الدخول للمشرف ${adm.email}`
+                        );
+                        setResetPasswords((prev) => ({ ...prev, [adm.id]: '' }));
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-white/10 text-amber-300 font-bold text-[11px] disabled:opacity-40 cursor-pointer"
+                    >
+                      تحديث كلمة المرور
+                    </button>
+                  </div>
                 )}
               </div>
-
-              <div className="flex flex-wrap gap-3 pt-2 border-t border-white/[0.05]">
-                {(
-                  [
-                    ['canUpload', 'رفع الفيديوهات'],
-                    ['canEditMedia', 'تعديل المحتوى'],
-                    ['canDeleteMedia', 'حذف المحتوى'],
-                    ['canManageUsers', 'إدارة المستخدمين'],
-                    ['canManageSettings', 'إعدادات الموقع'],
-                  ] as const
-                ).map(([permKey, label]) => (
-                  <label key={permKey} className="flex items-center gap-1.5 text-zinc-300">
-                    <input
-                      type="checkbox"
-                      disabled={adm.isSuperAdmin}
-                      checked={adm.permissions[permKey]}
-                      onChange={async (e) => {
-                        await updateAdminMember(token, adm.id, {
-                          permissions: { ...adm.permissions, [permKey]: e.target.checked },
-                        });
-                        loadAdmins();
-                      }}
-                      className="accent-amber-400"
-                    />
-                    <span>{label}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         <AdminConfirmDialog
@@ -681,9 +933,16 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
           confirmLabel="سحب الصلاحية"
           onConfirm={async () => {
             if (!confirmRemoveAdmin) return;
-            await deleteAdminMember(token, confirmRemoveAdmin.id);
-            setConfirmRemoveAdmin(null);
-            loadAdmins();
+            try {
+              await deleteAdminMember(token, confirmRemoveAdmin.id);
+              setConfirmRemoveAdmin(null);
+              await loadAdmins();
+              onAdminsChanged?.();
+              setFeedback({ type: 'success', msg: 'تم سحب الصلاحية وإزالة المشرف بنجاح' });
+            } catch (err: any) {
+              setConfirmRemoveAdmin(null);
+              setFeedback({ type: 'error', msg: err?.message || 'فشل إزالة المشرف' });
+            }
           }}
           onCancel={() => setConfirmRemoveAdmin(null)}
         />
@@ -712,14 +971,36 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
               توثيق آلي لجميع عمليات الإضافة والتعديل والحذف وتغييرات الأمان والإعدادات
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => setConfirmClearLogs(true)}
-            className="px-3.5 py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 text-xs font-black cursor-pointer"
-          >
-            مسح السجل
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={loadLogs}
+              className="px-3 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-xs font-bold text-zinc-200 border border-white/10 flex items-center gap-1.5 cursor-pointer"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+              <span>تحديث</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmClearLogs(true)}
+              className="px-3.5 py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 text-xs font-black cursor-pointer"
+            >
+              مسح السجل
+            </button>
+          </div>
         </div>
+
+        {feedback && (
+          <div
+            className={`p-3 rounded-xl text-xs border ${
+              feedback.type === 'success'
+                ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
+                : 'bg-rose-500/15 border-rose-500/30 text-rose-300'
+            }`}
+          >
+            {feedback.msg}
+          </div>
+        )}
 
         <input
           type="text"
@@ -763,9 +1044,15 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
           message="هل أنت متأكد من مسح كافة سجلات العمليات السابقة؟"
           confirmLabel="مسح السجل"
           onConfirm={async () => {
-            await clearAuditLogs(token);
-            setConfirmClearLogs(false);
-            loadLogs();
+            try {
+              await clearAuditLogs(token);
+              setConfirmClearLogs(false);
+              await loadLogs();
+              setFeedback({ type: 'success', msg: 'تم مسح سجل العمليات بنجاح' });
+            } catch (err: any) {
+              setConfirmClearLogs(false);
+              setFeedback({ type: 'error', msg: err?.message || 'فشل مسح السجل' });
+            }
           }}
           onCancel={() => setConfirmClearLogs(false)}
         />
@@ -810,7 +1097,22 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ testEmail: testEmailAddr }),
       });
-      const data = await res.json();
+      const raw = await res.text();
+      let data: any = null;
+      if (raw && !raw.trim().startsWith('<')) {
+        try {
+          data = JSON.parse(raw);
+        } catch {
+          data = null;
+        }
+      }
+      if (!data) {
+        setMailResult({
+          success: false,
+          message: 'تعذر قراءة استجابة خادم البريد',
+        });
+        return;
+      }
       setMailResult({
         success: Boolean(res.ok && data.success),
         message: data.message || data.error || 'اكتمل الاختبار',
@@ -855,7 +1157,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
           className="p-4 rounded-2xl bg-[#111116] border border-white/[0.08] space-y-4 text-xs"
         >
           <h3 className="font-black text-amber-400 border-b border-white/[0.06] pb-2">
-            الإعدادات العامة والأمان والتخزين
+            الإعدادات العامة والألوان والأمان والتخزين
           </h3>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -884,6 +1186,121 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
                 dir="ltr"
                 value={settings.logoText}
                 onChange={(e) => setSettings({ ...settings, logoText: e.target.value })}
+                className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-zinc-400 font-bold mb-1">لون التمييز الرئيسي (Accent)</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="color"
+                  value={settings.accentColor || '#f7c600'}
+                  onChange={(e) => setSettings({ ...settings, accentColor: e.target.value })}
+                  className="w-10 h-9 rounded-lg bg-zinc-950 border border-white/10 cursor-pointer shrink-0"
+                />
+                <input
+                  type="text"
+                  dir="ltr"
+                  value={settings.accentColor || '#f7c600'}
+                  onChange={(e) => setSettings({ ...settings, accentColor: e.target.value })}
+                  className="flex-1 bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-zinc-400 font-bold mb-1">لون الخلفية العام (Background)</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="color"
+                  value={settings.backgroundColor || '#050507'}
+                  onChange={(e) => setSettings({ ...settings, backgroundColor: e.target.value })}
+                  className="w-10 h-9 rounded-lg bg-zinc-950 border border-white/10 cursor-pointer shrink-0"
+                />
+                <input
+                  type="text"
+                  dir="ltr"
+                  value={settings.backgroundColor || '#050507'}
+                  onChange={(e) => setSettings({ ...settings, backgroundColor: e.target.value })}
+                  className="flex-1 bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
+            <div>
+              <label className="block text-zinc-400 font-bold mb-1">حد حجم الفيديو (MB)</label>
+              <input
+                type="number"
+                min={50}
+                value={settings.storageSettings?.maxVideoSizeMb ?? 4096}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    storageSettings: {
+                      ...settings.storageSettings,
+                      maxVideoSizeMb: Number(e.target.value) || 4096,
+                    },
+                  })
+                }
+                className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono"
+              />
+            </div>
+            <div>
+              <label className="block text-zinc-400 font-bold mb-1">حد حجم البوستر (MB)</label>
+              <input
+                type="number"
+                min={1}
+                value={settings.storageSettings?.maxPosterSizeMb ?? 15}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    storageSettings: {
+                      ...settings.storageSettings,
+                      maxPosterSizeMb: Number(e.target.value) || 15,
+                    },
+                  })
+                }
+                className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono"
+              />
+            </div>
+            <div>
+              <label className="block text-zinc-400 font-bold mb-1">حجم جزء الرفع (MB)</label>
+              <input
+                type="number"
+                min={1}
+                value={settings.storageSettings?.chunkSizeMb ?? 8}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    storageSettings: {
+                      ...settings.storageSettings,
+                      chunkSizeMb: Number(e.target.value) || 8,
+                    },
+                  })
+                }
+                className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono"
+              />
+            </div>
+            <div>
+              <label className="block text-zinc-400 font-bold mb-1">مسارات الرفع المتوازية</label>
+              <input
+                type="number"
+                min={1}
+                max={8}
+                value={settings.storageSettings?.parallelStreams ?? 3}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    storageSettings: {
+                      ...settings.storageSettings,
+                      parallelStreams: Number(e.target.value) || 3,
+                    },
+                  })
+                }
                 className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono"
               />
             </div>
@@ -923,6 +1340,57 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
                 className="accent-amber-400"
               />
               <span>إلزام التحقق عبر رابط البريد الإلكتروني</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer text-zinc-200 font-bold">
+              <input
+                type="checkbox"
+                checked={settings.securitySettings.strictAdminVerification}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    securitySettings: {
+                      ...settings.securitySettings,
+                      strictAdminVerification: e.target.checked,
+                    },
+                  })
+                }
+                className="accent-amber-400"
+              />
+              <span>تفعيل التحقق الصارم للإدارة</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer text-zinc-200 font-bold">
+              <input
+                type="checkbox"
+                checked={settings.notificationsSettings?.enableGlobalBanner ?? true}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    notificationsSettings: {
+                      ...settings.notificationsSettings,
+                      enableGlobalBanner: e.target.checked,
+                    },
+                  })
+                }
+                className="accent-amber-400"
+              />
+              <span>إظهار إشعارات الموقع العامة</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer text-zinc-200 font-bold">
+              <input
+                type="checkbox"
+                checked={settings.notificationsSettings?.notifyOnNewRelease ?? true}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    notificationsSettings: {
+                      ...settings.notificationsSettings,
+                      notifyOnNewRelease: e.target.checked,
+                    },
+                  })
+                }
+                className="accent-amber-400"
+              />
+              <span>تنبيه عند إضافة أعمال جديدة</span>
             </label>
           </div>
 

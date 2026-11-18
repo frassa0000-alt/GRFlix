@@ -1,8 +1,17 @@
-import { MediaItem, AppUserProfile } from '../types';
+import { MediaItem, AppUserProfile, AdminPermissions, AdminSessionInfo } from '../types';
 
 const ADMIN_TOKEN_KEY = 'goldenflix_cinema_admin_token';
 const ADMIN_EMAIL_KEY = 'goldenflix_cinema_admin_email';
+const ADMIN_SESSION_KEY = 'goldenflix_cinema_admin_session';
 const VERIFIED_USER_SESSION_KEY = 'goldenflix_verified_user_session';
+
+const DEFAULT_OWNER_PERMISSIONS: AdminPermissions = {
+  canUpload: true,
+  canEditMedia: true,
+  canDeleteMedia: true,
+  canManageUsers: true,
+  canManageSettings: true,
+};
 
 export const getStoredVerifiedUser = (): AppUserProfile | null => {
   try {
@@ -31,14 +40,67 @@ export const getStoredAdminToken = (): string | null => {
   return localStorage.getItem(ADMIN_TOKEN_KEY);
 };
 
-export const setStoredAdminSession = (token: string, email: string): void => {
+export const getStoredAdminSession = (): AdminSessionInfo | null => {
+  try {
+    const raw = localStorage.getItem(ADMIN_SESSION_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.token && parsed.email) {
+        return parsed as AdminSessionInfo;
+      }
+    }
+    const token = localStorage.getItem(ADMIN_TOKEN_KEY);
+    const email = localStorage.getItem(ADMIN_EMAIL_KEY);
+    if (token && email) {
+      const isPrimary = email.trim().toLowerCase() === PRIMARY_ADMIN_EMAIL;
+      return {
+        token,
+        email,
+        isSuperAdmin: isPrimary,
+        permissions: isPrimary
+          ? DEFAULT_OWNER_PERMISSIONS
+          : {
+              canUpload: true,
+              canEditMedia: true,
+              canDeleteMedia: false,
+              canManageUsers: false,
+              canManageSettings: false,
+            },
+      };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};
+
+export const setStoredAdminSession = (
+  token: string,
+  email: string,
+  session?: Partial<AdminSessionInfo>
+): void => {
   localStorage.setItem(ADMIN_TOKEN_KEY, token);
   localStorage.setItem(ADMIN_EMAIL_KEY, email);
+  try {
+    const isPrimary = email.trim().toLowerCase() === PRIMARY_ADMIN_EMAIL;
+    const fullSession: AdminSessionInfo = {
+      token,
+      email,
+      name: session?.name,
+      roleTitle: session?.roleTitle,
+      isSuperAdmin: session?.isSuperAdmin ?? isPrimary,
+      permissions: session?.permissions ?? DEFAULT_OWNER_PERMISSIONS,
+    };
+    localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(fullSession));
+  } catch {
+    // ignore storage quota errors
+  }
 };
 
 export const clearStoredAdminSession = (): void => {
   localStorage.removeItem(ADMIN_TOKEN_KEY);
   localStorage.removeItem(ADMIN_EMAIL_KEY);
+  localStorage.removeItem(ADMIN_SESSION_KEY);
 };
 
 // Fetch public published movies
@@ -87,11 +149,11 @@ const PRIMARY_ADMIN_EMAIL = 'frassa.wwindows@gmail.com';
 const FALLBACK_ADMIN_TOKEN = 'goldenflix-cinema-super-admin-token-2025';
 const ACCEPTED_ADMIN_PASSWORDS = new Set(['fr010020', 'GoldenFlix@Cinema2025']);
 
-// Admin Login
+// Admin Login (Primary Developer OR Invited Collaborator with VBL/9 password)
 export const loginAdmin = async (
   email: string,
   password: string
-): Promise<{ token: string; email: string }> => {
+): Promise<AdminSessionInfo> => {
   const cleanEmail = email.trim().toLowerCase();
   const cleanPass = password.trim();
 
@@ -99,7 +161,7 @@ export const loginAdmin = async (
     const res = await fetch('/api/admin/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email: cleanEmail, password: cleanPass }),
     });
 
     const text = await res.text();
@@ -117,8 +179,16 @@ export const loginAdmin = async (
         if (!res.ok || !data.success) {
           throw new Error(data.error || 'فشل تسجيل الدخول');
         }
-        setStoredAdminSession(data.token, data.email);
-        return { token: data.token, email: data.email };
+        const sessionInfo: AdminSessionInfo = {
+          token: data.token,
+          email: data.email,
+          name: data.name,
+          roleTitle: data.roleTitle,
+          isSuperAdmin: Boolean(data.isSuperAdmin),
+          permissions: data.permissions || DEFAULT_OWNER_PERMISSIONS,
+        };
+        setStoredAdminSession(data.token, data.email, sessionInfo);
+        return sessionInfo;
       }
     }
   } catch (err: any) {
@@ -128,35 +198,125 @@ export const loginAdmin = async (
     }
   }
 
-  // Fallback for static / serverless / Firestore-only previews where /api/admin/login returns HTML or is unavailable
+  // Fallback for static / serverless previews where /api/admin/login returns HTML or is unavailable
   if (cleanEmail !== PRIMARY_ADMIN_EMAIL) {
-    throw new Error(`حساب المطور مخصص فقط للبريد الإلكتروني ${PRIMARY_ADMIN_EMAIL}`);
+    throw new Error(`حساب الإدارة المتعاون يتطلب خادم المنصة النشط، أو تسجيل الدخول بحساب المطور ${PRIMARY_ADMIN_EMAIL}`);
   }
   if (!ACCEPTED_ADMIN_PASSWORDS.has(cleanPass)) {
     throw new Error('كلمة المرور غير صحيحة');
   }
 
-  setStoredAdminSession(FALLBACK_ADMIN_TOKEN, PRIMARY_ADMIN_EMAIL);
-  return { token: FALLBACK_ADMIN_TOKEN, email: PRIMARY_ADMIN_EMAIL };
+  const ownerSession: AdminSessionInfo = {
+    token: FALLBACK_ADMIN_TOKEN,
+    email: PRIMARY_ADMIN_EMAIL,
+    name: 'المطور الرئيسي',
+    roleTitle: 'المالك والمطور الرئيسي',
+    isSuperAdmin: true,
+    permissions: DEFAULT_OWNER_PERMISSIONS,
+  };
+  setStoredAdminSession(FALLBACK_ADMIN_TOKEN, PRIMARY_ADMIN_EMAIL, ownerSession);
+  return ownerSession;
 };
 
-// Verify Admin Token
-export const verifyAdminToken = async (token: string): Promise<boolean> => {
+// Verify Admin Token and return full session (email, roleTitle, isSuperAdmin, permissions)
+export const verifyAdminSession = async (token: string): Promise<AdminSessionInfo | null> => {
   try {
     const res = await fetch('/api/admin/verify', {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) {
-      return token === FALLBACK_ADMIN_TOKEN;
+      if (token === FALLBACK_ADMIN_TOKEN) {
+        return {
+          token,
+          email: PRIMARY_ADMIN_EMAIL,
+          isSuperAdmin: true,
+          permissions: DEFAULT_OWNER_PERMISSIONS,
+        };
+      }
+      return null;
     }
     const text = await res.text();
     if (!text || text.trim().startsWith('<')) {
-      return token === FALLBACK_ADMIN_TOKEN;
+      if (token === FALLBACK_ADMIN_TOKEN) {
+        return {
+          token,
+          email: PRIMARY_ADMIN_EMAIL,
+          isSuperAdmin: true,
+          permissions: DEFAULT_OWNER_PERMISSIONS,
+        };
+      }
+      return null;
     }
     const data = JSON.parse(text);
-    return Boolean(data.authenticated);
+    if (!data?.authenticated) return null;
+    const verifiedSession: AdminSessionInfo = {
+      token,
+      email: data.email || PRIMARY_ADMIN_EMAIL,
+      name: data.name,
+      roleTitle: data.roleTitle,
+      isSuperAdmin: Boolean(data.isSuperAdmin),
+      permissions: data.permissions || DEFAULT_OWNER_PERMISSIONS,
+    };
+    setStoredAdminSession(token, verifiedSession.email, verifiedSession);
+    return verifiedSession;
   } catch {
-    return token === FALLBACK_ADMIN_TOKEN;
+    if (token === FALLBACK_ADMIN_TOKEN) {
+      return {
+        token,
+        email: PRIMARY_ADMIN_EMAIL,
+        isSuperAdmin: true,
+        permissions: DEFAULT_OWNER_PERMISSIONS,
+      };
+    }
+    return null;
+  }
+};
+
+// Verify Admin Token (boolean helper)
+export const verifyAdminToken = async (token: string): Promise<boolean> => {
+  const session = await verifyAdminSession(token);
+  return Boolean(session);
+};
+
+export interface AdminAccessCheckResult {
+  allowed: boolean;
+  isSuperAdmin: boolean;
+  name?: string;
+  roleTitle?: string;
+  permissions?: AdminPermissions;
+}
+
+export const checkAdminAccess = async (email?: string | null): Promise<AdminAccessCheckResult> => {
+  const cleanEmail = (email || '').trim().toLowerCase();
+  if (!cleanEmail) {
+    return { allowed: false, isSuperAdmin: false };
+  }
+  const isPrimary = cleanEmail === PRIMARY_ADMIN_EMAIL;
+  try {
+    const res = await fetch(`/api/admin/access-check?email=${encodeURIComponent(cleanEmail)}`);
+    if (!res.ok) {
+      return isPrimary
+        ? { allowed: true, isSuperAdmin: true, permissions: DEFAULT_OWNER_PERMISSIONS }
+        : { allowed: false, isSuperAdmin: false };
+    }
+    const text = await res.text();
+    if (!text || text.trim().startsWith('<')) {
+      return isPrimary
+        ? { allowed: true, isSuperAdmin: true, permissions: DEFAULT_OWNER_PERMISSIONS }
+        : { allowed: false, isSuperAdmin: false };
+    }
+    const data = JSON.parse(text);
+    return {
+      allowed: Boolean(data?.allowed),
+      isSuperAdmin: Boolean(data?.isSuperAdmin),
+      name: data?.name,
+      roleTitle: data?.roleTitle,
+      permissions: data?.permissions,
+    };
+  } catch {
+    return isPrimary
+      ? { allowed: true, isSuperAdmin: true, permissions: DEFAULT_OWNER_PERMISSIONS }
+      : { allowed: false, isSuperAdmin: false };
   }
 };
 

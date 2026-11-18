@@ -955,6 +955,132 @@ app.use((req, res, next) => {
   next();
 });
 
+// Admin & Collaborator Auth Helpers
+const COLLABORATOR_TOKEN_PREFIX = 'gfcol.';
+const COLLABORATOR_PASSWORD_REQUIRED_PART = 'VBL/9';
+const SUPER_ADMIN_PERMISSIONS = {
+  canUpload: true,
+  canEditMedia: true,
+  canDeleteMedia: true,
+  canManageUsers: true,
+  canManageSettings: true,
+};
+
+interface ResolvedAdminSession {
+  authenticated: boolean;
+  email: string;
+  name: string;
+  roleTitle: string;
+  isSuperAdmin: boolean;
+  permissions: {
+    canUpload: boolean;
+    canEditMedia: boolean;
+    canDeleteMedia: boolean;
+    canManageUsers: boolean;
+    canManageSettings: boolean;
+  };
+}
+
+const sanitizeAdminRecord = (a: any) => ({
+  id: a.id,
+  email: a.email,
+  name: a.name,
+  roleTitle: a.roleTitle || 'محرر محتوى',
+  isSuperAdmin: Boolean(a.isSuperAdmin),
+  isActive: a.isActive !== false,
+  hasPassword: Boolean(a.isSuperAdmin || a.passwordHash),
+  passwordHint: a.isSuperAdmin ? 'حساب المالك الرئيسي' : a.passwordHint || 'يتضمن VBL/9',
+  permissions: {
+    canUpload: Boolean(a.permissions?.canUpload),
+    canEditMedia: Boolean(a.permissions?.canEditMedia),
+    canDeleteMedia: Boolean(a.permissions?.canDeleteMedia),
+    canManageUsers: Boolean(a.permissions?.canManageUsers),
+    canManageSettings: Boolean(a.permissions?.canManageSettings),
+  },
+  createdAt: a.createdAt || Date.now(),
+});
+
+const signCollaboratorToken = (email: string, id: string): string => {
+  const payload = Buffer.from(
+    JSON.stringify({
+      id,
+      email: email.toLowerCase(),
+      exp: Date.now() + 30 * 24 * 60 * 60 * 1000,
+    }),
+    'utf-8'
+  ).toString('base64url');
+  const sig = crypto
+    .createHmac('sha256', ADMIN_SECRET_TOKEN)
+    .update(payload)
+    .digest('base64url');
+  return `${COLLABORATOR_TOKEN_PREFIX}${payload}.${sig}`;
+};
+
+const verifyAdminTokenValue = (token: string): ResolvedAdminSession | null => {
+  if (!token) return null;
+  if (token === ADMIN_SECRET_TOKEN) {
+    return {
+      authenticated: true,
+      email: PRIMARY_ADMIN_EMAIL,
+      name: 'مطور المنصة الرئيسي',
+      roleTitle: 'مالك المنصة (Super Admin)',
+      isSuperAdmin: true,
+      permissions: { ...SUPER_ADMIN_PERMISSIONS },
+    };
+  }
+
+  if (!token.startsWith(COLLABORATOR_TOKEN_PREFIX)) return null;
+  const body = token.slice(COLLABORATOR_TOKEN_PREFIX.length);
+  const parts = body.split('.');
+  if (parts.length !== 2) return null;
+  const [payloadB64, sigB64] = parts;
+  if (!payloadB64 || !sigB64) return null;
+
+  const expectedSig = crypto
+    .createHmac('sha256', ADMIN_SECRET_TOKEN)
+    .update(payloadB64)
+    .digest('base64url');
+
+  const sigBuf = Buffer.from(sigB64);
+  const expBuf = Buffer.from(expectedSig);
+  if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf-8'));
+    if (!parsed?.email || !parsed?.exp || Date.now() > Number(parsed.exp)) {
+      return null;
+    }
+    const cleanEmail = String(parsed.email).trim().toLowerCase();
+    const list = readJsonFile<any[]>(ADMINS_FILE, DEFAULT_ADMINS);
+    const member = list.find((a) => String(a.email || '').trim().toLowerCase() === cleanEmail);
+    if (!member || member.isActive === false) return null;
+
+    return {
+      authenticated: true,
+      email: member.email,
+      name: member.name || member.email,
+      roleTitle: member.roleTitle || 'محرر محتوى',
+      isSuperAdmin: Boolean(member.isSuperAdmin),
+      permissions: member.isSuperAdmin
+        ? { ...SUPER_ADMIN_PERMISSIONS }
+        : {
+            canUpload: Boolean(member.permissions?.canUpload),
+            canEditMedia: Boolean(member.permissions?.canEditMedia),
+            canDeleteMedia: Boolean(member.permissions?.canDeleteMedia),
+            canManageUsers: Boolean(member.permissions?.canManageUsers),
+            canManageSettings: Boolean(member.permissions?.canManageSettings),
+          },
+    };
+  } catch {
+    return null;
+  }
+};
+
+const getSessionActor = (req: Request): string =>
+  ((req as any).adminSession?.email as string) || PRIMARY_ADMIN_EMAIL;
+
 // Admin Auth Middleware
 const requireAdmin = (req: Request, res: Response, next: () => void) => {
   const authHeader = req.headers.authorization;
@@ -962,46 +1088,136 @@ const requireAdmin = (req: Request, res: Response, next: () => void) => {
     return res.status(401).json({ error: 'غير مصرح: يرجى تسجيل الدخول كمسؤول' });
   }
   const token = authHeader.replace(/^Bearer\s+/i, '').trim();
-  if (token !== ADMIN_SECRET_TOKEN) {
-    return res.status(403).json({ error: 'صلاحيات غير كافية: هذا الحساب ليس المشرف المصرح له' });
+  const session = verifyAdminTokenValue(token);
+  if (!session) {
+    return res.status(403).json({ error: 'صلاحيات غير كافية أو انتهت الجلسة: هذا الحساب غير مصرح له' });
+  }
+  (req as any).adminSession = session;
+  next();
+};
+
+const requireSuperAdmin = (req: Request, res: Response, next: () => void) => {
+  const session = (req as any).adminSession as ResolvedAdminSession | undefined;
+  if (!session?.isSuperAdmin) {
+    return res.status(403).json({ error: 'هذا الإجراء مقتصر على المطور الرئيسي للمنصة فقط' });
   }
   next();
 };
 
+const requirePermission =
+  (perm: keyof ResolvedAdminSession['permissions']) =>
+  (req: Request, res: Response, next: () => void) => {
+    const session = (req as any).adminSession as ResolvedAdminSession | undefined;
+    if (!session) {
+      return res.status(401).json({ error: 'غير مصرح' });
+    }
+    if (session.isSuperAdmin || session.permissions?.[perm]) {
+      return next();
+    }
+    return res.status(403).json({ error: 'ليس لديك صلاحية لتنفيذ هذا الإجراء في لوحة الإدارة' });
+  };
+
+const requireAnyPermission =
+  (...perms: Array<keyof ResolvedAdminSession['permissions']>) =>
+  (req: Request, res: Response, next: () => void) => {
+    const session = (req as any).adminSession as ResolvedAdminSession | undefined;
+    if (!session) {
+      return res.status(401).json({ error: 'غير مصرح' });
+    }
+    if (session.isSuperAdmin || perms.some((p) => session.permissions?.[p])) {
+      return next();
+    }
+    return res.status(403).json({ error: 'ليس لديك صلاحية لتنفيذ هذا الإجراء في لوحة الإدارة' });
+  };
+
 // --- AUTHENTICATION ROUTES ---
 app.post('/api/admin/login', (req: Request, res: Response) => {
-  const { email, password } = req.body;
+  const { email, password } = req.body || {};
   if (!email || !password) {
     return res.status(400).json({ error: 'يرجى إدخال البريد الإلكتروني وكلمة المرور' });
   }
 
-  const cleanEmail = email.trim().toLowerCase();
-  const isAuthorizedEmail = cleanEmail === PRIMARY_ADMIN_EMAIL.toLowerCase();
+  const cleanEmail = String(email).trim().toLowerCase();
+  const cleanPass = String(password).trim();
 
-  if (!isAuthorizedEmail) {
-    return res.status(403).json({
-      error: `حساب المطور مخصص فقط للبريد الإلكتروني ${PRIMARY_ADMIN_EMAIL}`,
+  if (cleanEmail === PRIMARY_ADMIN_EMAIL.toLowerCase()) {
+    const isAuthorizedPassword =
+      cleanPass === 'fr010020' ||
+      cleanPass === ADMIN_PASSWORD ||
+      cleanPass === 'GoldenFlix@Cinema2025';
+
+    if (!isAuthorizedPassword) {
+      appendAuditLog('محاولة دخول إدارية فاشلة', 'security', `كلمة مرور خاطئة للبريد ${cleanEmail}`, cleanEmail);
+      return res.status(401).json({ error: 'كلمة المرور غير صحيحة' });
+    }
+
+    appendAuditLog('تسجيل دخول لوحة التحكم', 'auth', `دخول المشرف ${PRIMARY_ADMIN_EMAIL}`, PRIMARY_ADMIN_EMAIL);
+
+    return res.json({
+      success: true,
+      token: ADMIN_SECRET_TOKEN,
+      email: PRIMARY_ADMIN_EMAIL,
+      name: 'مطور المنصة الرئيسي',
+      roleTitle: 'مالك المنصة (Super Admin)',
+      isSuperAdmin: true,
+      permissions: { ...SUPER_ADMIN_PERMISSIONS },
+      message: 'تم تسجيل دخول المشرف بنجاح',
     });
   }
 
-  const cleanPass = password.trim();
-  const isAuthorizedPassword =
-    cleanPass === 'fr010020' ||
-    cleanPass === ADMIN_PASSWORD ||
-    cleanPass === 'GoldenFlix@Cinema2025';
+  // Check invited co-editor / collaborator accounts
+  const adminsList = readJsonFile<any[]>(ADMINS_FILE, DEFAULT_ADMINS);
+  const memberIdx = adminsList.findIndex(
+    (a) => String(a.email || '').trim().toLowerCase() === cleanEmail
+  );
+  const member = memberIdx >= 0 ? adminsList[memberIdx] : null;
 
-  if (!isAuthorizedPassword) {
-    appendAuditLog('محاولة دخول إدارية فاشلة', 'security', `كلمة مرور خاطئة للبريد ${cleanEmail}`, cleanEmail);
-    return res.status(401).json({ error: 'كلمة المرور غير صحيحة' });
+  if (!member) {
+    return res.status(403).json({
+      error: 'هذا البريد غير مضاف في قائمة صلاحيات الإدارة.',
+    });
   }
 
-  appendAuditLog('تسجيل دخول لوحة التحكم', 'auth', `دخول المشرف ${PRIMARY_ADMIN_EMAIL}`, PRIMARY_ADMIN_EMAIL);
+  if (member.isActive === false) {
+    return res.status(403).json({
+      error: 'تم إيقاف صلاحية الدخول لهذا الحساب الإداري من قِبل مالك المنصة.',
+    });
+  }
+
+  let passOk = false;
+  if (member.passwordHash) {
+    passOk = bcrypt.compareSync(cleanPass, member.passwordHash);
+  } else if (cleanPass === COLLABORATOR_PASSWORD_REQUIRED_PART) {
+    // Migrate legacy collaborator without hash
+    adminsList[memberIdx].passwordHash = bcrypt.hashSync(COLLABORATOR_PASSWORD_REQUIRED_PART, 10);
+    adminsList[memberIdx].passwordHint = 'VBL/9';
+    writeJsonFile(ADMINS_FILE, adminsList);
+    passOk = true;
+  }
+
+  if (!passOk) {
+    appendAuditLog('محاولة دخول إدارية فاشلة', 'security', `كلمة مرور خاطئة للمشرف المساعد ${cleanEmail}`, cleanEmail);
+    return res.status(401).json({ error: 'كلمة مرور الإدارة غير صحيحة' });
+  }
+
+  const collabToken = signCollaboratorToken(cleanEmail, member.id);
+  appendAuditLog('تسجيل دخول مشرف مساعد', 'auth', `دخول ${member.name || cleanEmail} (${member.roleTitle || 'محرر'})`, cleanEmail);
 
   return res.json({
     success: true,
-    token: ADMIN_SECRET_TOKEN,
-    email: PRIMARY_ADMIN_EMAIL,
-    message: 'تم تسجيل دخول المشرف بنجاح',
+    token: collabToken,
+    email: member.email,
+    name: member.name || member.email,
+    roleTitle: member.roleTitle || 'محرر محتوى',
+    isSuperAdmin: false,
+    permissions: {
+      canUpload: Boolean(member.permissions?.canUpload),
+      canEditMedia: Boolean(member.permissions?.canEditMedia),
+      canDeleteMedia: Boolean(member.permissions?.canDeleteMedia),
+      canManageUsers: Boolean(member.permissions?.canManageUsers),
+      canManageSettings: Boolean(member.permissions?.canManageSettings),
+    },
+    message: 'تم تسجيل دخول المشرف المساعد بنجاح',
   });
 });
 
@@ -1011,9 +1227,46 @@ app.get('/api/admin/verify', (req: Request, res: Response) => {
     return res.json({ authenticated: false });
   }
   const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+  const session = verifyAdminTokenValue(token);
+  if (!session) {
+    return res.json({ authenticated: false });
+  }
+  return res.json(session);
+});
+
+app.get('/api/admin/access-check', (req: Request, res: Response) => {
+  const rawEmail = String(req.query?.email || '').trim().toLowerCase();
+  if (!rawEmail) {
+    return res.json({ allowed: false, isSuperAdmin: false });
+  }
+  if (rawEmail === PRIMARY_ADMIN_EMAIL.toLowerCase()) {
+    return res.json({
+      allowed: true,
+      isSuperAdmin: true,
+      name: 'مطور المنصة الرئيسي',
+      roleTitle: 'مالك المنصة (Super Admin)',
+      permissions: { ...SUPER_ADMIN_PERMISSIONS },
+    });
+  }
+  const adminsList = readJsonFile<any[]>(ADMINS_FILE, DEFAULT_ADMINS);
+  const member = adminsList.find(
+    (a) => String(a.email || '').trim().toLowerCase() === rawEmail && a.isActive !== false
+  );
+  if (!member) {
+    return res.json({ allowed: false, isSuperAdmin: false });
+  }
   return res.json({
-    authenticated: token === ADMIN_SECRET_TOKEN,
-    email: PRIMARY_ADMIN_EMAIL,
+    allowed: true,
+    isSuperAdmin: false,
+    name: member.name || member.email,
+    roleTitle: member.roleTitle || 'محرر محتوى',
+    permissions: {
+      canUpload: Boolean(member.permissions?.canUpload),
+      canEditMedia: Boolean(member.permissions?.canEditMedia),
+      canDeleteMedia: Boolean(member.permissions?.canDeleteMedia),
+      canManageUsers: Boolean(member.permissions?.canManageUsers),
+      canManageSettings: Boolean(member.permissions?.canManageSettings),
+    },
   });
 });
 
@@ -1022,6 +1275,10 @@ app.get('/api/admin/verify', (req: Request, res: Response) => {
 // 1. Register with Name, Email & Password -> Sends real clickable activation link
 app.post('/api/auth/register', async (req: Request, res: Response) => {
   try {
+    const currentSettings = readJsonFile<any>(SITE_SETTINGS_FILE, DEFAULT_SITE_SETTINGS);
+    if (currentSettings?.securitySettings?.allowNewRegistrations === false) {
+      return res.status(403).json({ error: 'التسجيل الجديد مغلق مؤقتاً من قِبل إدارة المنصة' });
+    }
     const { name, email, password } = req.body;
     if (!name || !email || !password) {
       return res.status(400).json({ error: 'الاسم، والبريد الإلكتروني، وكلمة المرور مطلوبة' });
@@ -1502,7 +1759,7 @@ app.get('/api/auth/system-status', async (_req: Request, res: Response) => {
 });
 
 // Admin: Get sanitized mail configuration
-app.get('/api/admin/mail-config', requireAdmin, (_req: Request, res: Response) => {
+app.get('/api/admin/mail-config', requireAdmin, requirePermission('canManageSettings'), (_req: Request, res: Response) => {
   const cfg = getEffectiveMailConfig();
   return res.json({
     smtpHost: cfg.smtpHost || '',
@@ -1518,7 +1775,7 @@ app.get('/api/admin/mail-config', requireAdmin, (_req: Request, res: Response) =
 });
 
 // Admin: Save and immediately verify SMTP / Resend / Supabase mail configuration
-app.post('/api/admin/mail-config', requireAdmin, async (req: Request, res: Response) => {
+app.post('/api/admin/mail-config', requireAdmin, requirePermission('canManageSettings'), async (req: Request, res: Response) => {
   try {
     const existing = readSavedMailConfig();
     const {
@@ -1621,7 +1878,7 @@ app.post('/api/admin/mail-config', requireAdmin, async (req: Request, res: Respo
 });
 
 // Admin: Reset custom runtime mail config
-app.delete('/api/admin/mail-config', requireAdmin, async (_req: Request, res: Response) => {
+app.delete('/api/admin/mail-config', requireAdmin, requirePermission('canManageSettings'), async (_req: Request, res: Response) => {
   try {
     if (fs.existsSync(MAIL_CONFIG_FILE)) {
       fs.unlinkSync(MAIL_CONFIG_FILE);
@@ -1635,7 +1892,7 @@ app.delete('/api/admin/mail-config', requireAdmin, async (_req: Request, res: Re
 });
 
 // Admin: Test sending real clickable verification link email
-app.post('/api/admin/test-email', requireAdmin, async (req: Request, res: Response) => {
+app.post('/api/admin/test-email', requireAdmin, requirePermission('canManageSettings'), async (req: Request, res: Response) => {
   const { testEmail } = req.body;
   if (!testEmail) {
     return res.status(400).json({ error: 'يرجى إدخال البريد الإلكتروني للاختبار' });
@@ -1725,7 +1982,7 @@ setInterval(() => {
 }, 30 * 60 * 1000).unref();
 
 // 1. Initialize parallel chunked upload (pre-creates destination video file directly on disk)
-app.post('/api/admin/upload-video/init', requireAdmin, (req: Request, res: Response) => {
+app.post('/api/admin/upload-video/init', requireAdmin, requirePermission('canUpload'), (req: Request, res: Response) => {
   try {
     const { fileName, fileSize } = req.body || {};
     const rawName = typeof fileName === 'string' && fileName.trim() ? fileName.trim() : 'movie.mp4';
@@ -1765,6 +2022,7 @@ app.post('/api/admin/upload-video/init', requireAdmin, (req: Request, res: Respo
 app.post(
   '/api/admin/upload-video/chunk',
   requireAdmin,
+  requirePermission('canUpload'),
   express.raw({ type: 'application/octet-stream', limit: '16mb' }),
   async (req: Request, res: Response) => {
     const uploadId = (req.headers['x-upload-id'] || '').toString().trim();
@@ -1803,7 +2061,7 @@ app.post(
 );
 
 // 3. Complete parallel chunked upload instantaneously (zero file copy/merge delay)
-app.post('/api/admin/upload-video/complete', requireAdmin, (req: Request, res: Response) => {
+app.post('/api/admin/upload-video/complete', requireAdmin, requirePermission('canUpload'), (req: Request, res: Response) => {
   try {
     const uploadId = (req.body?.uploadId || '').toString().trim();
     const session = activeChunkUploads.get(uploadId);
@@ -1834,7 +2092,7 @@ app.post('/api/admin/upload-video/complete', requireAdmin, (req: Request, res: R
 });
 
 // 4. Abort & clean up partial file when user cancels upload
-app.post('/api/admin/upload-video/abort', requireAdmin, (req: Request, res: Response) => {
+app.post('/api/admin/upload-video/abort', requireAdmin, requirePermission('canUpload'), (req: Request, res: Response) => {
   const uploadId = (req.body?.uploadId || '').toString().trim();
   const session = activeChunkUploads.get(uploadId);
   if (session) {
@@ -1851,7 +2109,7 @@ app.post('/api/admin/upload-video/abort', requireAdmin, (req: Request, res: Resp
 });
 
 // Legacy single-request video upload endpoint (kept for small files & compatibility)
-app.post('/api/admin/upload-video', requireAdmin, (req: Request, res: Response) => {
+app.post('/api/admin/upload-video', requireAdmin, requirePermission('canUpload'), (req: Request, res: Response) => {
   uploadVideo.single('video')(req, res, (err: any) => {
     if (err) {
       console.error('Multer video upload error:', err);
@@ -1878,7 +2136,7 @@ app.post('/api/admin/upload-video', requireAdmin, (req: Request, res: Response) 
 });
 
 // Poster image upload endpoint with explicit Multer error catching
-app.post('/api/admin/upload-poster', requireAdmin, (req: Request, res: Response) => {
+app.post('/api/admin/upload-poster', requireAdmin, requireAnyPermission('canUpload', 'canEditMedia'), (req: Request, res: Response) => {
   uploadPoster.single('poster')(req, res, (err: any) => {
     if (err) {
       console.error('Multer poster upload error:', err);
@@ -2559,7 +2817,7 @@ app.get('/api/admin/movies', requireAdmin, (_req: Request, res: Response) => {
 });
 
 // Admin: POST create new movie or series
-app.post('/api/admin/movies', requireAdmin, (req: Request, res: Response) => {
+app.post('/api/admin/movies', requireAdmin, requireAnyPermission('canUpload', 'canEditMedia'), (req: Request, res: Response) => {
   const {
     id,
     title,
@@ -2649,7 +2907,8 @@ app.post('/api/admin/movies', requireAdmin, (req: Request, res: Response) => {
   appendAuditLog(
     mediaType === 'series' ? 'إضافة مسلسل جديد' : 'إضافة فيلم جديد',
     mediaType === 'series' ? 'series' : 'media',
-    `تمت إضافة "${newMovie.titleAr}" (${newMovie.videoQuality})`
+    `تمت إضافة "${newMovie.titleAr}" (${newMovie.videoQuality})`,
+    getSessionActor(req)
   );
 
   return res.status(201).json({
@@ -2660,7 +2919,7 @@ app.post('/api/admin/movies', requireAdmin, (req: Request, res: Response) => {
 });
 
 // Admin: PUT update movie/series (edit metadata, seasons, sources, or toggle flags)
-app.put('/api/admin/movies/:id', requireAdmin, (req: Request, res: Response) => {
+app.put('/api/admin/movies/:id', requireAdmin, requirePermission('canEditMedia'), (req: Request, res: Response) => {
   const id = req.params.id;
   const movies = readMovies();
   const index = movies.findIndex((m) => m.id === id);
@@ -2687,7 +2946,8 @@ app.put('/api/admin/movies/:id', requireAdmin, (req: Request, res: Response) => 
   appendAuditLog(
     'تحديث عمل',
     updated.type === 'series' ? 'series' : 'media',
-    `تم تحديث "${updated.titleAr}"`
+    `تم تحديث "${updated.titleAr}"`,
+    getSessionActor(req)
   );
 
   return res.json({
@@ -2698,7 +2958,7 @@ app.put('/api/admin/movies/:id', requireAdmin, (req: Request, res: Response) => 
 });
 
 // Admin: DELETE movie or series completely across server, files, banners, comments, views & tombstones
-app.delete('/api/admin/movies/:id', requireAdmin, (req: Request, res: Response) => {
+app.delete('/api/admin/movies/:id', requireAdmin, requirePermission('canDeleteMedia'), (req: Request, res: Response) => {
   const id = (req.params.id || '').trim();
   if (!id) {
     return res.status(400).json({ error: 'معرف العمل مطلوب' });
@@ -2721,7 +2981,8 @@ app.delete('/api/admin/movies/:id', requireAdmin, (req: Request, res: Response) 
   appendAuditLog(
     'حذف عمل نهائياً من الموقع بالكامل',
     body.type === 'series' ? 'series' : 'media',
-    `تم حذف "${deletedTitles[0] || id}" وجميع ملفاته وآثاره`
+    `تم حذف "${deletedTitles[0] || id}" وجميع ملفاته وآثاره`,
+    getSessionActor(req)
   );
 
   return res.json({
@@ -2732,7 +2993,7 @@ app.delete('/api/admin/movies/:id', requireAdmin, (req: Request, res: Response) 
 });
 
 // Admin: Bulk DELETE multiple movies/series at once across the whole site
-app.post('/api/admin/movies/bulk-delete', requireAdmin, (req: Request, res: Response) => {
+app.post('/api/admin/movies/bulk-delete', requireAdmin, requirePermission('canDeleteMedia'), (req: Request, res: Response) => {
   const items = Array.isArray(req.body?.items) ? req.body.items : [];
   if (items.length === 0) {
     return res.status(400).json({ error: 'يرجى تحديد أعمال للحذف' });
@@ -2759,7 +3020,8 @@ app.post('/api/admin/movies/bulk-delete', requireAdmin, (req: Request, res: Resp
   appendAuditLog(
     'حذف جماعي للأعمال',
     'media',
-    `تم حذف ${deletedIds.length} أعمال نهائياً (${deletedTitles.slice(0, 3).join('، ')})`
+    `تم حذف ${deletedIds.length} أعمال نهائياً (${deletedTitles.slice(0, 3).join('، ')})`,
+    getSessionActor(req)
   );
 
   return res.json({
@@ -3113,11 +3375,11 @@ app.get('/api/admin/views', requireAdmin, (_req: Request, res: Response) => {
   });
 });
 
-app.delete('/api/admin/views', requireAdmin, (_req: Request, res: Response) => {
+app.delete('/api/admin/views', requireAdmin, requirePermission('canManageSettings'), (req: Request, res: Response) => {
   writeJsonFile(VIEWS_LOG_FILE, []);
   const movies = readMovies().map((m) => ({ ...m, viewsCount: 0 }));
   writeMovies(movies);
-  appendAuditLog('تصفير سجل المشاهدات', 'settings', 'تم مسح سجل المشاهدات وإعادة تعيين العدادات');
+  appendAuditLog('تصفير سجل المشاهدات', 'settings', 'تم مسح سجل المشاهدات وإعادة تعيين العدادات', getSessionActor(req));
   return res.json({ success: true });
 });
 
@@ -3339,14 +3601,15 @@ const deletePhysicalVideosAndSyncSite = (fileNames: string[]) => {
   };
 };
 
-app.delete('/api/admin/videos-library/:filename', requireAdmin, (req: Request, res: Response) => {
+app.delete('/api/admin/videos-library/:filename', requireAdmin, requirePermission('canDeleteMedia'), (req: Request, res: Response) => {
   const filename = path.basename(req.params.filename);
   try {
     const result = deletePhysicalVideosAndSyncSite([filename]);
     appendAuditLog(
       'حذف فيديو من المكتبة والموقع',
       'files',
-      `تم حذف ${filename}${result.deletedMovieIds.length ? ` وإزالة ${result.deletedMovieIds.length} أعمال مرتبطة` : ''}`
+      `تم حذف ${filename}${result.deletedMovieIds.length ? ` وإزالة ${result.deletedMovieIds.length} أعمال مرتبطة` : ''}`,
+      getSessionActor(req)
     );
     return res.json({
       success: true,
@@ -3358,7 +3621,7 @@ app.delete('/api/admin/videos-library/:filename', requireAdmin, (req: Request, r
   }
 });
 
-app.post('/api/admin/videos-library/bulk-delete', requireAdmin, (req: Request, res: Response) => {
+app.post('/api/admin/videos-library/bulk-delete', requireAdmin, requirePermission('canDeleteMedia'), (req: Request, res: Response) => {
   const fileNames = Array.isArray(req.body?.fileNames) ? req.body.fileNames : [];
   if (fileNames.length === 0) {
     return res.status(400).json({ error: 'يرجى تحديد فيديوهات للحذف' });
@@ -3368,7 +3631,8 @@ app.post('/api/admin/videos-library/bulk-delete', requireAdmin, (req: Request, r
     appendAuditLog(
       'حذف جماعي لملفات الفيديو',
       'files',
-      `تم حذف ${fileNames.length} ملفات فيديو من الخادم والموقع`
+      `تم حذف ${fileNames.length} ملفات فيديو من الخادم والموقع`,
+      getSessionActor(req)
     );
     return res.json({
       success: true,
@@ -3443,10 +3707,11 @@ app.post('/api/admin/test-stream-url', requireAdmin, async (req: Request, res: R
 
 // Categories CRUD
 app.get('/api/admin/categories', requireAdmin, (_req: Request, res: Response) => {
-  return res.json(readJsonFile<any[]>(CATEGORIES_FILE, DEFAULT_CATEGORIES));
+  const list = readJsonFile<any[]>(CATEGORIES_FILE, DEFAULT_CATEGORIES);
+  return res.json([...list].sort((a, b) => (a.order || 0) - (b.order || 0)));
 });
 
-app.post('/api/admin/categories', requireAdmin, (req: Request, res: Response) => {
+app.post('/api/admin/categories', requireAdmin, requirePermission('canManageSettings'), (req: Request, res: Response) => {
   const { nameAr, nameEn, slug, description, isVisible, order } = req.body || {};
   if (!nameAr) return res.status(400).json({ error: 'اسم التصنيف بالعربية مطلوب' });
   const list = readJsonFile<any[]>(CATEGORIES_FILE, DEFAULT_CATEGORIES);
@@ -3462,26 +3727,26 @@ app.post('/api/admin/categories', requireAdmin, (req: Request, res: Response) =>
   };
   list.push(newItem);
   writeJsonFile(CATEGORIES_FILE, list);
-  appendAuditLog('إضافة تصنيف', 'settings', `تمت إضافة التصنيف "${newItem.nameAr}"`);
+  appendAuditLog('إضافة تصنيف', 'settings', `تمت إضافة التصنيف "${newItem.nameAr}"`, getSessionActor(req));
   return res.status(201).json({ success: true, category: newItem });
 });
 
-app.put('/api/admin/categories/:id', requireAdmin, (req: Request, res: Response) => {
+app.put('/api/admin/categories/:id', requireAdmin, requirePermission('canManageSettings'), (req: Request, res: Response) => {
   const list = readJsonFile<any[]>(CATEGORIES_FILE, DEFAULT_CATEGORIES);
   const idx = list.findIndex((c) => c.id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: 'التصنيف غير موجود' });
   list[idx] = { ...list[idx], ...req.body, id: list[idx].id };
   writeJsonFile(CATEGORIES_FILE, list);
-  appendAuditLog('تحديث تصنيف', 'settings', `تم تعديل التصنيف "${list[idx].nameAr}"`);
+  appendAuditLog('تحديث تصنيف', 'settings', `تم تعديل التصنيف "${list[idx].nameAr}"`, getSessionActor(req));
   return res.json({ success: true, category: list[idx] });
 });
 
-app.delete('/api/admin/categories/:id', requireAdmin, (req: Request, res: Response) => {
+app.delete('/api/admin/categories/:id', requireAdmin, requirePermission('canManageSettings'), (req: Request, res: Response) => {
   const list = readJsonFile<any[]>(CATEGORIES_FILE, DEFAULT_CATEGORIES);
   const target = list.find((c) => c.id === req.params.id);
   if (!target) return res.status(404).json({ error: 'التصنيف غير موجود' });
   writeJsonFile(CATEGORIES_FILE, list.filter((c) => c.id !== req.params.id));
-  appendAuditLog('حذف تصنيف', 'settings', `تم حذف التصنيف "${target.nameAr}"`);
+  appendAuditLog('حذف تصنيف', 'settings', `تم حذف التصنيف "${target.nameAr}"`, getSessionActor(req));
   return res.json({ success: true });
 });
 
@@ -3490,7 +3755,7 @@ app.get('/api/admin/people', requireAdmin, (_req: Request, res: Response) => {
   return res.json(readJsonFile<any[]>(PEOPLE_FILE, []));
 });
 
-app.post('/api/admin/people', requireAdmin, (req: Request, res: Response) => {
+app.post('/api/admin/people', requireAdmin, requirePermission('canEditMedia'), (req: Request, res: Response) => {
   const { name, role, bio, avatarUrl, nationality } = req.body || {};
   if (!name) return res.status(400).json({ error: 'الاسم مطلوب' });
   const list = readJsonFile<any[]>(PEOPLE_FILE, []);
@@ -3505,23 +3770,24 @@ app.post('/api/admin/people', requireAdmin, (req: Request, res: Response) => {
   };
   list.unshift(item);
   writeJsonFile(PEOPLE_FILE, list);
-  appendAuditLog('إضافة فنان/مخرج', 'media', `تمت إضافة "${item.name}"`);
+  appendAuditLog('إضافة فنان/مخرج', 'media', `تمت إضافة "${item.name}"`, getSessionActor(req));
   return res.status(201).json({ success: true, person: item });
 });
 
-app.put('/api/admin/people/:id', requireAdmin, (req: Request, res: Response) => {
+app.put('/api/admin/people/:id', requireAdmin, requirePermission('canEditMedia'), (req: Request, res: Response) => {
   const list = readJsonFile<any[]>(PEOPLE_FILE, []);
   const idx = list.findIndex((p) => p.id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: 'الشخصية غير موجودة' });
   list[idx] = { ...list[idx], ...req.body, id: list[idx].id };
   writeJsonFile(PEOPLE_FILE, list);
+  appendAuditLog('تحديث فنان/مخرج', 'media', `تم تعديل "${list[idx].name}"`, getSessionActor(req));
   return res.json({ success: true, person: list[idx] });
 });
 
-app.delete('/api/admin/people/:id', requireAdmin, (req: Request, res: Response) => {
+app.delete('/api/admin/people/:id', requireAdmin, requirePermission('canEditMedia'), (req: Request, res: Response) => {
   const list = readJsonFile<any[]>(PEOPLE_FILE, []);
   writeJsonFile(PEOPLE_FILE, list.filter((p) => p.id !== req.params.id));
-  appendAuditLog('حذف فنان/مخرج', 'media', `تم حذف السجل ${req.params.id}`);
+  appendAuditLog('حذف فنان/مخرج', 'media', `تم حذف السجل ${req.params.id}`, getSessionActor(req));
   return res.json({ success: true });
 });
 
@@ -3530,20 +3796,20 @@ app.get('/api/admin/comments', requireAdmin, (_req: Request, res: Response) => {
   return res.json(readJsonFile<any[]>(COMMENTS_FILE, []));
 });
 
-app.put('/api/admin/comments/:id', requireAdmin, (req: Request, res: Response) => {
+app.put('/api/admin/comments/:id', requireAdmin, requirePermission('canEditMedia'), (req: Request, res: Response) => {
   const list = readJsonFile<any[]>(COMMENTS_FILE, []);
   const idx = list.findIndex((c) => c.id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: 'التعليق غير موجود' });
   list[idx] = { ...list[idx], ...req.body, id: list[idx].id };
   writeJsonFile(COMMENTS_FILE, list);
-  appendAuditLog('إدارة تعليق', 'media', `تحديث حالة التعليق ${req.params.id} إلى ${list[idx].status}`);
+  appendAuditLog('إدارة تعليق', 'media', `تحديث حالة التعليق ${req.params.id} إلى ${list[idx].status}`, getSessionActor(req));
   return res.json({ success: true, comment: list[idx] });
 });
 
-app.delete('/api/admin/comments/:id', requireAdmin, (req: Request, res: Response) => {
+app.delete('/api/admin/comments/:id', requireAdmin, requirePermission('canEditMedia'), (req: Request, res: Response) => {
   const list = readJsonFile<any[]>(COMMENTS_FILE, []);
   writeJsonFile(COMMENTS_FILE, list.filter((c) => c.id !== req.params.id));
-  appendAuditLog('حذف تعليق', 'media', `تم حذف التعليق ${req.params.id}`);
+  appendAuditLog('حذف تعليق', 'media', `تم حذف التعليق ${req.params.id}`, getSessionActor(req));
   return res.json({ success: true });
 });
 
@@ -3552,7 +3818,7 @@ app.get('/api/admin/notifications', requireAdmin, (_req: Request, res: Response)
   return res.json(readJsonFile<any[]>(NOTIFICATIONS_FILE, []));
 });
 
-app.post('/api/admin/notifications', requireAdmin, (req: Request, res: Response) => {
+app.post('/api/admin/notifications', requireAdmin, requirePermission('canEditMedia'), (req: Request, res: Response) => {
   const { title, message, type, target } = req.body || {};
   if (!title || !message) return res.status(400).json({ error: 'عنوان الإشعار ونصه مطلوبان' });
   const list = readJsonFile<any[]>(NOTIFICATIONS_FILE, []);
@@ -3567,22 +3833,24 @@ app.post('/api/admin/notifications', requireAdmin, (req: Request, res: Response)
   };
   list.unshift(item);
   writeJsonFile(NOTIFICATIONS_FILE, list);
-  appendAuditLog('إرسال إشعار منصة', 'system', `تم إرسال إشعار: "${item.title}"`);
+  appendAuditLog('إرسال إشعار منصة', 'system', `تم إرسال إشعار: "${item.title}"`, getSessionActor(req));
   return res.status(201).json({ success: true, notification: item });
 });
 
-app.put('/api/admin/notifications/:id', requireAdmin, (req: Request, res: Response) => {
+app.put('/api/admin/notifications/:id', requireAdmin, requirePermission('canEditMedia'), (req: Request, res: Response) => {
   const list = readJsonFile<any[]>(NOTIFICATIONS_FILE, []);
   const idx = list.findIndex((n) => n.id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: 'الإشعار غير موجود' });
   list[idx] = { ...list[idx], ...req.body, id: list[idx].id };
   writeJsonFile(NOTIFICATIONS_FILE, list);
+  appendAuditLog('تعديل إشعار منصة', 'system', `تحديث الإشعار "${list[idx].title}"`, getSessionActor(req));
   return res.json({ success: true, notification: list[idx] });
 });
 
-app.delete('/api/admin/notifications/:id', requireAdmin, (req: Request, res: Response) => {
+app.delete('/api/admin/notifications/:id', requireAdmin, requirePermission('canEditMedia'), (req: Request, res: Response) => {
   const list = readJsonFile<any[]>(NOTIFICATIONS_FILE, []);
   writeJsonFile(NOTIFICATIONS_FILE, list.filter((n) => n.id !== req.params.id));
+  appendAuditLog('حذف إشعار منصة', 'system', `تم حذف الإشعار ${req.params.id}`, getSessionActor(req));
   return res.json({ success: true });
 });
 
@@ -3601,7 +3869,7 @@ app.get('/api/admin/users', requireAdmin, (_req: Request, res: Response) => {
   return res.json(enriched);
 });
 
-app.put('/api/admin/users/:id', requireAdmin, (req: Request, res: Response) => {
+app.put('/api/admin/users/:id', requireAdmin, requirePermission('canManageUsers'), (req: Request, res: Response) => {
   const users = readUsers();
   const idx = users.findIndex((u) => u.id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: 'المستخدم غير موجود' });
@@ -3624,12 +3892,13 @@ app.put('/api/admin/users/:id', requireAdmin, (req: Request, res: Response) => {
   appendAuditLog(
     'تحديث حساب مستخدم',
     'users',
-    `تحديث الحساب ${target.email} (الحالة: ${users[idx].disabled ? 'معطل' : 'نشط'} / الدور: ${users[idx].role})`
+    `تحديث الحساب ${target.email} (الحالة: ${users[idx].disabled ? 'معطل' : 'نشط'} / الدور: ${users[idx].role})`,
+    getSessionActor(req)
   );
   return res.json({ success: true, user: buildSafeUser(users[idx]) });
 });
 
-app.delete('/api/admin/users/:id', requireAdmin, (req: Request, res: Response) => {
+app.delete('/api/admin/users/:id', requireAdmin, requirePermission('canManageUsers'), (req: Request, res: Response) => {
   const users = readUsers();
   const target = users.find((u) => u.id === req.params.id);
   if (!target) return res.status(404).json({ error: 'المستخدم غير موجود' });
@@ -3637,23 +3906,38 @@ app.delete('/api/admin/users/:id', requireAdmin, (req: Request, res: Response) =
     return res.status(400).json({ error: 'لا يمكن حذف حساب المطور الرئيسي للمنصة' });
   }
   writeUsers(users.filter((u) => u.id !== req.params.id));
-  appendAuditLog('حذف حساب مستخدم', 'users', `تم حذف الحساب ${target.email} نهائياً`);
+  appendAuditLog('حذف حساب مستخدم', 'users', `تم حذف الحساب ${target.email} نهائياً`, getSessionActor(req));
   return res.json({ success: true });
 });
 
 // Admins & Permissions Management
 app.get('/api/admin/admins', requireAdmin, (_req: Request, res: Response) => {
-  return res.json(readJsonFile<any[]>(ADMINS_FILE, DEFAULT_ADMINS));
+  const list = readJsonFile<any[]>(ADMINS_FILE, DEFAULT_ADMINS);
+  return res.json(list.map(sanitizeAdminRecord));
 });
 
-app.post('/api/admin/admins', requireAdmin, (req: Request, res: Response) => {
-  const { email, name, roleTitle, permissions } = req.body || {};
+app.post('/api/admin/admins', requireAdmin, requireSuperAdmin, (req: Request, res: Response) => {
+  const { email, name, roleTitle, permissions, password } = req.body || {};
   if (!email || !name) return res.status(400).json({ error: 'الاسم والبريد الإلكتروني مطلوبان' });
   const cleanEmail = email.toString().trim().toLowerCase();
+  if (!cleanEmail.includes('@') || !cleanEmail.includes('.')) {
+    return res.status(400).json({ error: 'يرجى إدخال بريد إلكتروني صالح' });
+  }
+  const rawPass = (password !== undefined && password !== null && String(password).trim() !== ''
+    ? String(password).trim()
+    : COLLABORATOR_PASSWORD_REQUIRED_PART);
+
+  if (!rawPass.includes(COLLABORATOR_PASSWORD_REQUIRED_PART)) {
+    return res.status(400).json({
+      error: `يجب أن تتضمن كلمة مرور تسجيل الدخول للإدارة الرمز (${COLLABORATOR_PASSWORD_REQUIRED_PART})`,
+    });
+  }
+
   const list = readJsonFile<any[]>(ADMINS_FILE, DEFAULT_ADMINS);
-  if (list.some((a) => a.email.toLowerCase() === cleanEmail)) {
+  if (list.some((a) => String(a.email || '').toLowerCase() === cleanEmail)) {
     return res.status(400).json({ error: 'هذا البريد مضاف بالفعل في قائمة الصلاحيات' });
   }
+
   const newAdmin = {
     id: `admin-${Date.now()}`,
     email: cleanEmail,
@@ -3661,6 +3945,8 @@ app.post('/api/admin/admins', requireAdmin, (req: Request, res: Response) => {
     roleTitle: (roleTitle || 'محرر محتوى').toString().trim(),
     isSuperAdmin: false,
     isActive: true,
+    passwordHash: bcrypt.hashSync(rawPass, 10),
+    passwordHint: rawPass === COLLABORATOR_PASSWORD_REQUIRED_PART ? 'VBL/9' : 'يتضمن VBL/9',
     permissions: permissions || {
       canUpload: true,
       canEditMedia: true,
@@ -3672,24 +3958,47 @@ app.post('/api/admin/admins', requireAdmin, (req: Request, res: Response) => {
   };
   list.push(newAdmin);
   writeJsonFile(ADMINS_FILE, list);
-  appendAuditLog('إضافة صلاحية مدير', 'security', `تمت إضافة ${cleanEmail} بدور ${newAdmin.roleTitle}`);
-  return res.status(201).json({ success: true, admin: newAdmin });
+  appendAuditLog('إضافة صلاحية مدير', 'security', `تمت إضافة ${cleanEmail} بدور ${newAdmin.roleTitle}`, getSessionActor(req));
+  return res.status(201).json({ success: true, admin: sanitizeAdminRecord(newAdmin) });
 });
 
-app.put('/api/admin/admins/:id', requireAdmin, (req: Request, res: Response) => {
+app.put('/api/admin/admins/:id', requireAdmin, requireSuperAdmin, (req: Request, res: Response) => {
   const list = readJsonFile<any[]>(ADMINS_FILE, DEFAULT_ADMINS);
   const idx = list.findIndex((a) => a.id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: 'السجل غير موجود' });
   if (list[idx].isSuperAdmin) {
     return res.status(400).json({ error: 'صلاحيات المطور الرئيسي ثابتة ولا يمكن تقييدها' });
   }
-  list[idx] = { ...list[idx], ...req.body, id: list[idx].id, isSuperAdmin: false };
+
+  const { password, passwordHash: _ignoredHash, ...rest } = req.body || {};
+  let nextPasswordHash = list[idx].passwordHash;
+  let nextPasswordHint = list[idx].passwordHint;
+
+  if (typeof password === 'string' && password.trim() !== '') {
+    const cleanPass = password.trim();
+    if (!cleanPass.includes(COLLABORATOR_PASSWORD_REQUIRED_PART)) {
+      return res.status(400).json({
+        error: `يجب أن تتضمن كلمة مرور تسجيل الدخول للإدارة الرمز (${COLLABORATOR_PASSWORD_REQUIRED_PART})`,
+      });
+    }
+    nextPasswordHash = bcrypt.hashSync(cleanPass, 10);
+    nextPasswordHint = cleanPass === COLLABORATOR_PASSWORD_REQUIRED_PART ? 'VBL/9' : 'يتضمن VBL/9';
+  }
+
+  list[idx] = {
+    ...list[idx],
+    ...rest,
+    id: list[idx].id,
+    isSuperAdmin: false,
+    passwordHash: nextPasswordHash,
+    passwordHint: nextPasswordHint,
+  };
   writeJsonFile(ADMINS_FILE, list);
-  appendAuditLog('تعديل صلاحيات إدارية', 'security', `تعديل صلاحيات ${list[idx].email}`);
-  return res.json({ success: true, admin: list[idx] });
+  appendAuditLog('تعديل صلاحيات إدارية', 'security', `تعديل صلاحيات ${list[idx].email}`, getSessionActor(req));
+  return res.json({ success: true, admin: sanitizeAdminRecord(list[idx]) });
 });
 
-app.delete('/api/admin/admins/:id', requireAdmin, (req: Request, res: Response) => {
+app.delete('/api/admin/admins/:id', requireAdmin, requireSuperAdmin, (req: Request, res: Response) => {
   const list = readJsonFile<any[]>(ADMINS_FILE, DEFAULT_ADMINS);
   const target = list.find((a) => a.id === req.params.id);
   if (!target) return res.status(404).json({ error: 'السجل غير موجود' });
@@ -3697,7 +4006,7 @@ app.delete('/api/admin/admins/:id', requireAdmin, (req: Request, res: Response) 
     return res.status(400).json({ error: 'لا يمكن إزالة المطور الرئيسي للمنصة' });
   }
   writeJsonFile(ADMINS_FILE, list.filter((a) => a.id !== req.params.id));
-  appendAuditLog('سحب صلاحية إدارية', 'security', `تم سحب صلاحية ${target.email}`);
+  appendAuditLog('سحب صلاحية إدارية', 'security', `تم سحب صلاحية ${target.email}`, getSessionActor(req));
   return res.json({ success: true });
 });
 
@@ -3706,9 +4015,9 @@ app.get('/api/admin/audit-logs', requireAdmin, (_req: Request, res: Response) =>
   return res.json(readJsonFile<any[]>(AUDIT_LOGS_FILE, []));
 });
 
-app.delete('/api/admin/audit-logs', requireAdmin, (_req: Request, res: Response) => {
+app.delete('/api/admin/audit-logs', requireAdmin, requireSuperAdmin, (req: Request, res: Response) => {
   writeJsonFile(AUDIT_LOGS_FILE, []);
-  appendAuditLog('تنظيف سجل العمليات', 'security', 'تمت إعادة تهيئة سجل العمليات الإدارية');
+  appendAuditLog('تنظيف سجل العمليات', 'security', 'تمت إعادة تهيئة سجل العمليات الإدارية', getSessionActor(req));
   return res.json({ success: true });
 });
 
@@ -3718,7 +4027,7 @@ app.get('/api/admin/site-settings', requireAdmin, (_req: Request, res: Response)
   return res.json({ ...DEFAULT_SITE_SETTINGS, ...settings });
 });
 
-app.put('/api/admin/site-settings', requireAdmin, (req: Request, res: Response) => {
+app.put('/api/admin/site-settings', requireAdmin, requirePermission('canManageSettings'), (req: Request, res: Response) => {
   const current = readJsonFile<any>(SITE_SETTINGS_FILE, DEFAULT_SITE_SETTINGS);
   const merged = {
     ...DEFAULT_SITE_SETTINGS,
@@ -3731,7 +4040,7 @@ app.put('/api/admin/site-settings', requireAdmin, (req: Request, res: Response) 
     notificationsSettings: { ...DEFAULT_SITE_SETTINGS.notificationsSettings, ...(current.notificationsSettings || {}), ...(req.body?.notificationsSettings || {}) },
   };
   writeJsonFile(SITE_SETTINGS_FILE, merged);
-  appendAuditLog('تحديث إعدادات المنصة', 'settings', 'تم حفظ تعديلات الإعدادات العامة أو المشغل أو الواجهة');
+  appendAuditLog('تحديث إعدادات المنصة', 'settings', 'تم حفظ تعديلات الإعدادات العامة أو المشغل أو الواجهة', getSessionActor(req));
   return res.json({ success: true, settings: merged });
 });
 

@@ -1059,6 +1059,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
       let cancelled = false;
       let progressTimer: number | null = null;
       let ytReadyReceived = false;
+      let rawYtPlayer: YTPlayerInstance | null = null;
       const ytBootWatchdog = window.setTimeout(() => {
         if (cancelled || ytReadyReceived || hasFatalErrorRef.current) return;
         const switched = attemptAutomaticFailoverRef.current('تأخر استجابة مشغل يوتيوب');
@@ -1193,41 +1194,57 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
                 enforceYoutubeIframeStyle();
                 setIsLoading(false);
 
-                const dur = target.getDuration?.() || 0;
+                const dur =
+                  typeof target.getDuration === 'function' ? target.getDuration() || 0 : 0;
                 if (dur > 0) setDuration(dur);
 
                 if (typeof target.setVolume === 'function') {
                   target.setVolume(isMuted ? 0 : Math.round(volume * 100));
                 }
-                if (isMuted) target.mute?.();
-                else target.unMute?.();
+                if (isMuted && typeof target.mute === 'function') target.mute();
+                else if (!isMuted && typeof target.unMute === 'function') target.unMute();
 
-                if (playbackSpeed !== 1) {
-                  target.setPlaybackRate?.(playbackSpeed);
+                if (playbackSpeed !== 1 && typeof target.setPlaybackRate === 'function') {
+                  target.setPlaybackRate(playbackSpeed);
                 }
 
                 syncYouTubeQualities(target);
 
                 if (initialYtCode !== 'auto') {
-                  target.setPlaybackQualityRange?.(initialYtCode, initialYtCode);
-                  target.setPlaybackQuality?.(initialYtCode);
+                  if (typeof target.setPlaybackQualityRange === 'function') {
+                    target.setPlaybackQualityRange(initialYtCode, initialYtCode);
+                  }
+                  if (typeof target.setPlaybackQuality === 'function') {
+                    target.setPlaybackQuality(initialYtCode);
+                  }
                 }
 
-                if (pendingSeekRef.current !== null) {
-                  target.seekTo?.(pendingSeekRef.current, true);
+                if (pendingSeekRef.current !== null && typeof target.seekTo === 'function') {
+                  target.seekTo(pendingSeekRef.current, true);
                   pendingSeekRef.current = null;
                 }
 
-                if (!isPreRollIntroActiveRef.current) {
-                  target.playVideo?.();
+                if (!isPreRollIntroActiveRef.current || resumeAutoplayRef.current) {
+                  resumeAutoplayRef.current = false;
+                  if (typeof target.playVideo === 'function') {
+                    target.playVideo();
+                  }
                 }
 
                 progressTimer = window.setInterval(() => {
                   const p = ytPlayerRef.current;
                   if (!p || hasFatalErrorRef.current) return;
-                  const now = Number(p.getCurrentTime?.() || 0);
-                  const total = Number(p.getDuration?.() || 0);
-                  const loadedFrac = Number(p.getVideoLoadedFraction?.() || 0);
+                  const now = Number(
+                    typeof p.getCurrentTime === 'function' ? p.getCurrentTime() || 0 : 0
+                  );
+                  const total = Number(
+                    typeof p.getDuration === 'function' ? p.getDuration() || 0 : 0
+                  );
+                  const loadedFrac = Number(
+                    typeof p.getVideoLoadedFraction === 'function'
+                      ? p.getVideoLoadedFraction() || 0
+                      : 0
+                  );
                   if (Number.isFinite(now)) setCurrentTime(now);
                   if (Number.isFinite(total) && total > 0) {
                     setDuration(total);
@@ -1242,15 +1259,22 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
               },
               onStateChange: ({ data, target }) => {
                 if (cancelled) return;
+                if (ytPlayerRef.current !== target && typeof target?.playVideo === 'function') {
+                  ytPlayerRef.current = target;
+                }
                 if (data === 1) {
                   setIsLoading(false);
                   setIsPlaying(true);
                   setYtHasStartedPlaying(true);
                   setIsEnded(false);
-                  const dur = target.getDuration?.() || 0;
+                  const dur =
+                    typeof target.getDuration === 'function' ? target.getDuration() || 0 : 0;
                   if (dur > 0) setDuration(dur);
                   syncYouTubeQualities(target);
-                  const currentQ = target.getPlaybackQuality?.();
+                  const currentQ =
+                    typeof target.getPlaybackQuality === 'function'
+                      ? target.getPlaybackQuality()
+                      : undefined;
                   if (currentQ && currentQ !== 'unknown') {
                     setDetectedResolution(formatYouTubeQualityCode(currentQ));
                   }
@@ -1263,7 +1287,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
                   setIsLoading(false);
                   setIsPlaying(false);
                   setIsEnded(true);
-                  const dur = target.getDuration?.() || duration;
+                  const dur =
+                    (typeof target.getDuration === 'function' ? target.getDuration() : 0) ||
+                    duration;
                   persistProgress(dur, dur);
                 } else if (data === 5 || data === -1) {
                   setIsLoading(false);
@@ -1300,8 +1326,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
               },
             },
           });
-          ytPlayerRef.current = player;
+          rawYtPlayer = player;
           enforceYoutubeIframeStyle();
+          if (typeof player?.playVideo === 'function') {
+            ytPlayerRef.current = player;
+          }
         })
         .catch(() => {
           if (cancelled) return;
@@ -1320,14 +1349,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
         if (progressTimer !== null) {
           window.clearInterval(progressTimer);
         }
-        if (ytPlayerRef.current) {
+        const activeInstance = ytPlayerRef.current || rawYtPlayer;
+        if (activeInstance && typeof activeInstance.destroy === 'function') {
           try {
-            ytPlayerRef.current.destroy();
+            activeInstance.destroy();
           } catch {
             // Ignore cleanup errors
           }
-          ytPlayerRef.current = null;
         }
+        ytPlayerRef.current = null;
         if (ytHostRef.current) {
           ytHostRef.current.innerHTML = '';
         }
@@ -1492,9 +1522,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
 
     if (isYouTubeSource) {
       const yt = ytPlayerRef.current;
-      if (!yt) return;
+      if (!yt || typeof yt.playVideo !== 'function' || typeof yt.pauseVideo !== 'function') {
+        resumeAutoplayRef.current = true;
+        setIsLoading(true);
+        revealControls();
+        return;
+      }
       if (isEnded) {
-        yt.seekTo(0, true);
+        if (typeof yt.seekTo === 'function') yt.seekTo(0, true);
         setIsEnded(false);
         yt.playVideo();
         isPlayingRef.current = true;
@@ -1502,12 +1537,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
         revealControls();
         return;
       }
-      const state = yt.getPlayerState?.();
+      const state = typeof yt.getPlayerState === 'function' ? yt.getPlayerState() : -1;
       if (state === 1) {
         yt.pauseVideo();
         isPlayingRef.current = false;
         setIsPlaying(false);
-        persistProgress(yt.getCurrentTime?.() || currentTime, yt.getDuration?.() || duration);
+        const nowPos = typeof yt.getCurrentTime === 'function' ? yt.getCurrentTime() || currentTime : currentTime;
+        const totDur = typeof yt.getDuration === 'function' ? yt.getDuration() || duration : duration;
+        persistProgress(nowPos, totDur);
       } else {
         yt.playVideo();
         isPlayingRef.current = true;
@@ -1547,8 +1584,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
 
       if (isYouTubeSource) {
         const yt = ytPlayerRef.current;
-        if (!yt) return;
-        const maxDuration = yt.getDuration?.() || duration || 0;
+        if (!yt || typeof yt.seekTo !== 'function') {
+          pendingSeekRef.current = Math.max(0, newTime);
+          revealControls();
+          return;
+        }
+        const maxDuration =
+          (typeof yt.getDuration === 'function' ? yt.getDuration() : 0) || duration || 0;
         const clamped = Math.max(0, Math.min(newTime, maxDuration));
         yt.seekTo(clamped, true);
         setCurrentTime(clamped);
@@ -1581,7 +1623,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
 
   const skipForward = useCallback(() => {
     const base = isYouTubeSource
-      ? ytPlayerRef.current?.getCurrentTime?.() ?? currentTime
+      ? (typeof ytPlayerRef.current?.getCurrentTime === 'function'
+          ? ytPlayerRef.current.getCurrentTime()
+          : currentTime) ?? currentTime
       : videoRef.current
       ? videoRef.current.currentTime
       : currentTime;
@@ -1591,7 +1635,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
 
   const skipBackward = useCallback(() => {
     const base = isYouTubeSource
-      ? ytPlayerRef.current?.getCurrentTime?.() ?? currentTime
+      ? (typeof ytPlayerRef.current?.getCurrentTime === 'function'
+          ? ytPlayerRef.current.getCurrentTime()
+          : currentTime) ?? currentTime
       : videoRef.current
       ? videoRef.current.currentTime
       : currentTime;
@@ -1605,9 +1651,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
       if (isYouTubeSource) {
         const yt = ytPlayerRef.current;
         if (yt) {
-          yt.setVolume(Math.round(clamped * 100));
-          if (clamped === 0) yt.mute();
-          else yt.unMute();
+          if (typeof yt.setVolume === 'function') yt.setVolume(Math.round(clamped * 100));
+          if (clamped === 0 && typeof yt.mute === 'function') yt.mute();
+          else if (clamped > 0 && typeof yt.unMute === 'function') yt.unMute();
         }
         setVolume(clamped);
         setIsMuted(clamped === 0);
@@ -1631,12 +1677,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
       const yt = ytPlayerRef.current;
       if (isMuted) {
         const restored = volume > 0.05 ? volume : 0.8;
-        yt?.unMute();
-        yt?.setVolume(Math.round(restored * 100));
+        if (typeof yt?.unMute === 'function') yt.unMute();
+        if (typeof yt?.setVolume === 'function') yt.setVolume(Math.round(restored * 100));
         setVolume(restored);
         setIsMuted(false);
       } else {
-        yt?.mute();
+        if (typeof yt?.mute === 'function') yt.mute();
         setIsMuted(true);
       }
       revealControls();
@@ -1912,10 +1958,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
     if (isYouTubeSource) {
       const yt = ytPlayerRef.current;
       setCurrentTime(0);
-      if (yt) {
+      resumeAutoplayRef.current = true;
+      if (yt && typeof yt.playVideo === 'function') {
         try {
-          yt.seekTo?.(0, true);
-          yt.playVideo?.();
+          if (typeof yt.seekTo === 'function') yt.seekTo(0, true);
+          yt.playVideo();
           isPlayingRef.current = true;
           setIsPlaying(true);
         } catch {
@@ -2009,11 +2056,20 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
 
   const resumeSavedProgress = useCallback(() => {
     if (resumePrompt === null) return;
-    if (isYouTubeSource && ytPlayerRef.current) {
-      ytPlayerRef.current.seekTo(resumePrompt, true);
+    if (isYouTubeSource) {
+      const yt = ytPlayerRef.current;
+      if (!yt || typeof yt.playVideo !== 'function') {
+        pendingSeekRef.current = resumePrompt;
+        resumeAutoplayRef.current = true;
+        setCurrentTime(resumePrompt);
+        setResumePrompt(null);
+        revealControls();
+        return;
+      }
+      if (typeof yt.seekTo === 'function') yt.seekTo(resumePrompt, true);
       setCurrentTime(resumePrompt);
       setResumePrompt(null);
-      ytPlayerRef.current.playVideo();
+      yt.playVideo();
       setIsPlaying(true);
       revealControls();
       return;
@@ -3376,9 +3432,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
                   onClick={() => {
                     if (isYouTubeSource) {
                       const yt = ytPlayerRef.current;
-                      if (!yt) return;
                       setIsEnded(false);
-                      yt.seekTo(0, true);
+                      if (!yt || typeof yt.playVideo !== 'function') {
+                        pendingSeekRef.current = 0;
+                        resumeAutoplayRef.current = true;
+                        return;
+                      }
+                      if (typeof yt.seekTo === 'function') yt.seekTo(0, true);
                       yt.playVideo();
                       setIsPlaying(true);
                       return;

@@ -31,9 +31,14 @@ import { AdminConfirmDialog } from '../AdminConfirmDialog';
 interface UsersAnalyticsSectionsProps {
   mode: 'users' | 'analytics' | 'views_management';
   token: string;
+  onViewsReset?: () => void;
 }
 
-export const UsersAnalyticsSections: React.FC<UsersAnalyticsSectionsProps> = ({ mode, token }) => {
+export const UsersAnalyticsSections: React.FC<UsersAnalyticsSectionsProps> = ({
+  mode,
+  token,
+  onViewsReset,
+}) => {
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
 
   // --- USERS ---
@@ -225,15 +230,27 @@ export const UsersAnalyticsSections: React.FC<UsersAnalyticsSectionsProps> = ({ 
                           ) : (
                             <select
                               value={u.role}
+                              disabled={isMutatingUser}
                               onChange={async (e) => {
-                                await updateAdminUser(token, u.id, { role: e.target.value });
-                                loadUsers();
+                                const nextRole = e.target.value;
+                                setIsMutatingUser(true);
+                                setFeedback(null);
+                                try {
+                                  await updateAdminUser(token, u.id, { role: nextRole });
+                                  await loadUsers();
+                                  setFeedback({ type: 'success', msg: `تم تغيير دور "${u.displayName || u.email}" بنجاح` });
+                                } catch (err: any) {
+                                  setFeedback({ type: 'error', msg: err?.message || 'تعذر تغيير دور المستخدم' });
+                                } finally {
+                                  setIsMutatingUser(false);
+                                }
                               }}
                               className="bg-zinc-950 border border-white/10 rounded-lg px-2 py-1 text-[11px] text-white"
                             >
                               <option value="عضو VIP">عضو VIP</option>
                               <option value="مشاهد">مشاهد</option>
                               <option value="محرر">محرر</option>
+                              <option value="عضو مسجل">عضو مسجل</option>
                             </select>
                           )}
                         </td>
@@ -261,9 +278,22 @@ export const UsersAnalyticsSections: React.FC<UsersAnalyticsSectionsProps> = ({ 
                               <>
                                 <button
                                   type="button"
+                                  disabled={isMutatingUser}
                                   onClick={async () => {
-                                    await updateAdminUser(token, u.id, { disabled: !u.disabled });
-                                    loadUsers();
+                                    setIsMutatingUser(true);
+                                    setFeedback(null);
+                                    try {
+                                      await updateAdminUser(token, u.id, { disabled: !u.disabled });
+                                      await loadUsers();
+                                      setFeedback({
+                                        type: 'success',
+                                        msg: u.disabled ? 'تم تفعيل حساب المستخدم' : 'تم تعطيل حساب المستخدم',
+                                      });
+                                    } catch (err: any) {
+                                      setFeedback({ type: 'error', msg: err?.message || 'تعذر تحديث حالة الحساب' });
+                                    } finally {
+                                      setIsMutatingUser(false);
+                                    }
                                   }}
                                   className={`px-2 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer ${
                                     u.disabled
@@ -415,6 +445,18 @@ export const UsersAnalyticsSections: React.FC<UsersAnalyticsSectionsProps> = ({ 
           </div>
         </div>
 
+        {feedback && (
+          <div
+            className={`p-3 rounded-xl text-xs border ${
+              feedback.type === 'success'
+                ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
+                : 'bg-rose-500/15 border-rose-500/30 text-rose-300'
+            }`}
+          >
+            {feedback.msg}
+          </div>
+        )}
+
         {loadingAnalytics && !analytics ? (
           <div className="py-16 text-center text-zinc-400 text-xs">جارٍ حساب الإحصائيات...</div>
         ) : (
@@ -487,15 +529,37 @@ export const UsersAnalyticsSections: React.FC<UsersAnalyticsSectionsProps> = ({ 
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setConfirmResetViews(true)}
-          className="px-3.5 py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 text-xs font-black flex items-center gap-1.5 cursor-pointer"
-        >
-          <RotateCcw className="w-3.5 h-3.5" />
-          <span>تصفير المشاهدات</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={loadViews}
+            className="px-3 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-xs font-bold text-zinc-200 border border-white/10 flex items-center gap-1.5 cursor-pointer"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loadingViews ? 'animate-spin' : ''}`} />
+            <span>تحديث</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setConfirmResetViews(true)}
+            className="px-3.5 py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 text-xs font-black flex items-center gap-1.5 cursor-pointer"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>تصفير المشاهدات</span>
+          </button>
+        </div>
       </div>
+
+      {feedback && (
+        <div
+          className={`p-3 rounded-xl text-xs border ${
+            feedback.type === 'success'
+              ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
+              : 'bg-rose-500/15 border-rose-500/30 text-rose-300'
+          }`}
+        >
+          {feedback.msg}
+        </div>
+      )}
 
       {loadingViews ? (
         <div className="py-16 text-center text-zinc-400 text-xs">جارٍ تحميل السجل...</div>
@@ -553,10 +617,22 @@ export const UsersAnalyticsSections: React.FC<UsersAnalyticsSectionsProps> = ({ 
         title="تصفير عدادات المشاهدة"
         message="سيتم مسح سجل المشاهدات وإعادة تعيين العدادات لجميع الأفلام والمسلسلات إلى 0. هل تريد المتابعة؟"
         confirmLabel="تصفير الآن"
+        isLoading={isMutatingUser}
         onConfirm={async () => {
-          await resetAdminViews(token);
-          setConfirmResetViews(false);
-          loadViews();
+          setIsMutatingUser(true);
+          setFeedback(null);
+          try {
+            await resetAdminViews(token);
+            setConfirmResetViews(false);
+            await loadViews();
+            onViewsReset?.();
+            setFeedback({ type: 'success', msg: 'تم تصفير سجل المشاهدات بنجاح' });
+          } catch (err: any) {
+            setConfirmResetViews(false);
+            setFeedback({ type: 'error', msg: err?.message || 'فشل تصفير المشاهدات' });
+          } finally {
+            setIsMutatingUser(false);
+          }
         }}
         onCancel={() => setConfirmResetViews(false)}
       />

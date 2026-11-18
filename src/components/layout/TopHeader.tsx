@@ -4,17 +4,8 @@ import {
   Search,
   Bell,
   X,
-  LayoutGrid,
   Clapperboard,
-  Zap,
-  Drama,
-  Ghost,
-  Laugh,
-  Rocket,
-  Compass,
-  Heart,
   User,
-  Play,
   BellRing,
   CheckCheck,
   Trash2,
@@ -51,6 +42,34 @@ interface TopHeaderProps {
   siteName?: string;
 }
 
+const GoldenOrbitalG: React.FC<{ className?: string }> = ({ className }) => (
+  <svg
+    viewBox="0 0 64 56"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    className={className}
+    aria-hidden="true"
+  >
+    <defs>
+      <linearGradient id="gfOrbitalGold" x1="10%" y1="5%" x2="90%" y2="95%">
+        <stop offset="0%" stopColor="#FDE047" />
+        <stop offset="50%" stopColor="#F59E0B" />
+        <stop offset="100%" stopColor="#D97706" />
+      </linearGradient>
+    </defs>
+    {/* Bold geometric G */}
+    <path
+      d="M 48 16.5 A 18.5 18.5 0 1 0 51.5 31.5 L 51.5 26.5 L 34.5 26.5 L 34.5 32.5 L 44.2 32.5 A 12 12 0 1 1 42.5 21.5 L 48 16.5 Z"
+      fill="url(#gfOrbitalGold)"
+    />
+    {/* Dynamic orbital crescent swoosh around the G */}
+    <path
+      d="M 10 38.5 C 4.5 47.5 20.5 49.5 36.5 36.5 C 51.5 24.5 57.5 11.5 49 9.5 C 44.5 8.5 37.5 11 31.5 15.2 C 38 12.2 44 11.2 46.2 13 C 49.5 15.6 43 26.5 32.2 34.5 C 20.5 43.2 11 43.5 13 36.5 Z"
+      fill="url(#gfOrbitalGold)"
+    />
+  </svg>
+);
+
 const SeriesTvIcon: React.FC<{ className?: string }> = ({ className }) => (
   <svg
     viewBox="0 0 24 24"
@@ -79,14 +98,6 @@ const TOP_NAV_ITEMS: {
   { id: 'home', labelAr: 'الرئيسية', labelEn: 'Home', tab: 'home', icon: Home },
   { id: 'movies', labelAr: 'الأفلام', labelEn: 'Movies', tab: 'movies', icon: Clapperboard },
   { id: 'series', labelAr: 'المسلسلات', labelEn: 'Series', tab: 'series', icon: SeriesTvIcon },
-  { id: 'favorites', labelAr: 'المفضلة', labelEn: 'Favorites', tab: 'favorites', bottomTab: 'favorites', icon: Heart },
-  { id: 'categories', labelAr: 'التصنيفات', labelEn: 'Categories', bottomTab: 'categories', icon: LayoutGrid },
-  { id: 'action', labelAr: 'أكشن', labelEn: 'Action', tab: 'action', icon: Zap },
-  { id: 'drama', labelAr: 'دراما', labelEn: 'Drama', tab: 'drama', icon: Drama },
-  { id: 'horror', labelAr: 'رعب', labelEn: 'Horror', tab: 'horror', icon: Ghost },
-  { id: 'comedy', labelAr: 'كوميديا', labelEn: 'Comedy', tab: 'comedy', icon: Laugh },
-  { id: 'sci-fi', labelAr: 'خيال علمي', labelEn: 'Sci-Fi', tab: 'sci-fi', icon: Rocket },
-  { id: 'adventure', labelAr: 'مغامرات', labelEn: 'Adventure', tab: 'adventure', icon: Compass },
 ];
 
 let hasPlayedEntryLogoSpin = false;
@@ -112,7 +123,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   const { lang, dir, t } = useLanguage();
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifTab, setNotifTab] = useState<'feed' | 'alerts'>('feed');
-  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [shouldSpinOnEntry] = useState<boolean>(() => !hasPlayedEntryLogoSpin);
 
   React.useEffect(() => {
@@ -193,209 +204,171 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
     <>
       <header className="sticky top-0 z-30 w-full pointer-events-none select-none font-sans">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 pt-2.5 pb-1.5">
-          {/* Floating Liquid-Glass Top Bar + Standalone Golden-Ringed Profile Avatar */}
-          <div
-            dir="ltr"
-            className="pointer-events-auto flex items-center justify-between gap-2.5 sm:gap-3.5"
-          >
-            {/* Left Floating Liquid-Glass Capsule: [Bell] [Search] | [▶ GoldenFlix] */}
-            <div className="relative flex-1 min-w-0 h-[50px] sm:h-[54px] rounded-full px-1.5 sm:px-2.5 flex items-center justify-between gap-2 sm:gap-3 bg-gradient-to-b from-[#1a1a20]/82 via-[#0c0c10]/88 to-[#171307]/88 backdrop-blur-2xl border border-white/15 shadow-[0_10px_28px_rgba(0,0,0,0.8),inset_0_1px_0_rgba(255,255,255,0.22),inset_0_-1.5px_10px_rgba(247,198,0,0.34),0_2px_16px_rgba(247,198,0,0.14)] overflow-hidden">
-              {/* Top Specular Liquid-Glass Highlight & Bottom Golden Rim Sheen */}
+          {/* Unified Gold-Beveled Obsidian Pill Top Bar */}
+          <div dir="ltr" className="pointer-events-auto relative w-full">
+            <div className="relative w-full h-[54px] sm:h-[60px] rounded-full px-2.5 sm:px-4 flex items-center justify-between bg-[#08080b]/95 backdrop-blur-2xl border border-[#F7C600]/80 shadow-[0_12px_32px_rgba(0,0,0,0.88),0_0_18px_rgba(247,198,0,0.18),inset_0_1px_0_rgba(253,224,71,0.45),inset_0_-1px_10px_rgba(247,198,0,0.22)] overflow-hidden">
+              {/* Subtle Curved Metallic Corner Highlights Matching Mockup Shoulders */}
               <span
                 aria-hidden="true"
-                className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-white/40 to-transparent"
+                className="pointer-events-none absolute -left-3 -top-2 w-24 h-16 rounded-full bg-gradient-to-br from-[#FDE047]/35 via-white/[0.06] to-transparent blur-[1px]"
               />
               <span
                 aria-hidden="true"
-                className="pointer-events-none absolute inset-x-4 bottom-0 h-[1.5px] bg-gradient-to-r from-[#F7C600]/20 via-[#F7C600]/80 to-[#F7C600]/20 opacity-85"
+                className="pointer-events-none absolute -right-3 -top-2 w-24 h-16 rounded-full bg-gradient-to-bl from-[#FDE047]/35 via-white/[0.06] to-transparent blur-[1px]"
+              />
+              {/* Bottom Centered Warm Golden Hotspot Glow Under Logo */}
+              <span
+                aria-hidden="true"
+                className="pointer-events-none absolute left-1/2 -translate-x-1/2 -bottom-1.5 w-48 sm:w-64 h-3 rounded-full bg-[radial-gradient(ellipse_at_center,rgba(254,240,138,0.95)_0%,rgba(247,198,0,0.65)_45%,transparent_75%)] blur-[3px]"
               />
 
-              {/* Circular Glass Action Controls: Bell + Search */}
-              <div className="relative z-10 flex items-center gap-1.5 sm:gap-2 shrink-0">
+              {/* Left Zone: Glowing Gold-Ringed Profile Avatar + White Outlined Bell */}
+              <div className="relative z-10 flex items-center gap-3 sm:gap-4 shrink-0">
                 <motion.button
-                  whileHover={{ scale: 1.05 }}
+                  whileHover={{ scale: 1.06 }}
+                  whileTap={{ scale: 0.92 }}
+                  onClick={onOpenGoogleLogin}
+                  type="button"
+                  aria-label={googleUser ? t('الملف الشخصي', 'My Profile') : t('تسجيل الدخول', 'Sign In')}
+                  title={googleUser ? googleUser.displayName || googleUser.name : t('تسجيل الدخول', 'Sign In')}
+                  className="relative w-10 h-10 sm:w-[44px] sm:h-[44px] rounded-full p-[1.5px] border-[1.75px] border-[#F7C600] bg-[#0a0a0e] shadow-[0_0_14px_rgba(247,198,0,0.45),inset_0_0_8px_rgba(247,198,0,0.18)] flex items-center justify-center transition-all cursor-pointer shrink-0 overflow-hidden"
+                >
+                  {googleUser?.picture || googleUser?.photoURL ? (
+                    <img
+                      src={googleUser.picture || googleUser.photoURL}
+                      alt={googleUser.displayName || googleUser.name}
+                      referrerPolicy="no-referrer"
+                      className="w-full h-full rounded-full object-cover"
+                    />
+                  ) : googleUser ? (
+                    <span className="text-sm sm:text-base font-black text-[#F7C600]">
+                      {(googleUser.displayName || googleUser.name || 'G').trim().charAt(0).toUpperCase()}
+                    </span>
+                  ) : (
+                    <User className="w-5 h-5 fill-zinc-100 text-zinc-100" />
+                  )}
+                </motion.button>
+
+                <motion.button
+                  whileHover={{ scale: 1.08 }}
                   whileTap={{ scale: 0.92 }}
                   onClick={() => setShowNotifications((v) => !v)}
                   type="button"
                   aria-label={t('الإشعارات', 'Notifications')}
-                  className={`w-10 h-10 sm:w-[42px] sm:h-[42px] rounded-full flex items-center justify-center transition-all border relative cursor-pointer shrink-0 shadow-[inset_0_1px_0_rgba(255,255,255,0.22)] ${
+                  className={`relative w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-all cursor-pointer shrink-0 ${
                     showNotifications
-                      ? 'bg-[#F7C600]/20 border-[#F7C600]/65 text-[#F7C600]'
-                      : 'bg-white/[0.06] hover:bg-white/[0.12] text-zinc-100 hover:text-white border-white/20'
+                      ? 'text-[#F7C600] drop-shadow-[0_0_10px_rgba(247,198,0,0.75)]'
+                      : 'text-white hover:text-[#FDE047] drop-shadow-[0_0_8px_rgba(255,255,255,0.45)]'
                   }`}
                 >
-                  <Bell className="w-[18px] h-[18px]" />
+                  <Bell className="w-[21px] h-[21px] sm:w-[23px] sm:h-[23px] stroke-[2.1]" />
                   {totalBadgeCount > 0 && (
-                    <span
-                      className={`absolute top-0.5 right-0.5 min-w-[14px] h-[14px] px-1 rounded-full text-[9px] font-black flex items-center justify-center leading-none tabular-nums ${
-                        unreadReleaseCount > 0
-                          ? 'bg-emerald-400 text-black shadow-[0_0_8px_rgba(52,211,153,0.75)]'
-                          : 'bg-[#F7C600] text-black'
-                      }`}
-                    >
+                    <span className="absolute top-0.5 right-0 min-w-[17px] h-[17px] px-1 rounded-full bg-[#ef233c] text-white text-[10px] font-black flex items-center justify-center leading-none tabular-nums shadow-[0_2px_8px_rgba(239,35,60,0.75)]">
                       {totalBadgeCount > 9 ? '9+' : totalBadgeCount}
                     </span>
                   )}
                 </motion.button>
-
-                {/* Mobile Search Glass Circle */}
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.92 }}
-                  type="button"
-                  onClick={() => setMobileSearchOpen((v) => !v)}
-                  aria-label={t('البحث', 'Search')}
-                  className={`md:hidden w-10 h-10 rounded-full flex items-center justify-center border transition-all cursor-pointer shrink-0 shadow-[inset_0_1px_0_rgba(255,255,255,0.22)] ${
-                    mobileSearchOpen || searchQuery
-                      ? 'bg-[#F7C600]/20 border-[#F7C600]/65 text-[#F7C600]'
-                      : 'bg-white/[0.06] hover:bg-white/[0.12] border-white/20 text-zinc-100 hover:text-white'
-                  }`}
-                >
-                  <Search className="w-[18px] h-[18px]" />
-                </motion.button>
               </div>
 
-              {/* Desktop Integrated Glass Search Input */}
-              <div className="hidden md:flex relative z-10 flex-1 min-w-[140px] max-w-sm lg:max-w-md items-center">
-                <Search
-                  className={`w-4 h-4 text-zinc-300/80 absolute pointer-events-none ${
-                    dir === 'ltr' ? 'left-3.5' : 'right-3.5'
-                  }`}
-                />
-                <input
-                  dir={dir}
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => onSearchChange(e.target.value)}
-                  placeholder={t('ابحث عن فيلم أو مسلسل...', 'Search movies or series...')}
-                  className={`w-full h-9 bg-white/[0.06] hover:bg-white/[0.09] focus:bg-black/45 text-zinc-100 placeholder-zinc-400 text-xs font-medium rounded-full border border-white/15 focus:border-[#F7C600]/70 focus:outline-none focus:ring-2 focus:ring-[#F7C600]/15 transition-all ${
-                    dir === 'ltr' ? 'pl-10 pr-8' : 'pr-10 pl-8'
-                  }`}
-                />
-                {searchQuery && (
-                  <button
-                    type="button"
-                    onClick={() => onSearchChange('')}
-                    aria-label={t('مسح البحث', 'Clear search')}
-                    className={`absolute p-1 text-zinc-400 hover:text-white cursor-pointer ${
-                      dir === 'ltr' ? 'right-3' : 'left-3'
-                    }`}
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-
-              {/* Vertical Hairline Divider + Brand Wordmark */}
-              <div className="relative z-10 flex items-center gap-2 sm:gap-3.5 min-w-0 pr-1.5 sm:pr-2.5">
-                <span className="h-5 w-px bg-white/15 shrink-0" aria-hidden="true" />
-
-                <motion.button
-                  type="button"
-                  onClick={handleLogoClick}
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.96 }}
-                  aria-label="GoldenFlix"
-                  title="GoldenFlix"
-                  className="relative flex items-center cursor-pointer min-w-0 py-1 focus:outline-none"
+              {/* Center Zone: Signature Orbital G + GoldenFlix Wordmark */}
+              <motion.button
+                type="button"
+                onClick={handleLogoClick}
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.96 }}
+                aria-label="GoldenFlix"
+                title="GoldenFlix"
+                className="relative z-10 flex items-center justify-center cursor-pointer py-1 px-2 focus:outline-none min-w-0"
+              >
+                <motion.span
+                  initial={shouldSpinOnEntry ? { scale: 0.92, opacity: 0.7 } : false}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+                  className="inline-flex items-center whitespace-nowrap"
                 >
-                  <motion.span
-                    initial={shouldSpinOnEntry ? { rotate: 0, scale: 0.92 } : false}
-                    animate={shouldSpinOnEntry ? { rotate: 360, scale: 1 } : { rotate: 0, scale: 1 }}
-                    transition={{
-                      rotate: { duration: 0.85, ease: [0.22, 1, 0.36, 1] },
-                      scale: { duration: 0.5, ease: 'easeOut' },
-                    }}
-                    className="inline-flex items-center gap-1.5 sm:gap-2 whitespace-nowrap"
-                  >
-                    <Play className="w-4 h-4 sm:w-[18px] sm:h-[18px] fill-[#F7C600] text-[#F7C600] drop-shadow-[0_0_8px_rgba(247,198,0,0.6)] shrink-0" />
-                    {displaySiteName.trim().toLowerCase() === 'goldenflix' ||
-                    displaySiteName.trim().toLowerCase() === 'goldenfelix' ? (
-                      <span className="text-[14px] sm:text-[17px] font-black tracking-tight leading-none truncate">
-                        <span className="text-[#F7C600] drop-shadow-[0_0_10px_rgba(247,198,0,0.45)]">
-                          Golden
-                        </span>
-                        <span className="text-white">Flix</span>
+                  {displaySiteName.trim().toLowerCase() === 'goldenflix' ||
+                  displaySiteName.trim().toLowerCase() === 'goldenfelix' ? (
+                    <span className="inline-flex items-center">
+                      <GoldenOrbitalG className="w-8 h-7 sm:w-10 sm:h-9 -mr-1.5 sm:-mr-2 drop-shadow-[0_0_10px_rgba(247,198,0,0.45)] shrink-0" />
+                      <span className="text-[19px] sm:text-[24px] font-black tracking-tight leading-none">
+                        <span className="text-white">olden</span>
+                        <span className="text-[#F7C600]">Flix</span>
                       </span>
-                    ) : (
-                      <span className="text-[14px] sm:text-[17px] font-black tracking-tight text-[#F7C600] leading-none truncate">
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1">
+                      <GoldenOrbitalG className="w-7 h-6 sm:w-9 sm:h-8 drop-shadow-[0_0_10px_rgba(247,198,0,0.45)] shrink-0" />
+                      <span className="text-[18px] sm:text-[22px] font-black tracking-tight text-white leading-none truncate">
                         {displaySiteName}
                       </span>
-                    )}
-                  </motion.span>
+                    </span>
+                  )}
+                </motion.span>
+              </motion.button>
+
+              {/* Right Zone: Gold-Ringed Search Circle Button */}
+              <div className="relative z-10 flex items-center shrink-0">
+                <motion.button
+                  whileHover={{ scale: 1.06 }}
+                  whileTap={{ scale: 0.92 }}
+                  type="button"
+                  onClick={() => setSearchOpen((v) => !v)}
+                  aria-label={t('البحث', 'Search')}
+                  className={`w-10 h-10 sm:w-[44px] sm:h-[44px] rounded-full flex items-center justify-center border-[1.75px] transition-all cursor-pointer shrink-0 ${
+                    searchOpen || searchQuery
+                      ? 'border-[#FDE047] bg-[#F7C600]/20 text-[#FDE047] shadow-[0_0_16px_rgba(247,198,0,0.6)]'
+                      : 'border-[#F7C600] bg-[#0a0a0e] text-white hover:text-[#FDE047] shadow-[0_0_14px_rgba(247,198,0,0.45),inset_0_0_8px_rgba(247,198,0,0.18)]'
+                  }`}
+                >
+                  <Search className="w-[18px] h-[18px] sm:w-[20px] sm:h-[20px] stroke-[2.2]" />
                 </motion.button>
               </div>
             </div>
-
-            {/* Standalone Glowing Circular Profile Avatar Outside the Pill */}
-            <motion.button
-              whileHover={{ scale: 1.06 }}
-              whileTap={{ scale: 0.92 }}
-              onClick={onOpenGoogleLogin}
-              type="button"
-              aria-label={googleUser ? t('الملف الشخصي', 'My Profile') : t('تسجيل الدخول', 'Sign In')}
-              title={googleUser ? googleUser.displayName || googleUser.name : t('تسجيل الدخول', 'Sign In')}
-              className="relative w-[50px] h-[50px] sm:w-[54px] sm:h-[54px] rounded-full p-[2px] bg-gradient-to-br from-[#fde047] via-[#F7C600] to-[#b45309] shadow-[0_0_22px_rgba(247,198,0,0.52),0_6px_16px_rgba(0,0,0,0.75)] flex items-center justify-center transition-all cursor-pointer shrink-0"
-            >
-              <div className="w-full h-full rounded-full overflow-hidden bg-[#121216] flex items-center justify-center">
-                {googleUser?.picture || googleUser?.photoURL ? (
-                  <img
-                    src={googleUser.picture || googleUser.photoURL}
-                    alt={googleUser.displayName || googleUser.name}
-                    referrerPolicy="no-referrer"
-                    className="w-full h-full object-cover"
-                  />
-                ) : googleUser ? (
-                  <span className="text-sm sm:text-base font-black text-[#F7C600]">
-                    {(googleUser.displayName || googleUser.name || 'G').trim().charAt(0).toUpperCase()}
-                  </span>
-                ) : (
-                  <User className="w-5 h-5 fill-[#F7C600] text-[#F7C600]" />
-                )}
-              </div>
-            </motion.button>
           </div>
 
-          {/* Mobile Expandable Liquid-Glass Search Input */}
+          {/* Expandable Gold-Rimmed Search Bar (All Viewports via Right Search Trigger) */}
           <AnimatePresence initial={false}>
-            {(mobileSearchOpen || searchQuery.trim().length > 0) && (
+            {(searchOpen || searchQuery.trim().length > 0) && (
               <motion.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
                 transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-                className="pointer-events-auto md:hidden overflow-hidden pt-2"
+                className="pointer-events-auto overflow-hidden pt-2"
               >
-                <div className="relative flex items-center w-full">
+                <div className="relative flex items-center w-full max-w-2xl mx-auto">
                   <Search
                     className={`w-4 h-4 text-[#F7C600] absolute pointer-events-none ${
-                      dir === 'ltr' ? 'left-3.5' : 'right-3.5'
+                      dir === 'ltr' ? 'left-4' : 'right-4'
                     }`}
                   />
                   <input
                     dir={dir}
                     type="text"
+                    autoFocus
                     value={searchQuery}
                     onChange={(e) => onSearchChange(e.target.value)}
                     placeholder={t('ابحث عن فيلم أو مسلسل...', 'Search movies or series...')}
-                    className="w-full h-10 bg-[#101015]/90 backdrop-blur-xl text-zinc-100 placeholder-zinc-400 text-xs font-medium rounded-full px-10 border border-white/15 focus:border-[#F7C600]/70 focus:outline-none shadow-[0_8px_20px_rgba(0,0,0,0.65)]"
+                    className={`w-full h-10 bg-[#0d0d12]/95 backdrop-blur-xl text-zinc-100 placeholder-zinc-400 text-xs sm:text-sm font-medium rounded-full border border-[#F7C600]/45 focus:border-[#F7C600] focus:outline-none shadow-[0_8px_24px_rgba(0,0,0,0.75)] ${
+                      dir === 'ltr' ? 'pl-11 pr-10' : 'pr-11 pl-10'
+                    }`}
                   />
-                  {(searchQuery || mobileSearchOpen) && (
+                  {(searchQuery || searchOpen) && (
                     <button
                       type="button"
                       onClick={() => {
                         if (searchQuery) {
                           onSearchChange('');
                         } else {
-                          setMobileSearchOpen(false);
+                          setSearchOpen(false);
                         }
                       }}
                       aria-label={t('إغلاق أو مسح البحث', 'Clear or close search')}
                       className={`absolute p-1.5 text-zinc-400 hover:text-white cursor-pointer ${
-                        dir === 'ltr' ? 'right-2.5' : 'left-2.5'
+                        dir === 'ltr' ? 'right-3' : 'left-3'
                       }`}
                     >
-                      <X className="w-3.5 h-3.5" />
+                      <X className="w-4 h-4" />
                     </button>
                   )}
                 </div>

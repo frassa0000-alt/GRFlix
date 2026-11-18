@@ -93,6 +93,16 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
     }
   }, [mode, token]);
 
+  useEffect(() => {
+    if (mediaItems.length === 0) {
+      if (selectedMediaId) setSelectedMediaId('');
+      return;
+    }
+    if (!selectedMediaId || !mediaItems.some((m) => m.id === selectedMediaId)) {
+      setSelectedMediaId(mediaItems[0].id);
+    }
+  }, [mediaItems, selectedMediaId]);
+
   const selectedMedia =
     mediaItems.find((m) => m.id === selectedMediaId) || mediaItems[0] || null;
 

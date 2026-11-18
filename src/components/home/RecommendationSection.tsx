@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { MediaItem, WatchProgress } from '../../types';
 import { MediaCard } from '../cards/MediaCard';
-import { Sparkles, Compass, ThumbsUp } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
 
 interface RecommendationSectionProps {
@@ -12,6 +12,7 @@ interface RecommendationSectionProps {
   onToggleFavorite: (id: string) => void;
   alertSubscribedIds?: string[];
   onToggleAlert?: (id: string) => void;
+  onViewAll?: () => void;
   userGenrePreference?: string;
 }
 
@@ -23,12 +24,13 @@ export const RecommendationSection: React.FC<RecommendationSectionProps> = ({
   onToggleFavorite,
   alertSubscribedIds = [],
   onToggleAlert,
+  onViewAll,
 }) => {
-  const { lang, t, translateGenre } = useLanguage();
+  const { dir, t } = useLanguage();
 
-  const { recommendedItems, topGenreLabels, isPersonalized } = useMemo(() => {
+  const { recommendedItems } = useMemo(() => {
     if (!mediaItems || mediaItems.length === 0) {
-      return { recommendedItems: [], topGenreLabels: [], isPersonalized: false };
+      return { recommendedItems: [] };
     }
 
     const watchedIds = new Set(history.map((h) => h.mediaId));
@@ -56,10 +58,6 @@ export const RecommendationSection: React.FC<RecommendationSectionProps> = ({
     const sortedGenres = Object.entries(genreScores).sort((a, b) => b[1] - a[1]);
     const topGenres = sortedGenres.slice(0, 3).map(([genre]) => genre);
 
-    const readableTopGenres = topGenres
-      .map((g) => translateGenre(g))
-      .slice(0, 2);
-
     let candidates: { item: MediaItem; score: number }[] = [];
 
     if (topGenres.length > 0) {
@@ -83,7 +81,7 @@ export const RecommendationSection: React.FC<RecommendationSectionProps> = ({
       });
     }
 
-    if (candidates.length < 3) {
+    if (candidates.length < 6) {
       const remaining = mediaItems
         .filter((m) => !candidates.some((c) => c.item.id === m.id))
         .map((item) => ({
@@ -94,61 +92,46 @@ export const RecommendationSection: React.FC<RecommendationSectionProps> = ({
     }
 
     candidates.sort((a, b) => b.score - a.score);
-    const finalItems = candidates.slice(0, 10).map((c) => c.item);
+    const finalItems = candidates.slice(0, 12).map((c) => c.item);
 
     return {
       recommendedItems: finalItems,
-      topGenreLabels: readableTopGenres,
-      isPersonalized: topGenres.length > 0,
     };
-  }, [history, mediaItems, favorites, translateGenre]);
+  }, [history, mediaItems, favorites]);
 
   if (recommendedItems.length === 0) return null;
 
   return (
-    <section className="w-full py-3 select-none">
-      {/* Section Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 px-3 sm:px-4 mb-2.5">
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-1.5">
-            <div className="w-6 h-6 rounded-lg bg-amber-400/20 text-amber-400 flex items-center justify-center border border-amber-400/30">
-              <Sparkles className="w-3.5 h-3.5" />
-            </div>
-            <h3 className="text-sm sm:text-base md:text-lg font-black text-white tracking-wide">
-              {t('مقترحات مخصصة لك', 'Picked for You')}
-            </h3>
-          </div>
+    <section className="w-full mb-6 select-none">
+      {/* Clean Header Matching "For you" + "See all" in the video */}
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <h2 className="text-base sm:text-lg font-black text-white tracking-tight truncate">
+          {t('مقترح لك', 'For you')}
+        </h2>
 
-          {isPersonalized && topGenreLabels.length > 0 ? (
-            <span className="text-[10px] sm:text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/25 flex items-center gap-1">
-              <ThumbsUp className="w-2.5 h-2.5" />
-              <span>
-                {lang === 'en'
-                  ? `Based on: ${topGenreLabels.join(' & ')}`
-                  : `حسب ذوقك في: ${topGenreLabels.join(' و ')}`}
-              </span>
-            </span>
-          ) : (
-            <span className="text-[10px] sm:text-xs font-semibold px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-300 border border-zinc-700 flex items-center gap-1">
-              <Compass className="w-2.5 h-2.5 text-amber-400" />
-              <span>
-                {t('أعمال سينمائية مختارة بعناية', 'Curated cinema selections')}
-              </span>
-            </span>
-          )}
-        </div>
-
-        <span className="text-[11px] text-zinc-400 hidden sm:inline font-medium">
-          {t('تحليل ذكي بناءً على التصنيفات', 'Smart genre-based recommendations')}
-        </span>
+        {onViewAll && (
+          <button
+            type="button"
+            onClick={onViewAll}
+            className="inline-flex items-center gap-1 text-xs font-semibold text-zinc-400 hover:text-white transition-colors cursor-pointer whitespace-nowrap"
+          >
+            <span>{t('عرض الكل', 'See all')}</span>
+            {dir === 'ltr' ? (
+              <ChevronRight className="w-3.5 h-3.5" />
+            ) : (
+              <ChevronLeft className="w-3.5 h-3.5" />
+            )}
+          </button>
+        )}
       </div>
 
       {/* Horizontal Carousel */}
-      <div className="flex items-center gap-2.5 sm:gap-3 overflow-x-auto no-scrollbar scroll-smooth px-3 sm:px-4 snap-x snap-mandatory overscroll-x-contain pb-1">
-        {recommendedItems.map((item) => (
+      <div className="flex items-stretch gap-3 sm:gap-3.5 overflow-x-auto no-scrollbar scroll-smooth snap-x snap-mandatory overscroll-x-contain py-1">
+        {recommendedItems.map((item, idx) => (
           <MediaCard
             key={`rec-${item.id}`}
             media={item}
+            index={idx}
             variant="poster"
             onClick={() => onSelectMedia(item)}
             isFavorite={favorites.includes(item.id)}

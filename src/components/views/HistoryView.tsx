@@ -23,7 +23,8 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   const { lang, t, getMediaTitle } = useLanguage();
   const [showConfirmClear, setShowConfirmClear] = useState<boolean>(false);
 
-  const historyWithMedia = history
+  const historyWithMedia = [...history]
+    .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
     .map((prog) => {
       const media = mediaItems.find((m) => m.id === prog.mediaId);
       return { progress: prog, media };
@@ -55,12 +56,12 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
             </div>
             <div>
               <h2 className="text-base font-black text-white">
-                {t('سجل المشاهدة', 'Watch History')}
+                {t('تابع المشاهدة', 'Continue Watching')}
               </h2>
               <p className="text-[11px] text-zinc-400">
                 {t(
-                  'استكمل مشاهدة أفلامك المفضلة من حيث توقفت',
-                  'Pick up right where you left off'
+                  'الأفلام والمسلسلات التي كنت تشاهدها مؤخراً',
+                  'Movies and series you were recently watching'
                 )}
               </p>
             </div>

@@ -268,6 +268,19 @@ export const testStreamUrl = async (
 
 // --- CATEGORIES ---
 
+export const fetchPublicCategories = async (): Promise<CategoryItem[]> => {
+  try {
+    const res = await fetch('/api/categories');
+    if (!res.ok) return [];
+    const text = await res.text();
+    if (!text || text.trim().startsWith('<')) return [];
+    const data = JSON.parse(text);
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+};
+
 export const fetchCategories = async (token: string): Promise<CategoryItem[]> => {
   const res = await fetch('/api/admin/categories', {
     headers: authHeaders(token),

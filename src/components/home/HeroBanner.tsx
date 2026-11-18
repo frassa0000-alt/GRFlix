@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Play, ChevronLeft, ChevronRight, Star, Calendar, Drama } from 'lucide-react';
+import { Play, ChevronLeft, ChevronRight, Star } from 'lucide-react';
 import { MediaItem } from '../../types';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { formatQualityLabel } from '../../utils/quality';
+import { getEffectiveMediaRating } from '../../utils/rating';
 
 export interface HeroSlideItem {
   id: string;
@@ -29,6 +30,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
   const [currentIndex, setCurrentIndex] = useState(0);
   const [welcomeIndex, setWelcomeIndex] = useState(0);
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
+  const [isPaused, setIsPaused] = useState(false);
   const touchStartXRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -38,12 +40,12 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
   }, [slides.length, currentIndex]);
 
   useEffect(() => {
-    if (slides.length <= 1) return;
+    if (slides.length <= 1 || isPaused) return;
     const interval = setInterval(() => {
       setCurrentIndex((prev) => (prev + 1) % slides.length);
-    }, 6500);
+    }, 6000);
     return () => clearInterval(interval);
-  }, [slides.length]);
+  }, [slides.length, isPaused]);
 
   const welcomeSlides = [
     {
@@ -91,7 +93,6 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
         aria-label={t('مرحباً بك في GoldenFlix', 'Welcome to GoldenFlix')}
         className="relative w-full h-[185px] sm:h-[220px] md:h-[245px] overflow-hidden rounded-[22px] border border-[#F7C600]/20 bg-[#0d0d11] shadow-[0_22px_55px_rgba(0,0,0,0.8)] select-none"
       >
-        {/* Curved Metallic Golden Ribbons Backdrop Matching Reference Visual */}
         <svg
           viewBox="0 0 800 320"
           preserveAspectRatio="none"
@@ -110,14 +111,8 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
               <stop offset="100%" stopColor="#0d0d11" stopOpacity="0" />
             </linearGradient>
           </defs>
-          <path
-            d="M0,0 L280,0 C175,90 95,155 0,210 Z"
-            fill="url(#gfGoldSweepA)"
-          />
-          <path
-            d="M800,320 L480,320 C610,230 710,155 800,80 Z"
-            fill="url(#gfGoldSweepB)"
-          />
+          <path d="M0,0 L280,0 C175,90 95,155 0,210 Z" fill="url(#gfGoldSweepA)" />
+          <path d="M800,320 L480,320 C610,230 710,155 800,80 Z" fill="url(#gfGoldSweepB)" />
           <path
             d="M120,0 C240,120 510,210 800,190 L800,260 C490,265 230,170 40,0 Z"
             fill="#F7C600"
@@ -126,7 +121,6 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
         </svg>
 
         <div className="relative z-10 h-full px-5 sm:px-9 md:px-12 flex items-center justify-between gap-4">
-          {/* Welcome Text Block */}
           <AnimatePresence mode="wait">
             <motion.div
               key={`welcome-${welcomeIndex}`}
@@ -151,7 +145,6 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
             </motion.div>
           </AnimatePresence>
 
-          {/* Glowing Large Golden Play Triangle Visual */}
           <div className="shrink-0 flex items-center justify-center pl-1 sm:pl-4">
             <div className="relative w-16 h-16 sm:w-24 sm:h-24 flex items-center justify-center">
               <div className="absolute inset-0 rounded-full bg-[#F7C600]/20 blur-xl" />
@@ -174,7 +167,6 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
           </div>
         </div>
 
-        {/* 4 Centered Pagination Dots */}
         <div className="absolute bottom-3 inset-x-0 flex items-center justify-center gap-2 z-20">
           {welcomeSlides.map((_, idx) => (
             <button
@@ -194,11 +186,9 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
     );
   }
 
+  const totalSlides = slides.length;
   const currentSlide = slides[currentIndex] || slides[0];
   const linkedMedia = currentSlide.media;
-  const imageSrc =
-    currentSlide.imageUrl || linkedMedia?.bannerUrl || linkedMedia?.posterUrl || '';
-  const hasImageError = !imageSrc || Boolean(failedImages[currentSlide.id]);
 
   const firstGenre =
     linkedMedia?.genres && linkedMedia.genres.length > 0 && typeof linkedMedia.genres[0] === 'string'
@@ -209,262 +199,265 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
       ? t('أنمي', 'Anime')
       : t('فيلم', 'Movie');
 
-  const qualityText = linkedMedia?.videoQuality
-    ? formatQualityLabel(linkedMedia.videoQuality).toUpperCase()
-    : '1080P';
+  const durationOrQuality =
+    linkedMedia?.duration?.trim() ||
+    (linkedMedia?.videoQuality ? formatQualityLabel(linkedMedia.videoQuality).toUpperCase() : 'HD');
+
+  const ratingValue = linkedMedia ? getEffectiveMediaRating(linkedMedia) : 8.0;
 
   const headlineTitle = linkedMedia
     ? getMediaTitle(linkedMedia) || currentSlide.title
     : currentSlide.title;
 
-  const watchLabel =
-    dir === 'ltr'
-      ? linkedMedia?.type === 'series'
-        ? 'Watch Series'
-        : 'Watch Movie'
-      : currentSlide.ctaLabel ||
-        (linkedMedia?.type === 'series' ? 'مشاهدة المسلسل' : 'مشاهدة الفيلم');
-
   const goPrev = () => {
-    setCurrentIndex((prev) => (prev - 1 + slides.length) % slides.length);
+    setCurrentIndex((prev) => (prev - 1 + totalSlides) % totalSlides);
   };
 
   const goNext = () => {
-    setCurrentIndex((prev) => (prev + 1) % slides.length);
+    setCurrentIndex((prev) => (prev + 1) % totalSlides);
   };
 
   const handleTouchStart = (e: React.TouchEvent) => {
+    setIsPaused(true);
     touchStartXRef.current = e.touches[0]?.clientX ?? null;
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
-    if (touchStartXRef.current === null || slides.length <= 1) return;
+    setIsPaused(false);
+    if (touchStartXRef.current === null || totalSlides <= 1) return;
     const endX = e.changedTouches[0]?.clientX ?? touchStartXRef.current;
     const diff = endX - touchStartXRef.current;
     touchStartXRef.current = null;
-    if (Math.abs(diff) < 40) return;
-    if (dir === 'ltr') {
-      if (diff < 0) goNext();
-      else goPrev();
-    } else {
-      if (diff > 0) goNext();
-      else goPrev();
+    if (Math.abs(diff) < 35) return;
+    if (diff < 0) goNext();
+    else goPrev();
+  };
+
+  const getCircularOffset = (index: number) => {
+    let offset = index - currentIndex;
+    if (totalSlides > 2) {
+      const half = totalSlides / 2;
+      if (offset > half) offset -= totalSlides;
+      if (offset < -half) offset += totalSlides;
+    } else if (totalSlides === 2) {
+      if (offset < 0) offset = 1;
     }
+    return offset;
   };
 
   return (
     <section
       aria-label={t('العروض السينمائية المميزة', 'Featured Cinema Releases')}
-      className="w-full select-none"
+      onMouseEnter={() => setIsPaused(true)}
+      onMouseLeave={() => setIsPaused(false)}
+      className="w-full select-none pt-1 pb-2"
     >
-      {/* Golden-Bordered Featured Banner Card */}
+      {/* 3D Perspective Coverflow Poster Carousel Matching Video Reference */}
       <div
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
-        onClick={() => {
-          if (linkedMedia) onSelectMedia(linkedMedia);
-        }}
-        className={`relative w-full h-[215px] sm:h-[310px] md:h-[380px] lg:h-[420px] overflow-hidden rounded-[22px] sm:rounded-[26px] border-[1.5px] border-[#F7C600]/75 shadow-[0_0_22px_rgba(247,198,0,0.28),0_22px_55px_rgba(0,0,0,0.88)] bg-[#09090d] group ${
-          linkedMedia ? 'cursor-pointer' : ''
-        }`}
+        className="relative w-full h-[290px] sm:h-[345px] md:h-[385px] flex items-center justify-center overflow-hidden"
+        style={{ perspective: '1200px' }}
       >
-        {/* Background Artwork Transition */}
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={currentSlide.id}
-            initial={{ opacity: 0.25 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0.15 }}
-            transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
-            className="absolute inset-0 overflow-hidden"
-          >
-            {!hasImageError ? (
-              <img
-                src={imageSrc}
-                alt={headlineTitle}
-                referrerPolicy="no-referrer"
-                onError={() =>
-                  setFailedImages((prev) => ({ ...prev, [currentSlide.id]: true }))
-                }
-                className="w-full h-full object-cover object-center animate-ken-burns"
-              />
-            ) : (
-              <div className="w-full h-full bg-gradient-to-br from-[#1b150b] via-[#0b0b0f] to-[#060608]" />
-            )}
+        {/* Subtle atmospheric glow behind active poster */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-56 h-72 sm:w-72 sm:h-80 rounded-full bg-white/[0.04] blur-3xl"
+        />
 
-            {/* Subtle Edge Contrast Scrims */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/82 via-black/22 to-black/35" />
-            <div
-              className={`absolute inset-0 ${
-                dir === 'ltr'
-                  ? 'bg-gradient-to-r from-black/75 via-black/25 to-transparent'
-                  : 'bg-gradient-to-l from-black/75 via-black/25 to-transparent'
-              }`}
-            />
-          </motion.div>
-        </AnimatePresence>
-
-        {/* Subtle Desktop Prev/Next Arrows */}
-        {slides.length > 1 && (
+        {/* Desktop Previous / Next Navigation Arrows */}
+        {totalSlides > 1 && (
           <>
             <button
               type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                goPrev();
-              }}
+              onClick={goPrev}
               aria-label={t('العرض السابق', 'Previous slide')}
-              className={`hidden sm:flex absolute top-1/2 -translate-y-1/2 ${
-                dir === 'ltr' ? 'left-3.5' : 'right-3.5'
-              } z-20 w-9 h-9 rounded-full bg-black/55 hover:bg-[#F7C600] text-white hover:text-black border border-white/15 items-center justify-center opacity-0 group-hover:opacity-100 transition-all cursor-pointer backdrop-blur-md active:scale-90`}
+              className="hidden sm:flex absolute left-2 md:left-6 top-1/2 -translate-y-1/2 z-40 w-10 h-10 rounded-full bg-black/55 hover:bg-[#F7C600] text-white hover:text-black border border-white/15 items-center justify-center transition-all cursor-pointer backdrop-blur-md active:scale-90"
             >
-              {dir === 'ltr' ? (
-                <ChevronLeft className="w-4 h-4" />
-              ) : (
-                <ChevronRight className="w-4 h-4" />
-              )}
+              <ChevronLeft className="w-5 h-5" />
             </button>
             <button
               type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                goNext();
-              }}
+              onClick={goNext}
               aria-label={t('العرض التالي', 'Next slide')}
-              className={`hidden sm:flex absolute top-1/2 -translate-y-1/2 ${
-                dir === 'ltr' ? 'right-3.5' : 'left-3.5'
-              } z-20 w-9 h-9 rounded-full bg-black/55 hover:bg-[#F7C600] text-white hover:text-black border border-white/15 items-center justify-center opacity-0 group-hover:opacity-100 transition-all cursor-pointer backdrop-blur-md active:scale-90`}
+              className="hidden sm:flex absolute right-2 md:right-6 top-1/2 -translate-y-1/2 z-40 w-10 h-10 rounded-full bg-black/55 hover:bg-[#F7C600] text-white hover:text-black border border-white/15 items-center justify-center transition-all cursor-pointer backdrop-blur-md active:scale-90"
             >
-              {dir === 'ltr' ? (
-                <ChevronRight className="w-4 h-4" />
-              ) : (
-                <ChevronLeft className="w-4 h-4" />
-              )}
+              <ChevronRight className="w-5 h-5" />
             </button>
           </>
         )}
 
-        {/* Top Floating Corner Metadata Capsules */}
-        <div
-          dir="rtl"
-          className="relative z-10 flex items-center justify-between gap-2 px-3 pt-3 sm:px-5 sm:pt-4"
-        >
-          {/* Top-Right Capsule: Genre + Quality (e.g. كوميديا | 1080P) */}
-          <div className="inline-flex items-center gap-2 px-2.5 sm:px-3 py-1 rounded-full bg-black/55 backdrop-blur-md border border-white/[0.14] text-[10px] sm:text-xs font-bold shadow-md">
-            <span className="inline-flex items-center gap-1 text-zinc-100 whitespace-nowrap">
-              <Drama className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[#F7C600] shrink-0" />
-              <span>{firstGenre}</span>
-            </span>
-            <span className="h-3 w-px bg-white/25" aria-hidden="true" />
-            <span dir="ltr" className="text-[#F7C600] font-black tracking-wide whitespace-nowrap">
-              {qualityText}
-            </span>
-          </div>
-
-          {/* Top-Left Capsule: Year + Rating (e.g. 2000 | ★ 6.7) */}
-          {(linkedMedia?.year || (typeof linkedMedia?.rating === 'number' && linkedMedia.rating > 0)) && (
-            <div className="inline-flex items-center gap-2 px-2.5 sm:px-3 py-1 rounded-full bg-black/55 backdrop-blur-md border border-white/[0.14] text-[10px] sm:text-xs font-bold shadow-md tabular-nums">
-              {linkedMedia?.year && (
-                <span className="inline-flex items-center gap-1 text-zinc-100 whitespace-nowrap">
-                  <Calendar className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-zinc-300 shrink-0" />
-                  <span>{linkedMedia.year}</span>
-                </span>
-              )}
-              {linkedMedia?.year &&
-                typeof linkedMedia?.rating === 'number' &&
-                linkedMedia.rating > 0 && (
-                  <span className="h-3 w-px bg-white/25" aria-hidden="true" />
-                )}
-              {typeof linkedMedia?.rating === 'number' && linkedMedia.rating > 0 && (
-                <span className="inline-flex items-center gap-1 text-white whitespace-nowrap">
-                  <span>{linkedMedia.rating.toFixed(1)}</span>
-                  <Star className="w-3 h-3 sm:w-3.5 sm:h-3.5 fill-[#F7C600] text-[#F7C600] shrink-0" />
-                </span>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Bottom Title & Action Row */}
-        <div
-          className={`absolute inset-x-0 bottom-0 z-10 px-3.5 pb-3.5 sm:px-6 sm:pb-6 flex flex-col justify-end ${
-            dir === 'ltr' ? 'items-start text-left' : 'items-start text-right'
-          }`}
-        >
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={`content-${currentSlide.id}`}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6 }}
-              transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-              className="space-y-2.5 sm:space-y-3.5 max-w-[85%] sm:max-w-xl"
-            >
-              <h1 className="text-base sm:text-2xl md:text-3xl font-black text-white leading-snug tracking-tight drop-shadow-[0_2px_10px_rgba(0,0,0,0.92)] line-clamp-2">
-                {headlineTitle}
-              </h1>
-
-              {linkedMedia && (
-                <div className="flex items-center gap-2.5">
-                  <motion.button
-                    whileHover={{ scale: 1.03 }}
-                    whileTap={{ scale: 0.95 }}
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onPlayMedia(linkedMedia);
-                    }}
-                    className="h-9 sm:h-11 inline-flex items-center gap-1.5 px-4 sm:px-6 rounded-full bg-gradient-to-b from-[#FFE23A] via-[#F7C600] to-[#E6AD00] hover:from-[#ffe85c] hover:to-[#f0b900] text-black font-black text-xs sm:text-sm shadow-[0_0_20px_rgba(247,198,0,0.48),inset_0_1px_1px_rgba(255,255,255,0.65)] transition-all cursor-pointer whitespace-nowrap"
-                  >
-                    <span>{watchLabel}</span>
-                    {dir === 'ltr' ? (
-                      <ChevronRight className="w-4 h-4 stroke-[2.6]" />
-                    ) : (
-                      <ChevronLeft className="w-4 h-4 stroke-[2.6]" />
-                    )}
-                  </motion.button>
-
-                  <motion.button
-                    whileHover={{ scale: 1.06 }}
-                    whileTap={{ scale: 0.92 }}
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onPlayMedia(linkedMedia);
-                    }}
-                    aria-label={t('تشغيل الآن', 'Play now')}
-                    className="w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-black/55 hover:bg-black/75 border border-white/20 backdrop-blur-md flex items-center justify-center shadow-[0_6px_16px_rgba(0,0,0,0.65)] transition-all cursor-pointer shrink-0"
-                  >
-                    <Play className="w-4 h-4 sm:w-4.5 sm:h-4.5 fill-[#F7C600] text-[#F7C600]" />
-                  </motion.button>
-                </div>
-              )}
-            </motion.div>
-          </AnimatePresence>
-        </div>
-      </div>
-
-      {/* Centered Pagination Indicators Directly Below the Card */}
-      {slides.length > 1 && (
-        <div className="mt-3 flex items-center justify-center gap-2">
+        {/* Stacked Coverflow Poster Cards */}
+        <div className="relative w-full h-full flex items-center justify-center">
           {slides.map((slide, idx) => {
-            const active = idx === currentIndex;
+            const offset = getCircularOffset(idx);
+            const absOffset = Math.abs(offset);
+            if (absOffset > 2) return null;
+
+            const isCenter = offset === 0;
+            const slideMedia = slide.media;
+            const posterSrc =
+              slideMedia?.posterUrl || slide.imageUrl || slideMedia?.bannerUrl || '';
+            const slideTitle = slideMedia
+              ? getMediaTitle(slideMedia) || slide.title
+              : slide.title;
+            const hasImageError = !posterSrc || Boolean(failedImages[slide.id]);
+
+            const translatePct =
+              offset === 0
+                ? '0%'
+                : offset === 1
+                ? '56%'
+                : offset === -1
+                ? '-56%'
+                : offset > 1
+                ? '98%'
+                : '-98%';
+
+            const scaleVal = isCenter ? 1 : absOffset === 1 ? 0.83 : 0.68;
+            const opacityVal = isCenter ? 1 : absOffset === 1 ? 0.68 : 0.28;
+            const rotateYVal = offset === 0 ? 0 : offset > 0 ? -12 : 12;
+            const zIndexVal = isCenter ? 30 : absOffset === 1 ? 20 : 10;
+
             return (
-              <button
+              <motion.div
                 key={slide.id}
-                type="button"
-                onClick={() => setCurrentIndex(idx)}
-                aria-label={t(`عرض الشريحة ${idx + 1}`, `View slide ${idx + 1}`)}
-                className={`h-2 rounded-full transition-all duration-300 cursor-pointer ${
-                  active
-                    ? 'w-6 sm:w-7 bg-[#F7C600] shadow-[0_0_10px_rgba(247,198,0,0.7)]'
-                    : 'w-2 bg-zinc-600/80 hover:bg-zinc-400'
+                initial={false}
+                animate={{
+                  x: translatePct,
+                  scale: scaleVal,
+                  opacity: opacityVal,
+                  rotateY: rotateYVal,
+                }}
+                transition={{
+                  type: 'spring',
+                  stiffness: 290,
+                  damping: 28,
+                }}
+                style={{ zIndex: zIndexVal }}
+                onClick={() => {
+                  if (isCenter) {
+                    if (slideMedia) onSelectMedia(slideMedia);
+                  } else {
+                    setCurrentIndex(idx);
+                  }
+                }}
+                className={`absolute w-[186px] sm:w-[222px] md:w-[248px] aspect-[2/3] rounded-[24px] sm:rounded-[28px] overflow-hidden bg-[#13141a] cursor-pointer group ${
+                  isCenter
+                    ? 'shadow-[0_24px_60px_rgba(0,0,0,0.9)] ring-1 ring-white/20'
+                    : 'shadow-[0_14px_35px_rgba(0,0,0,0.75)] ring-1 ring-white/10'
                 }`}
-              />
+              >
+                {!hasImageError ? (
+                  <img
+                    src={posterSrc}
+                    alt={slideTitle}
+                    referrerPolicy="no-referrer"
+                    onError={() =>
+                      setFailedImages((prev) => ({ ...prev, [slide.id]: true }))
+                    }
+                    className="w-full h-full object-cover object-center transition-transform duration-500 group-hover:scale-[1.03]"
+                  />
+                ) : (
+                  <div className="w-full h-full bg-gradient-to-br from-zinc-900 via-[#15161e] to-amber-950/30 flex flex-col items-center justify-center p-4 text-center">
+                    <Play className="w-10 h-10 text-[#F7C600]/60 mb-2" />
+                    <span className="text-xs font-bold text-zinc-200 line-clamp-2">
+                      {slideTitle}
+                    </span>
+                  </div>
+                )}
+
+                {/* Subtle darkening veil on non-center peeking cards */}
+                {!isCenter && (
+                  <div className="absolute inset-0 bg-black/30 pointer-events-none" />
+                )}
+
+                {/* Center card quick Play hover trigger */}
+                {isCenter && slideMedia && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onPlayMedia(slideMedia);
+                    }}
+                    aria-label={t(`تشغيل ${slideTitle}`, `Play ${slideTitle}`)}
+                    className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-black/20 cursor-pointer"
+                  >
+                    <span className="w-13 h-13 rounded-full bg-white/25 backdrop-blur-md border border-white/35 text-white flex items-center justify-center shadow-2xl transform scale-90 group-hover:scale-100 transition-transform">
+                      <Play className="w-5 h-5 fill-current ml-0.5" />
+                    </span>
+                  </button>
+                )}
+              </motion.div>
             );
           })}
         </div>
-      )}
+      </div>
+
+      {/* Centered Active Slide Details Below Poster (Exact Video Hierarchy) */}
+      <div className="mt-2.5 flex flex-col items-center text-center px-4">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={`hero-meta-${currentSlide.id}`}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.22 }}
+            onClick={() => {
+              if (linkedMedia) onSelectMedia(linkedMedia);
+            }}
+            className={`flex flex-col items-center max-w-md ${
+              linkedMedia ? 'cursor-pointer' : ''
+            }`}
+          >
+            {linkedMedia?.year && (
+              <span className="text-[11px] sm:text-xs font-medium text-zinc-400 tabular-nums mb-0.5">
+                {linkedMedia.year}
+              </span>
+            )}
+
+            <h1 className="text-lg sm:text-2xl font-black text-white tracking-tight leading-snug line-clamp-1">
+              {headlineTitle}
+            </h1>
+
+            {/* Compact 3-chip metadata strip matching the video */}
+            <div className="mt-2 flex items-center justify-center gap-2 flex-wrap">
+              <span className="px-2.5 py-1 rounded-lg bg-[#17181f] border border-white/[0.06] text-[11px] font-semibold text-zinc-300">
+                {firstGenre}
+              </span>
+              <span className="px-2.5 py-1 rounded-lg bg-[#17181f] border border-white/[0.06] text-[11px] font-semibold text-zinc-300 tabular-nums">
+                {durationOrQuality}
+              </span>
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#17181f] border border-white/[0.06] text-[11px] font-bold text-white tabular-nums">
+                <Star className="w-3 h-3 fill-[#F7C600] text-[#F7C600]" />
+                <span>{ratingValue.toFixed(1)}</span>
+              </span>
+            </div>
+          </motion.div>
+        </AnimatePresence>
+
+        {/* Centered Pagination Dots */}
+        {totalSlides > 1 && (
+          <div className="mt-3.5 flex items-center justify-center gap-1.5">
+            {slides.map((slide, idx) => {
+              const active = idx === currentIndex;
+              return (
+                <button
+                  key={slide.id}
+                  type="button"
+                  onClick={() => setCurrentIndex(idx)}
+                  aria-label={t(`عرض الشريحة ${idx + 1}`, `View slide ${idx + 1}`)}
+                  className={`h-1.5 rounded-full transition-all duration-300 cursor-pointer ${
+                    active
+                      ? 'w-4 bg-white shadow-[0_0_8px_rgba(255,255,255,0.55)]'
+                      : 'w-1.5 bg-zinc-600/80 hover:bg-zinc-400'
+                  }`}
+                />
+              );
+            })}
+          </div>
+        )}
+      </div>
     </section>
   );
 };

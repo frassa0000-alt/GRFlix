@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
+  ArrowDown,
+  ArrowUp,
   Bell,
   Check,
   Edit3,
@@ -41,6 +43,7 @@ interface CommunityCatalogSectionsProps {
   people: PersonItem[];
   onRefreshCategories: () => void;
   onRefreshPeople: () => void;
+  onCategoriesUpdated?: () => void;
 }
 
 export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> = ({
@@ -50,6 +53,7 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
   people,
   onRefreshCategories,
   onRefreshPeople,
+  onCategoriesUpdated,
 }) => {
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
 
@@ -63,6 +67,7 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
   const [personName, setPersonName] = useState<string>('');
   const [personRole, setPersonRole] = useState<'actor' | 'director' | 'both'>('actor');
   const [personNationality, setPersonNationality] = useState<string>('');
+  const [personAvatarUrl, setPersonAvatarUrl] = useState<string>('');
   const [personBio, setPersonBio] = useState<string>('');
   const [personSearch, setPersonSearch] = useState<string>('');
   const [editingPerson, setEditingPerson] = useState<PersonItem | null>(null);
@@ -125,6 +130,7 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
       if (confirmDelete.kind === 'category') {
         await deleteCategory(token, confirmDelete.id);
         onRefreshCategories();
+        onCategoriesUpdated?.();
       } else if (confirmDelete.kind === 'person') {
         await deletePerson(token, confirmDelete.id);
         onRefreshPeople();
@@ -146,10 +152,13 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
 
   // --- 1. CATEGORIES ---
   if (mode === 'categories') {
+    const sortedCategories = [...categories].sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
+
     const handleAddOrUpdateCat = async (e: React.FormEvent) => {
       e.preventDefault();
       if (!catNameAr.trim()) return;
       setIsProcessing(true);
+      setFeedback(null);
       try {
         if (editingCat) {
           await updateCategory(token, editingCat.id, {
@@ -169,9 +178,35 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
         setCatNameEn('');
         setCatSlug('');
         onRefreshCategories();
+        onCategoriesUpdated?.();
         setFeedback({ type: 'success', msg: 'تم حفظ التصنيف بنجاح' });
       } catch (err: any) {
         setFeedback({ type: 'error', msg: err?.message || 'فشل حفظ التصنيف' });
+      } finally {
+        setIsProcessing(false);
+      }
+    };
+
+    const handleMoveCategory = async (idx: number, direction: -1 | 1) => {
+      const targetIdx = idx + direction;
+      if (targetIdx < 0 || targetIdx >= sortedCategories.length) return;
+      const cur = sortedCategories[idx];
+      const other = sortedCategories[targetIdx];
+      const curOrder = cur.order || idx + 1;
+      const otherOrder = other.order || targetIdx + 1;
+      const finalCurOrder = curOrder === otherOrder ? targetIdx + 1 : otherOrder;
+      const finalOtherOrder = curOrder === otherOrder ? idx + 1 : curOrder;
+      setIsProcessing(true);
+      setFeedback(null);
+      try {
+        await Promise.all([
+          updateCategory(token, cur.id, { order: finalCurOrder }),
+          updateCategory(token, other.id, { order: finalOtherOrder }),
+        ]);
+        onRefreshCategories();
+        onCategoriesUpdated?.();
+      } catch (err: any) {
+        setFeedback({ type: 'error', msg: err?.message || 'تعذر تغيير ترتيب التصنيف' });
       } finally {
         setIsProcessing(false);
       }
@@ -264,14 +299,14 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
         </form>
 
         <div className="rounded-2xl bg-[#111116] border border-white/[0.08] divide-y divide-white/[0.05]">
-          {categories.map((cat) => (
+          {sortedCategories.map((cat, idx) => (
             <div
               key={cat.id}
               className="p-3.5 flex flex-wrap items-center justify-between gap-2 text-xs"
             >
               <div className="flex items-center gap-3">
                 <span className="w-7 h-7 rounded-lg bg-zinc-900 text-amber-400 font-mono font-bold flex items-center justify-center">
-                  {cat.order}
+                  {cat.order || idx + 1}
                 </span>
                 <div>
                   <p className="font-black text-white">{cat.nameAr}</p>
@@ -284,9 +319,37 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
               <div className="flex items-center gap-1.5">
                 <button
                   type="button"
+                  disabled={idx === 0 || isProcessing}
+                  onClick={() => handleMoveCategory(idx, -1)}
+                  className="w-7 h-7 rounded-lg bg-zinc-900 hover:bg-zinc-800 disabled:opacity-40 text-zinc-300 flex items-center justify-center cursor-pointer"
+                  title="تقديم للأعلى"
+                >
+                  <ArrowUp className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  disabled={idx === sortedCategories.length - 1 || isProcessing}
+                  onClick={() => handleMoveCategory(idx, 1)}
+                  className="w-7 h-7 rounded-lg bg-zinc-900 hover:bg-zinc-800 disabled:opacity-40 text-zinc-300 flex items-center justify-center cursor-pointer"
+                  title="تأخير للأسفل"
+                >
+                  <ArrowDown className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  disabled={isProcessing}
                   onClick={async () => {
-                    await updateCategory(token, cat.id, { isVisible: !cat.isVisible });
-                    onRefreshCategories();
+                    try {
+                      await updateCategory(token, cat.id, { isVisible: !cat.isVisible });
+                      onRefreshCategories();
+                      onCategoriesUpdated?.();
+                      setFeedback({
+                        type: 'success',
+                        msg: cat.isVisible ? 'تم إخفاء التصنيف بنجاح' : 'تم إظهار التصنيف بنجاح',
+                      });
+                    } catch (err: any) {
+                      setFeedback({ type: 'error', msg: err?.message || 'تعذر تغيير حالة التصنيف' });
+                    }
                   }}
                   className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 cursor-pointer border ${
                     cat.isVisible
@@ -355,6 +418,7 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
             name: personName.trim(),
             role: personRole,
             nationality: personNationality.trim(),
+            avatarUrl: personAvatarUrl.trim(),
             bio: personBio.trim(),
           });
           setEditingPerson(null);
@@ -363,11 +427,13 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
             name: personName.trim(),
             role: personRole,
             nationality: personNationality.trim(),
+            avatarUrl: personAvatarUrl.trim(),
             bio: personBio.trim(),
           });
         }
         setPersonName('');
         setPersonNationality('');
+        setPersonAvatarUrl('');
         setPersonBio('');
         onRefreshPeople();
         setFeedback({ type: 'success', msg: 'تم حفظ بيانات الفنان / المخرج بنجاح' });
@@ -447,6 +513,7 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
                     setEditingPerson(null);
                     setPersonName('');
                     setPersonBio('');
+                    setPersonAvatarUrl('');
                     setPersonNationality('');
                   }}
                   className="px-2.5 rounded-xl bg-zinc-900 text-zinc-300 border border-white/10 cursor-pointer"
@@ -456,13 +523,23 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
               )}
             </div>
           </div>
-          <input
-            type="text"
-            value={personBio}
-            onChange={(e) => setPersonBio(e.target.value)}
-            placeholder="نبذة مختصرة..."
-            className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white"
-          />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <input
+              type="url"
+              dir="ltr"
+              value={personAvatarUrl}
+              onChange={(e) => setPersonAvatarUrl(e.target.value)}
+              placeholder="رابط الصورة الشخصية (اختياري)"
+              className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono"
+            />
+            <input
+              type="text"
+              value={personBio}
+              onChange={(e) => setPersonBio(e.target.value)}
+              placeholder="نبذة مختصرة..."
+              className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white"
+            />
+          </div>
         </form>
 
         <div className="relative">
@@ -487,15 +564,24 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
                 key={p.id}
                 className="p-3.5 rounded-2xl bg-[#111116] border border-white/[0.08] flex items-start justify-between gap-2 text-xs"
               >
-                <div className="min-w-0">
-                  <p className="font-black text-white truncate">{p.name}</p>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="px-2 py-0.5 rounded bg-amber-400/15 text-amber-300 text-[10px] font-bold">
-                      {p.role === 'director' ? 'مخرج' : p.role === 'both' ? 'ممثل ومخرج' : 'ممثل'}
-                    </span>
-                    {p.nationality && <span className="text-[11px] text-zinc-400">{p.nationality}</span>}
+                <div className="flex items-start gap-2.5 min-w-0">
+                  {p.avatarUrl && (
+                    <img
+                      src={p.avatarUrl}
+                      alt={p.name}
+                      className="w-10 h-10 rounded-full object-cover border border-white/10 shrink-0"
+                    />
+                  )}
+                  <div className="min-w-0">
+                    <p className="font-black text-white truncate">{p.name}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="px-2 py-0.5 rounded bg-amber-400/15 text-amber-300 text-[10px] font-bold">
+                        {p.role === 'director' ? 'مخرج' : p.role === 'both' ? 'ممثل ومخرج' : 'ممثل'}
+                      </span>
+                      {p.nationality && <span className="text-[11px] text-zinc-400">{p.nationality}</span>}
+                    </div>
+                    {p.bio && <p className="text-[11px] text-zinc-400 mt-1.5 line-clamp-2">{p.bio}</p>}
                   </div>
-                  {p.bio && <p className="text-[11px] text-zinc-400 mt-1.5 line-clamp-2">{p.bio}</p>}
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
                   <button
@@ -505,6 +591,7 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
                       setPersonName(p.name);
                       setPersonRole(p.role);
                       setPersonNationality(p.nationality || '');
+                      setPersonAvatarUrl(p.avatarUrl || '');
                       setPersonBio(p.bio || '');
                     }}
                     className="w-7 h-7 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 flex items-center justify-center cursor-pointer"
@@ -555,7 +642,15 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
               مراجعة تعليقات المشاهدين وتقييماتهم والموافقة عليها أو إخفاؤها
             </p>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <button
+              type="button"
+              onClick={loadComments}
+              className="px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-white/10 text-xs font-bold flex items-center gap-1 cursor-pointer"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loadingComments ? 'animate-spin' : ''}`} />
+              <span>تحديث</span>
+            </button>
             {(['all', 'approved', 'pending', 'hidden'] as const).map((st) => (
               <button
                 key={st}
@@ -572,6 +667,18 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
             ))}
           </div>
         </div>
+
+        {feedback && (
+          <div
+            className={`p-3 rounded-xl text-xs border ${
+              feedback.type === 'success'
+                ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
+                : 'bg-rose-500/15 border-rose-500/30 text-rose-300'
+            }`}
+          >
+            {feedback.msg}
+          </div>
+        )}
 
         {loadingComments ? (
           <div className="py-16 text-center text-zinc-400">
@@ -618,8 +725,13 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
                     <button
                       type="button"
                       onClick={async () => {
-                        await updateAdminComment(token, c.id, { status: 'approved' });
-                        loadComments();
+                        try {
+                          await updateAdminComment(token, c.id, { status: 'approved' });
+                          await loadComments();
+                          setFeedback({ type: 'success', msg: 'تم اعتماد التعليق بنجاح' });
+                        } catch (err: any) {
+                          setFeedback({ type: 'error', msg: err?.message || 'تعذر اعتماد التعليق' });
+                        }
                       }}
                       className="px-2.5 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 font-bold flex items-center gap-1 cursor-pointer"
                     >
@@ -631,8 +743,13 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
                     <button
                       type="button"
                       onClick={async () => {
-                        await updateAdminComment(token, c.id, { status: 'hidden' });
-                        loadComments();
+                        try {
+                          await updateAdminComment(token, c.id, { status: 'hidden' });
+                          await loadComments();
+                          setFeedback({ type: 'success', msg: 'تم إخفاء التعليق' });
+                        } catch (err: any) {
+                          setFeedback({ type: 'error', msg: err?.message || 'تعذر إخفاء التعليق' });
+                        }
                       }}
                       className="px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 font-bold flex items-center gap-1 cursor-pointer"
                     >
@@ -792,8 +909,16 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
                 <button
                   type="button"
                   onClick={async () => {
-                    await updateAdminNotification(token, n.id, { isActive: !n.isActive });
-                    loadNotifications();
+                    try {
+                      await updateAdminNotification(token, n.id, { isActive: !n.isActive });
+                      await loadNotifications();
+                      setFeedback({
+                        type: 'success',
+                        msg: n.isActive ? 'تم إيقاف الإشعار' : 'تم تفعيل الإشعار',
+                      });
+                    } catch (err: any) {
+                      setFeedback({ type: 'error', msg: err?.message || 'تعذر تغيير حالة الإشعار' });
+                    }
                   }}
                   className={`px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer border ${
                     n.isActive
