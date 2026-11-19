@@ -106,7 +106,7 @@ export const CinemaIntro: React.FC<CinemaIntroProps> = ({ onComplete }) => {
       }`}
       role="dialog"
       aria-modal="true"
-      aria-label={t('مقدمة GoldenFlix', 'GoldenFlix Intro')}
+      aria-label={t('مقدمة MASHHAD', 'MASHHAD Intro')}
     >
       {/* Ambient Aura Behind Character During Morph Stages */}
       {phase === 'rainbow' && (
@@ -386,20 +386,20 @@ export const CinemaIntro: React.FC<CinemaIntroProps> = ({ onComplete }) => {
               className="flex items-baseline justify-center text-[42px] sm:text-[66px] md:text-[78px] font-black tracking-tight leading-none text-[#0B0B0F]"
               style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", system-ui, sans-serif' }}
             >
-              <span>G</span>
+              <span>MASH</span>
 
-              {/* Target Letter "o" Where Mascot Drops & Settles */}
+              {/* Target Letter "H" Where Mascot Drops & Settles */}
               <span className="relative inline-flex items-center justify-center mx-[0.01em]">
                 <motion.span
                   animate={
                     mascotLanded
-                      ? { scaleY: [1, 0.68, 1.05, 1], opacity: [1, 0.15, 0] }
+                      ? { scaleY: [1, 0.72, 1.05, 1], opacity: [1, 0.85, 1] }
                       : { scaleY: 1, opacity: 1 }
                   }
                   transition={{ duration: 0.28 }}
                   className="inline-block"
                 >
-                  o
+                  H
                 </motion.span>
 
                 {/* Impact Shockwave Ring Beneath Landing Point */}
@@ -408,7 +408,7 @@ export const CinemaIntro: React.FC<CinemaIntroProps> = ({ onComplete }) => {
                     initial={{ scale: 0.3, opacity: 0.9 }}
                     animate={{ scale: 1.55, opacity: 0 }}
                     transition={{ duration: 0.45, ease: 'easeOut' }}
-                    className="pointer-events-none absolute -bottom-[0.04em] w-[1.15em] h-[0.34em] rounded-full border-[2.5px] border-[#0B0B0F]/70"
+                    className="pointer-events-none absolute -bottom-[0.04em] w-[1.15em] h-[0.34em] rounded-full border-[2.5px] border-[#ea1d24]/70"
                   />
                 )}
 
@@ -416,7 +416,7 @@ export const CinemaIntro: React.FC<CinemaIntroProps> = ({ onComplete }) => {
                 <motion.span
                   initial={{ y: '-26vh', x: '0.65em', scale: 0.95, opacity: 0 }}
                   animate={{
-                    y: ['-26vh', '0.02em', '-0.16em', '0.02em'],
+                    y: ['-26vh', '-0.55em', '-0.72em', '-0.55em'],
                     x: ['0.65em', '0em', '0em', '0em'],
                     scaleX: [0.95, 1.18, 0.94, 1],
                     scaleY: [1.05, 0.78, 1.06, 1],
@@ -432,7 +432,7 @@ export const CinemaIntro: React.FC<CinemaIntroProps> = ({ onComplete }) => {
                 >
                   <svg
                     viewBox="0 0 100 108"
-                    className="w-[0.76em] h-[0.82em] overflow-visible drop-shadow-[0_6px_12px_rgba(0,0,0,0.16)]"
+                    className="w-[0.48em] h-[0.52em] overflow-visible drop-shadow-[0_6px_12px_rgba(0,0,0,0.16)]"
                   >
                     <ellipse
                       cx="50"
@@ -471,8 +471,7 @@ export const CinemaIntro: React.FC<CinemaIntroProps> = ({ onComplete }) => {
                 </motion.span>
               </span>
 
-              <span>lden</span>
-              <span className="text-[#EAB308]">Flix</span>
+              <span className="text-[#ea1d24]">AD</span>
             </motion.div>
 
             {/* Subtle Brand Subtitle */}

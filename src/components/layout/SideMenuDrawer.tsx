@@ -48,7 +48,7 @@ interface MenuRowConfig {
   avatarUrl?: string;
 }
 
-const GoldenFlixEmblem: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' }) => (
+const MashhadEmblem: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' }) => (
   <svg
     viewBox="0 0 28 28"
     fill="none"
@@ -85,7 +85,7 @@ export const SideMenuDrawer: React.FC<SideMenuDrawerProps> = ({
   onOpenRegister,
   onOpenProfileModal,
   hasAdminAccess = false,
-  siteName = 'GoldenFlix',
+  siteName = 'MASHHAD',
 }) => {
   const { lang, dir, setLang, t } = useLanguage();
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -94,7 +94,11 @@ export const SideMenuDrawer: React.FC<SideMenuDrawerProps> = ({
   const isDeveloperUser =
     (googleUser?.email || '').trim().toLowerCase() === 'frassa.wwindows@gmail.com';
   const canAccessAdmin = isDeveloperUser || Boolean(hasAdminAccess);
-  const brandTitle = (siteName || '').trim() || 'GoldenFlix';
+  const rawTitle = (siteName || '').trim();
+  const brandTitle =
+    !rawTitle || /^(goldenflix|goldenfelix|جولدن(\s+فليكس)?)$/i.test(rawTitle)
+      ? 'MASHHAD'
+      : rawTitle;
 
   useEffect(() => {
     if (isOpen) {
@@ -416,8 +420,8 @@ export const SideMenuDrawer: React.FC<SideMenuDrawerProps> = ({
             >
               {!isCollapsed && (
                 <div className="flex items-center gap-2 min-w-0">
-                  <span className="w-7 h-7 rounded-lg bg-white text-[#0d0d0f] flex items-center justify-center shrink-0 shadow-sm">
-                    <GoldenFlixEmblem className="w-4 h-4" />
+                  <span className="w-7 h-7 rounded-lg bg-[#ea1d24] text-white flex items-center justify-center shrink-0 shadow-sm">
+                    <MashhadEmblem className="w-4 h-4" />
                   </span>
                   <span className="text-[14.5px] font-bold tracking-tight text-white truncate">
                     {brandTitle}

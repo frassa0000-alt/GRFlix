@@ -381,7 +381,7 @@ export const evaluateMediaReleaseAlerts = async (
           message: clampStr(
             diff > 1
               ? `تمت إضافة ${diff} حلقات جديدة (${epLabel}) وهي متوفرة الآن للمشاهدة.`
-              : `توفرت ${epLabel} الآن للمشاهدة على GoldenFlix.`,
+              : `توفرت ${epLabel} الآن للمشاهدة على MASHHAD.`,
             1000
           ),
           kind: 'new_episode',

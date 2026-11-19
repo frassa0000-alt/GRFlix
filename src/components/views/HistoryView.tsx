@@ -51,7 +51,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
       {historyWithMedia.length > 0 && (
         <div className="flex items-center justify-between border-b border-white/[0.08] pb-3">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-full bg-[#F7C600]/12 border border-[#F7C600]/30 flex items-center justify-center text-[#F7C600]">
+            <div className="w-9 h-9 rounded-full bg-[#ea1d24]/15 border border-[#ea1d24]/30 flex items-center justify-center text-[#ea1d24]">
               <History className="w-4.5 h-4.5" />
             </div>
             <div>
@@ -121,8 +121,8 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
           titleHighlight={t('فارغ', 'is Empty')}
           titleEnd={t('حالياً', '')}
           subtitle={t(
-            'عندما تشاهد أي فيلم أو مسلسل على GoldenFlix، سيتم حفظ نقطة التوقف هنا تلقائياً',
-            'Any movie or series you watch on GoldenFlix will automatically save here'
+            'عندما تشاهد أي فيلم أو مسلسل على MASHHAD، سيتم حفظ نقطة التوقف هنا تلقائياً',
+            'Any movie or series you watch on MASHHAD will automatically save here'
           )}
           ctaLabel={t('تصفح المحتوى', 'Browse Content')}
           onCtaClick={onBrowseContent}
@@ -134,7 +134,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
             return (
               <div
                 key={`${progress.mediaId}_${progress.episodeId || 'movie'}`}
-                className="group relative flex items-center gap-3.5 p-2.5 bg-zinc-900/80 hover:bg-zinc-800/80 border border-zinc-800 hover:border-amber-500/40 rounded-2xl transition-all shadow-md"
+                className="group relative flex items-center gap-3.5 p-2.5 bg-[#17121f]/90 hover:bg-[#1e1729] border border-white/[0.08] hover:border-[#ea1d24]/45 rounded-2xl transition-all shadow-md"
               >
                 <div className="relative w-24 h-32 rounded-xl overflow-hidden shrink-0 bg-black">
                   <img
@@ -144,14 +144,14 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                     loading="lazy"
                   />
                   <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                    <div className="w-8 h-8 rounded-full bg-amber-400 text-black flex items-center justify-center shadow-lg">
+                    <div className="w-8 h-8 rounded-full bg-[#ea1d24] text-white flex items-center justify-center shadow-lg">
                       <Play className="w-4 h-4 fill-current ml-0.5" />
                     </div>
                   </div>
 
                   <div className="absolute bottom-0 inset-x-0 h-1.5 bg-black/70">
                     <div
-                      className="h-full bg-gradient-to-r from-amber-400 to-amber-500"
+                      className="h-full bg-[#ea1d24]"
                       style={{ width: `${progress.percentage}%` }}
                     />
                   </div>
@@ -159,7 +159,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
 
                 <div className="flex-1 min-w-0 space-y-1.5">
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#ea1d24]/15 text-[#ea1d24] border border-[#ea1d24]/25">
                       {media.type === 'anime'
                         ? t('أنمي', 'Anime')
                         : media.type === 'series'
@@ -169,7 +169,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                     <span className="text-[11px] text-zinc-500">{media.year}</span>
                   </div>
 
-                  <h3 className="text-sm font-bold text-white truncate group-hover:text-amber-400 transition-colors">
+                  <h3 className="text-sm font-bold text-white truncate group-hover:text-[#ea1d24] transition-colors">
                     {title}
                   </h3>
 
@@ -183,7 +183,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                           `Watched ${progress.percentage}% (${formatSeconds(progress.currentTime)})`
                         )}
                       </span>
-                      <span className="text-amber-400 font-semibold">
+                      <span className="text-white font-semibold">
                         {t(
                           `متبقي ${formatSeconds(Math.max(0, progress.duration - progress.currentTime))}`,
                           `${formatSeconds(Math.max(0, progress.duration - progress.currentTime))} left`
@@ -191,9 +191,9 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                       </span>
                     </div>
 
-                    <div className="w-full h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+                    <div className="w-full h-1.5 rounded-full bg-white/10 overflow-hidden">
                       <div
-                        className="h-full bg-gradient-to-r from-amber-500 to-amber-400 rounded-full"
+                        className="h-full bg-[#ea1d24] rounded-full"
                         style={{ width: `${progress.percentage}%` }}
                       />
                     </div>
@@ -202,7 +202,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                   <div className="pt-1.5">
                     <button
                       onClick={() => onPlay(media)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-black text-xs font-black shadow-sm transition-all cursor-pointer"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#ea1d24] hover:bg-[#ff2b32] text-white text-xs font-black shadow-sm transition-all cursor-pointer"
                     >
                       <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
                       <span>{t('متابعة المشاهدة', 'Resume Watching')}</span>

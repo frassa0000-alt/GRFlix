@@ -454,7 +454,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
             <span>إعدادات مشغل الفيديو الافتراضية</span>
           </h2>
           <p className="text-xs text-zinc-400 mt-0.5">
-            تحديد الخيارات الافتراضية لمشغل GoldenFlix في الموقع لجميع المشاهدين
+            تحديد الخيارات الافتراضية لمشغل MASHHAD في الموقع لجميع المشاهدين
           </p>
         </div>
 
@@ -1496,7 +1496,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
               dir="ltr"
               value={smtpFrom}
               onChange={(e) => setSmtpFrom(e.target.value)}
-              placeholder="GoldenFlix <noreply@domain.com>"
+              placeholder="MASHHAD <noreply@domain.com>"
               className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono"
             />
           </div>

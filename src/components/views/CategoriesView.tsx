@@ -189,13 +189,13 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({
   return (
     <div className="w-full max-w-7xl mx-auto px-3.5 sm:px-6 py-4 space-y-6 animate-fade-in select-none">
       {/* Header Banner */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-zinc-950 via-zinc-900 to-zinc-950 border border-amber-500/20 p-4 sm:p-5 shadow-lg shadow-black/40">
-        <div className="absolute -top-12 -right-12 w-48 h-48 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-amber-500/5 rounded-full blur-2xl pointer-events-none" />
+      <div className="relative overflow-hidden rounded-2xl bg-[#17121f] border border-white/[0.08] p-4 sm:p-5 shadow-lg shadow-black/40">
+        <div className="absolute -top-12 -right-12 w-48 h-48 bg-[#ea1d24]/12 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-[#ea1d24]/6 rounded-full blur-2xl pointer-events-none" />
 
         <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 text-black flex items-center justify-center shadow-md shadow-amber-500/25 shrink-0">
+            <div className="w-11 h-11 rounded-xl bg-[#ea1d24] text-white flex items-center justify-center shadow-md shadow-[#ea1d24]/30 shrink-0">
               <Layers className="w-5 h-5 stroke-[2.2]" />
             </div>
             <div>
@@ -203,7 +203,7 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({
                 <h1 className="text-base sm:text-lg font-black text-white tracking-wide">
                   {t('تصفح الأقسام والتصنيفات', 'Browse Categories & Genres')}
                 </h1>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/25">
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#ea1d24]/15 text-[#ea1d24] border border-[#ea1d24]/25">
                   {t('سينما حصرية', 'Exclusive Cinema')}
                 </span>
               </div>
@@ -221,14 +221,14 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({
               <button
                 type="button"
                 onClick={resetFilters}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-zinc-900/90 text-zinc-300 hover:text-amber-400 border border-zinc-800 hover:border-amber-500/40 transition-all active:scale-95 cursor-pointer"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-white/[0.06] text-zinc-300 hover:text-white border border-white/10 hover:border-[#ea1d24]/50 transition-all active:scale-95 cursor-pointer"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
                 <span>{t('إعادة ضبط', 'Reset')}</span>
               </button>
             )}
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-400 text-xs font-extrabold shadow-sm">
-              <Clapperboard className="w-3.5 h-3.5" />
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#ea1d24]/15 border border-[#ea1d24]/30 text-white text-xs font-extrabold shadow-sm">
+              <Clapperboard className="w-3.5 h-3.5 text-[#ea1d24]" />
               <span>
                 {filteredItems.length} {t('عمل متاح', 'titles')}
               </span>
@@ -241,7 +241,7 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({
       <div className="space-y-2">
         <div className="flex items-center justify-between px-1">
           <span className="text-xs font-bold text-zinc-400 flex items-center gap-1.5">
-            <SlidersHorizontal className="w-3.5 h-3.5 text-amber-400" />
+            <SlidersHorizontal className="w-3.5 h-3.5 text-[#ea1d24]" />
             <span>{t('نوع المحتوى:', 'Content Type:')}</span>
           </span>
           <span className="text-[11px] text-zinc-400 font-medium">
@@ -255,14 +255,14 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({
           </span>
         </div>
 
-        <div className="grid grid-cols-3 gap-1.5 sm:gap-2 p-1.5 bg-zinc-950/90 rounded-2xl border border-zinc-800/80 backdrop-blur-md">
+        <div className="grid grid-cols-3 gap-1.5 sm:gap-2 p-1.5 bg-[#17121f] rounded-2xl border border-white/[0.08] backdrop-blur-md">
           <button
             type="button"
             onClick={() => setSelectedType('all')}
             className={`flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl text-xs font-bold transition-all duration-200 active:scale-95 cursor-pointer ${
               selectedType === 'all'
-                ? 'bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 text-black font-black shadow-md shadow-amber-500/25'
-                : 'text-zinc-400 hover:text-white hover:bg-zinc-900/80'
+                ? 'bg-[#ea1d24] text-white font-black shadow-md shadow-[#ea1d24]/30'
+                : 'text-zinc-400 hover:text-white hover:bg-white/[0.05]'
             }`}
           >
             <Layers className="w-4 h-4 shrink-0" />
@@ -274,8 +274,8 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({
             onClick={() => setSelectedType('movie')}
             className={`flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl text-xs font-bold transition-all duration-200 active:scale-95 cursor-pointer ${
               selectedType === 'movie'
-                ? 'bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 text-black font-black shadow-md shadow-amber-500/25'
-                : 'text-zinc-400 hover:text-white hover:bg-zinc-900/80'
+                ? 'bg-[#ea1d24] text-white font-black shadow-md shadow-[#ea1d24]/30'
+                : 'text-zinc-400 hover:text-white hover:bg-white/[0.05]'
             }`}
           >
             <Film className="w-4 h-4 shrink-0" />
@@ -287,8 +287,8 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({
             onClick={() => setSelectedType('series')}
             className={`flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl text-xs font-bold transition-all duration-200 active:scale-95 cursor-pointer ${
               selectedType === 'series'
-                ? 'bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 text-black font-black shadow-md shadow-amber-500/25'
-                : 'text-zinc-400 hover:text-white hover:bg-zinc-900/80'
+                ? 'bg-[#ea1d24] text-white font-black shadow-md shadow-[#ea1d24]/30'
+                : 'text-zinc-400 hover:text-white hover:bg-white/[0.05]'
             }`}
           >
             <Tv className="w-4 h-4 shrink-0" />
@@ -301,10 +301,10 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({
       <div className="space-y-3">
         <div className="flex items-center justify-between px-1">
           <span className="text-xs font-bold text-zinc-300 flex items-center gap-1.5">
-            <Tags className="w-3.5 h-3.5 text-amber-400" />
+            <Tags className="w-3.5 h-3.5 text-[#ea1d24]" />
             <span>{t('اختر التصنيف الفني:', 'Select a Genre:')}</span>
           </span>
-          <span className="text-[11px] text-amber-400/90 font-medium">
+          <span className="text-[11px] text-[#ea1d24] font-bold">
             {lang === 'en' ? activeGenreObj.labelEn : activeGenreObj.labelAr} (
             {genreCounts[selectedGenre] ?? 0})
           </span>
@@ -325,20 +325,20 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({
                   dir === 'ltr' ? 'text-left' : 'text-right'
                 } p-3 rounded-2xl border transition-all duration-200 active:scale-[0.97] flex flex-col justify-between overflow-hidden cursor-pointer ${
                   isSelected
-                    ? 'bg-gradient-to-b from-amber-500/15 via-zinc-900 to-zinc-950 border-amber-400/80 shadow-md shadow-amber-500/10'
-                    : 'bg-zinc-900/70 hover:bg-zinc-800/80 border-zinc-800 hover:border-zinc-700'
+                    ? 'bg-gradient-to-b from-[#ea1d24]/18 via-[#17121f] to-[#120e18] border-[#ea1d24]/80 shadow-md shadow-[#ea1d24]/15'
+                    : 'bg-[#17121f]/90 hover:bg-[#1e1729] border-white/[0.08] hover:border-white/20'
                 }`}
               >
                 {isSelected && (
-                  <div className="absolute top-0 right-0 left-0 h-1 bg-gradient-to-r from-amber-400 to-amber-500" />
+                  <div className="absolute top-0 right-0 left-0 h-1 bg-[#ea1d24]" />
                 )}
 
                 <div className="flex items-start justify-between w-full mb-3">
                   <div
                     className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all duration-200 ${
                       isSelected
-                        ? 'bg-amber-400 text-black shadow-md shadow-amber-500/30'
-                        : 'bg-zinc-800 text-zinc-300 group-hover:text-amber-400 group-hover:bg-zinc-700/60'
+                        ? 'bg-[#ea1d24] text-white shadow-md shadow-[#ea1d24]/30'
+                        : 'bg-white/[0.06] text-zinc-300 group-hover:text-[#ea1d24]'
                     }`}
                   >
                     <Icon className="w-4 h-4 stroke-[2.2]" />
@@ -347,8 +347,8 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({
                   <span
                     className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded-md transition-colors ${
                       isSelected
-                        ? 'bg-amber-400/20 text-amber-300 border border-amber-400/30'
-                        : 'bg-zinc-800/80 text-zinc-400 group-hover:text-zinc-200'
+                        ? 'bg-[#ea1d24]/20 text-white border border-[#ea1d24]/35'
+                        : 'bg-white/[0.06] text-zinc-400 group-hover:text-zinc-200'
                     }`}
                   >
                     {count}
@@ -358,7 +358,7 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({
                 <div>
                   <h3
                     className={`text-xs font-black transition-colors ${
-                      isSelected ? 'text-amber-400' : 'text-white group-hover:text-amber-300'
+                      isSelected ? 'text-white' : 'text-white group-hover:text-[#ea1d24]'
                     }`}
                   >
                     {lang === 'en' ? genre.labelEn : genre.labelAr}
@@ -389,7 +389,7 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({
           {availableYears.length > 0 && (
             <div className="relative flex items-center">
               <Calendar
-                className={`w-3.5 h-3.5 text-amber-400 absolute pointer-events-none ${
+                className={`w-3.5 h-3.5 text-[#ea1d24] absolute pointer-events-none ${
                   dir === 'ltr' ? 'left-2.5' : 'right-2.5'
                 }`}
               />
@@ -397,7 +397,7 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({
                 value={selectedYear}
                 onChange={(e) => setSelectedYear(e.target.value)}
                 aria-label={t('تصفية حسب سنة الإنتاج', 'Filter by release year')}
-                className={`h-9 bg-zinc-950 hover:bg-zinc-900 text-zinc-200 text-xs font-bold rounded-xl border border-zinc-800/80 focus:border-amber-400/70 focus:outline-none transition-colors cursor-pointer ${
+                className={`h-9 bg-[#17121f] hover:bg-[#1f182a] text-zinc-200 text-xs font-bold rounded-xl border border-white/[0.1] focus:border-[#ea1d24]/70 focus:outline-none transition-colors cursor-pointer ${
                   dir === 'ltr' ? 'pl-8 pr-3' : 'pr-8 pl-3'
                 }`}
               >
@@ -413,7 +413,7 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({
             </div>
           )}
 
-          <div className="flex items-center gap-1.5 bg-zinc-950 p-1 rounded-xl border border-zinc-800/80">
+          <div className="flex items-center gap-1.5 bg-[#17121f] p-1 rounded-xl border border-white/[0.08]">
             <span className="text-[10px] text-zinc-400 px-2 font-medium">
               {t('الترتيب:', 'Sort:')}
             </span>
@@ -422,7 +422,7 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({
               onClick={() => setSortBy('latest')}
               className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all active:scale-95 cursor-pointer ${
                 sortBy === 'latest'
-                  ? 'bg-amber-400 text-black font-black shadow-sm'
+                  ? 'bg-[#ea1d24] text-white font-black shadow-sm'
                   : 'text-zinc-400 hover:text-white'
               }`}
             >
@@ -434,7 +434,7 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({
               onClick={() => setSortBy('rating')}
               className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all active:scale-95 cursor-pointer ${
                 sortBy === 'rating'
-                  ? 'bg-amber-400 text-black font-black shadow-sm'
+                  ? 'bg-[#ea1d24] text-white font-black shadow-sm'
                   : 'text-zinc-400 hover:text-white'
               }`}
             >
@@ -447,8 +447,8 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({
 
       {/* Items Results Grid */}
       {filteredItems.length === 0 ? (
-        <div className="py-16 text-center rounded-3xl bg-zinc-900/40 border border-zinc-800/60 p-6 space-y-3 max-w-md mx-auto">
-          <div className="w-14 h-14 rounded-2xl bg-zinc-800/60 border border-amber-500/20 text-amber-400 flex items-center justify-center mx-auto shadow-inner">
+        <div className="py-16 text-center rounded-3xl bg-[#17121f]/60 border border-white/[0.08] p-6 space-y-3 max-w-md mx-auto">
+          <div className="w-14 h-14 rounded-2xl bg-white/[0.05] border border-[#ea1d24]/25 text-[#ea1d24] flex items-center justify-center mx-auto shadow-inner">
             <Film className="w-7 h-7" />
           </div>
           <div className="space-y-1">
@@ -465,7 +465,7 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({
           <button
             type="button"
             onClick={resetFilters}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-amber-400 to-amber-500 text-black shadow-md shadow-amber-500/20 transition-all active:scale-95 hover:brightness-110 cursor-pointer"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-[#ea1d24] hover:bg-[#ff2b32] text-white shadow-md shadow-[#ea1d24]/25 transition-all active:scale-95 cursor-pointer"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             <span>{t('عرض كافة الأفلام والمسلسلات', 'Show All Movies & Series')}</span>

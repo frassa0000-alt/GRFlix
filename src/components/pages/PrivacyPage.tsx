@@ -17,9 +17,9 @@ export const PrivacyPage: React.FC<PrivacyPageProps> = ({ onBackHome, onNavigate
       titleAr: 'المعلومات التي نقوم بجمعها',
       titleEn: '01. Information We Collect',
       bodyAr:
-        'عند إنشاء حساب أو تسجيل الدخول في GoldenFlix، قد نطلب الاسم وعنوان البريد الإلكتروني وصورة الحساب الاختيارية لتمكين مزامنة حسابك. كما يتم حفظ قائمة المفضلة وسجل المشاهدة وإعدادات اللغة وتنبيهات الحلقات الجديدة لتسهيل استكمال المشاهدة لاحقاً.',
+        'عند إنشاء حساب أو تسجيل الدخول في MASHHAD، قد نطلب الاسم وعنوان البريد الإلكتروني وصورة الحساب الاختيارية لتمكين مزامنة حسابك. كما يتم حفظ قائمة المفضلة وسجل المشاهدة وإعدادات اللغة وتنبيهات الحلقات الجديدة لتسهيل استكمال المشاهدة لاحقاً.',
       bodyEn:
-        'When you create an account or sign in to GoldenFlix, we may collect your name, email address, and optional avatar to manage your profile. Your favorites list, watch progress, language preference, and release alerts are stored to preserve your viewing continuity.',
+        'When you create an account or sign in to MASHHAD, we may collect your name, email address, and optional avatar to manage your profile. Your favorites list, watch progress, language preference, and release alerts are stored to preserve your viewing continuity.',
     },
     {
       numAr: '02.',
@@ -37,7 +37,7 @@ export const PrivacyPage: React.FC<PrivacyPageProps> = ({ onBackHome, onNavigate
       bodyAr:
         'يعتمد الموقع على التخزين المحلي في المتصفح (Local Storage) لحفظ جلسة الدخول، تفضيل اللغة، المفضلة، وتقدّم المشاهدة بحيث تعمل الواجهة بسرعة سواء على الهاتف أو الكمبيوتر. يمكنك مسح بيانات المتصفح في أي وقت.',
       bodyEn:
-        'GoldenFlix uses browser Local Storage to preserve your session, language selection, favorites, and playback progress quickly across mobile and desktop devices. You may clear browser data at any time.',
+        'MASHHAD uses browser Local Storage to preserve your session, language selection, favorites, and playback progress quickly across mobile and desktop devices. You may clear browser data at any time.',
     },
     {
       numAr: '04.',
@@ -73,8 +73,8 @@ export const PrivacyPage: React.FC<PrivacyPageProps> = ({ onBackHome, onNavigate
       pageId="privacy"
       title={t('سياسة الخصوصية', 'Privacy Policy')}
       subtitle={t(
-        'توضح هذه السياسة كيفية تعامل GoldenFlix مع بيانات المستخدمين وحماية خصوصيتهم أثناء استخدام المنصة.',
-        'This policy explains how GoldenFlix handles user data and safeguards your privacy while using the platform.'
+        'توضح هذه السياسة كيفية تعامل MASHHAD مع بيانات المستخدمين وحماية خصوصيتهم أثناء استخدام المنصة.',
+        'This policy explains how MASHHAD handles user data and safeguards your privacy while using the platform.'
       )}
       updatedLabel={t('آخر تحديث: 2026', 'Last updated: 2026')}
       onBackHome={onBackHome}

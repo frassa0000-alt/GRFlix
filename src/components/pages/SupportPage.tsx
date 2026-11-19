@@ -78,7 +78,7 @@ export const SupportPage: React.FC<SupportPageProps> = ({ onBackHome, onNavigate
       return;
     }
 
-    const mailSubject = encodeURIComponent(`[GoldenFlix Support] ${cleanSubject}`);
+    const mailSubject = encodeURIComponent(`[MASHHAD Support] ${cleanSubject}`);
     const mailBody = encodeURIComponent(
       `${lang === 'en' ? 'Name' : 'الاسم'}: ${cleanName}\n\n${cleanMessage}`
     );
@@ -98,8 +98,8 @@ export const SupportPage: React.FC<SupportPageProps> = ({ onBackHome, onNavigate
       pageId="support"
       title={t('الدعم الفني والمساعدة', 'Technical Support')}
       subtitle={t(
-        'فريق GoldenFlix جاهز لمساعدتك في حل أي مشكلة تقنية أثناء التصفح أو التشغيل، واستقبال اقتراحاتك وملاحظاتك.',
-        'The GoldenFlix team is ready to assist with any playback or account issue and receive your suggestions.'
+        'فريق MASHHAD جاهز لمساعدتك في حل أي مشكلة تقنية أثناء التصفح أو التشغيل، واستقبال اقتراحاتك وملاحظاتك.',
+        'The MASHHAD team is ready to assist with any playback or account issue and receive your suggestions.'
       )}
       updatedLabel={t('متاح عبر البريد الإلكتروني الرسمي', 'Available via official support email')}
       onBackHome={onBackHome}
@@ -118,7 +118,7 @@ export const SupportPage: React.FC<SupportPageProps> = ({ onBackHome, onNavigate
                 'For technical issues or reports, contact us directly at the email below (typical response: 24–48 hours).'
               )}
             </p>
-            <p dir="ltr" className="text-sm sm:text-base font-bold text-[#F7C600] pt-1 select-all inline-block">
+            <p dir="ltr" className="text-sm sm:text-base font-bold text-[#ea1d24] pt-1 select-all inline-block">
               {SUPPORT_EMAIL}
             </p>
           </div>
@@ -126,7 +126,7 @@ export const SupportPage: React.FC<SupportPageProps> = ({ onBackHome, onNavigate
           <div className="flex flex-wrap items-center gap-2.5 shrink-0">
             <a
               href={`mailto:${SUPPORT_EMAIL}`}
-              className="inline-flex items-center justify-center gap-2 min-h-[44px] px-5 py-2.5 rounded-xl bg-[#F7C600] hover:bg-[#ffd52e] text-black text-xs sm:text-sm font-black transition-all duration-150 active:scale-[0.97] whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-[#F7C600]/60"
+              className="inline-flex items-center justify-center gap-2 min-h-[44px] px-5 py-2.5 rounded-xl bg-[#ea1d24] hover:bg-[#ff2b32] text-white text-xs sm:text-sm font-black transition-all duration-150 active:scale-[0.97] whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-[#ea1d24]/60"
             >
               <Mail className="w-4 h-4 shrink-0" />
               <span>{t('مراسلة الدعم الفني', 'Email Support')}</span>
@@ -135,7 +135,7 @@ export const SupportPage: React.FC<SupportPageProps> = ({ onBackHome, onNavigate
             <button
               type="button"
               onClick={handleCopyEmail}
-              className="inline-flex items-center justify-center gap-2 min-h-[44px] px-4 py-2.5 rounded-xl bg-[#16161e] hover:bg-[#1e1e28] border border-white/12 text-zinc-200 hover:text-white text-xs sm:text-sm font-bold transition-all duration-150 active:scale-[0.97] cursor-pointer whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-[#F7C600]/60"
+              className="inline-flex items-center justify-center gap-2 min-h-[44px] px-4 py-2.5 rounded-xl bg-[#17121f] hover:bg-[#1e1729] border border-white/12 text-zinc-200 hover:text-white text-xs sm:text-sm font-bold transition-all duration-150 active:scale-[0.97] cursor-pointer whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-[#ea1d24]/60"
             >
               {copied ? (
                 <>
@@ -144,7 +144,7 @@ export const SupportPage: React.FC<SupportPageProps> = ({ onBackHome, onNavigate
                 </>
               ) : (
                 <>
-                  <Copy className="w-4 h-4 text-[#F7C600] shrink-0" />
+                  <Copy className="w-4 h-4 text-[#ea1d24] shrink-0" />
                   <span>{t('نسخ البريد', 'Copy Email')}</span>
                 </>
               )}
@@ -270,7 +270,7 @@ export const SupportPage: React.FC<SupportPageProps> = ({ onBackHome, onNavigate
 
           <button
             type="submit"
-            className="inline-flex items-center justify-center gap-2 min-h-[44px] px-6 py-2.5 rounded-xl bg-[#F7C600] hover:bg-[#ffd52e] text-black text-xs sm:text-sm font-black transition-all duration-150 active:scale-[0.97] cursor-pointer whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-[#F7C600]/60"
+            className="inline-flex items-center justify-center gap-2 min-h-[44px] px-6 py-2.5 rounded-xl bg-[#ea1d24] hover:bg-[#ff2b32] text-white text-xs sm:text-sm font-black transition-all duration-150 active:scale-[0.97] cursor-pointer whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-[#ea1d24]/60"
           >
             <Send className="w-4 h-4 shrink-0" />
             <span>{t('إرسال عبر البريد الإلكتروني', 'Send via Email')}</span>

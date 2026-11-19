@@ -43,13 +43,13 @@ const CHROME_SILVER_TEXT_STYLE: React.CSSProperties = {
   filter: 'drop-shadow(0 6px 22px rgba(0, 168, 255, 0.35)) drop-shadow(0 2px 6px rgba(0, 0, 0, 0.9))',
 };
 
-const GOLD_METALLIC_TEXT_STYLE: React.CSSProperties = {
+const CRIMSON_METALLIC_TEXT_STYLE: React.CSSProperties = {
   ...CINEMA_FONT_STYLE,
   backgroundImage:
-    'linear-gradient(180deg, #fffbeb 0%, #fde047 38%, #f7c600 68%, #b45309 100%)',
+    'linear-gradient(180deg, #ffe4e6 0%, #fb7185 35%, #ea1d24 68%, #991b1b 100%)',
   WebkitBackgroundClip: 'text',
   WebkitTextFillColor: 'transparent',
-  filter: 'drop-shadow(0 6px 22px rgba(247, 198, 0, 0.45)) drop-shadow(0 2px 6px rgba(0, 0, 0, 0.9))',
+  filter: 'drop-shadow(0 6px 22px rgba(234, 29, 36, 0.55)) drop-shadow(0 2px 6px rgba(0, 0, 0, 0.9))',
 };
 
 const AnamorphicFlareBar: React.FC<{
@@ -160,7 +160,7 @@ export const PlayerCinemaIntro: React.FC<PlayerCinemaIntroProps> = ({
       onPointerDown={(e) => e.stopPropagation()}
       onPointerUp={(e) => e.stopPropagation()}
       className="absolute inset-0 z-50 w-full h-full overflow-hidden bg-[#01050d] flex items-center justify-center select-none"
-      aria-label="GoldenFlix Cinema Intro"
+      aria-label="MASHHAD Cinema Intro"
     >
       {/* 1. Deep Midnight Cinematic Blue Atmosphere */}
       <div
@@ -318,7 +318,7 @@ export const PlayerCinemaIntro: React.FC<PlayerCinemaIntroProps> = ({
                 className="text-[26px] sm:text-5xl md:text-6xl font-bold uppercase whitespace-nowrap pl-[0.36em]"
                 style={CHROME_SILVER_TEXT_STYLE}
               >
-                GOLDENFLIX
+                MASHHAD
               </motion.h2>
               <AnamorphicFlareBar sweepFrom="-20%" sweepTo="38%" goldHint />
             </motion.div>
@@ -435,7 +435,7 @@ export const PlayerCinemaIntro: React.FC<PlayerCinemaIntroProps> = ({
                   className="text-4xl sm:text-7xl font-black uppercase tracking-[0.55em] pl-[0.55em]"
                   style={CHROME_SILVER_TEXT_STYLE}
                 >
-                  GOLDEN
+                  MASHHAD
                 </div>
                 <div className="mt-2 w-56 sm:w-96 h-1 rounded-full bg-gradient-to-r from-transparent via-cyan-300 to-transparent shadow-[0_0_28px_rgba(56,189,248,0.95)]" />
               </motion.div>
@@ -555,9 +555,9 @@ export const PlayerCinemaIntro: React.FC<PlayerCinemaIntroProps> = ({
                   <div className="relative z-10 text-center space-y-0.5">
                     <p
                       className="text-[11px] sm:text-sm font-bold tracking-[0.2em]"
-                      style={GOLD_METALLIC_TEXT_STYLE}
+                      style={CRIMSON_METALLIC_TEXT_STYLE}
                     >
-                      GOLDENFLIX
+                      MASHHAD
                     </p>
                     <p
                       className="text-[6px] sm:text-[8px] tracking-[0.26em] text-sky-200/70 uppercase"
@@ -587,8 +587,8 @@ export const PlayerCinemaIntro: React.FC<PlayerCinemaIntroProps> = ({
                 }`}
               >
                 <div className="text-[22px] sm:text-4xl md:text-5xl font-bold uppercase tracking-[0.22em] leading-tight">
-                  <span style={GOLD_METALLIC_TEXT_STYLE}>GOLDEN</span>
-                  <span style={CHROME_SILVER_TEXT_STYLE}>FLIX</span>
+                  <span style={CHROME_SILVER_TEXT_STYLE}>MASH</span>
+                  <span style={CRIMSON_METALLIC_TEXT_STYLE}>HAD</span>
                 </div>
                 <div
                   className="mt-1 text-sm sm:text-2xl md:text-3xl font-semibold uppercase tracking-[0.26em] leading-tight"
@@ -638,7 +638,7 @@ export const PlayerCinemaIntro: React.FC<PlayerCinemaIntroProps> = ({
                 transition={{ delay: 0.18, duration: 0.55 }}
                 className="mt-2.5 sm:mt-3.5 text-sm sm:text-xl md:text-2xl font-bold uppercase tracking-[0.34em] pl-[0.34em]"
               >
-                <span style={GOLD_METALLIC_TEXT_STYLE}>GOLDENFLIX</span>
+                <span style={CRIMSON_METALLIC_TEXT_STYLE}>MASHHAD</span>
                 <span className="mx-2 text-sky-300/70">·</span>
                 <span style={CHROME_SILVER_TEXT_STYLE}>ULTRA HD</span>
               </motion.div>

@@ -612,7 +612,7 @@ export interface AdminUserRecord extends AppUserProfile {
 const mapFirestoreDocToUser = (docId: string, raw: Record<string, any>): AdminUserRecord => {
   const email = String(raw.email || '').trim();
   const displayName = String(
-    raw.displayName || raw.name || (email ? email.split('@')[0] : 'مستخدم GoldenFlix')
+    raw.displayName || raw.name || (email ? email.split('@')[0] : 'مستخدم MASHHAD')
   ).trim();
   const photo = String(
     raw.picture ||
@@ -742,7 +742,7 @@ const syncFirestoreUserUpdate = async (
 
     const existing = snap.data() as Record<string, any>;
     const nextDisplayName = String(
-      updates.displayName ?? existing.displayName ?? existing.name ?? 'عضو GoldenFlix'
+      updates.displayName ?? existing.displayName ?? existing.name ?? 'عضو MASHHAD'
     ).slice(0, 120);
 
     // Strictly conform to firestore.rules isValidUserProfile allowed fields

@@ -53,11 +53,11 @@ export const SurprisePickBar: React.FC<SurprisePickBarProps> = ({
 
   return (
     <div className="max-w-lg mx-auto px-1">
-      <div className="rounded-2xl bg-[#101016]/90 border border-white/[0.08] backdrop-blur-xl shadow-[0_12px_32px_rgba(0,0,0,0.6)] overflow-hidden">
+      <div className="rounded-2xl bg-[#17121f]/95 border border-white/[0.08] backdrop-blur-xl shadow-[0_12px_32px_rgba(0,0,0,0.6)] overflow-hidden">
         {/* Compact Action Row */}
         <div className="flex items-center justify-between gap-3 px-3.5 py-2.5">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-xl bg-amber-400/15 border border-amber-400/30 text-amber-400 flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-xl bg-[#ea1d24]/15 border border-[#ea1d24]/30 text-[#ea1d24] flex items-center justify-center shrink-0">
               <motion.div
                 animate={{ rotate: spinCount * 180 }}
                 transition={{ type: 'spring', stiffness: 260, damping: 18 }}
@@ -75,7 +75,7 @@ export const SurprisePickBar: React.FC<SurprisePickBarProps> = ({
             whileHover={{ scale: 1.03 }}
             whileTap={{ scale: 0.95 }}
             onClick={handlePickRandom}
-            className="min-h-[40px] px-4 py-1.5 rounded-xl bg-gradient-to-r from-amber-300 via-amber-400 to-amber-500 hover:from-amber-200 hover:to-amber-400 text-black text-xs font-black whitespace-nowrap shrink-0 shadow-[0_6px_18px_rgba(251,191,36,0.25)] transition-all cursor-pointer"
+            className="min-h-[40px] px-4 py-1.5 rounded-xl bg-[#ea1d24] hover:bg-[#ff2b32] text-white text-xs font-black whitespace-nowrap shrink-0 shadow-[0_6px_18px_rgba(234,29,36,0.32)] transition-all cursor-pointer"
           >
             {pickedItem ? t('اختيار آخر', 'Pick Another') : t('اقترح لي', 'Surprise Me')}
           </motion.button>
@@ -110,12 +110,12 @@ export const SurprisePickBar: React.FC<SurprisePickBarProps> = ({
                         className="w-full h-full object-cover"
                       />
                     ) : (
-                      <Film className="w-4 h-4 text-amber-400/50" />
+                      <Film className="w-4 h-4 text-[#ea1d24]/60" />
                     )}
                   </div>
 
                   <div className="min-w-0 flex-1">
-                    <h4 className="text-xs font-black text-white group-hover:text-amber-400 transition-colors truncate">
+                    <h4 className="text-xs font-black text-white group-hover:text-[#ea1d24] transition-colors truncate">
                       {title}
                     </h4>
                     <div className="flex items-center gap-1.5 text-[11px] text-zinc-400 mt-0.5 truncate tabular-nums">
@@ -135,8 +135,8 @@ export const SurprisePickBar: React.FC<SurprisePickBarProps> = ({
                       {typeof pickedItem.rating === 'number' && pickedItem.rating > 0 && (
                         <>
                           <span aria-hidden="true">·</span>
-                          <span className="inline-flex items-center gap-0.5 text-amber-400 font-bold">
-                            <Star className="w-3 h-3 fill-amber-400" />
+                          <span className="inline-flex items-center gap-0.5 text-white font-bold">
+                            <Star className="w-3 h-3 fill-white" />
                             <span>{pickedItem.rating.toFixed(1)}</span>
                           </span>
                         </>
@@ -149,7 +149,7 @@ export const SurprisePickBar: React.FC<SurprisePickBarProps> = ({
                   <button
                     type="button"
                     onClick={() => onPlayMedia(pickedItem)}
-                    className="min-h-[38px] px-3 py-1.5 rounded-xl bg-amber-400/15 hover:bg-amber-400 text-amber-300 hover:text-black border border-amber-400/35 text-[11px] font-black flex items-center gap-1 transition-colors cursor-pointer whitespace-nowrap"
+                    className="min-h-[38px] px-3 py-1.5 rounded-xl bg-[#ea1d24]/15 hover:bg-[#ea1d24] text-[#ea1d24] hover:text-white border border-[#ea1d24]/40 text-[11px] font-black flex items-center gap-1 transition-colors cursor-pointer whitespace-nowrap"
                   >
                     <Play className="w-3.5 h-3.5 fill-current" />
                     <span>{t('تشغيل', 'Watch')}</span>
@@ -159,7 +159,7 @@ export const SurprisePickBar: React.FC<SurprisePickBarProps> = ({
                     type="button"
                     onClick={() => setPickedItem(null)}
                     aria-label={t('إغلاق الاقتراح', 'Dismiss pick')}
-                    className="w-8 h-8 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+                    className="w-8 h-8 rounded-lg bg-white/[0.06] hover:bg-white/[0.14] text-zinc-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>

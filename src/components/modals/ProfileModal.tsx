@@ -35,17 +35,17 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
 
         {/* Profile Card */}
         <div className="flex items-center gap-3.5 pb-4 border-b border-zinc-800">
-          <div className="w-14 h-14 rounded-full bg-gradient-to-tr from-amber-500 to-amber-300 text-black flex items-center justify-center shadow-lg shadow-amber-500/25 font-black text-xl">
-            GF
+          <div className="w-14 h-14 rounded-full bg-[#ea1d24] text-white flex items-center justify-center shadow-lg shadow-[#ea1d24]/30 font-black text-xl">
+            M
           </div>
           <div>
             <div className="flex items-center gap-1.5">
-              <h3 className="text-white font-bold text-base">منصة GoldenFlix</h3>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 font-bold">
+              <h3 className="text-white font-bold text-base">منصة MASHHAD</h3>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#ea1d24]/20 text-[#ea1d24] font-bold">
                 PRO
               </span>
             </div>
-            <p className="text-xs text-zinc-400 font-mono">GoldenFlix Platform</p>
+            <p className="text-xs text-zinc-400 font-mono">MASHHAD Platform</p>
           </div>
         </div>
 

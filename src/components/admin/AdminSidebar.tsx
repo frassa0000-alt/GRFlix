@@ -151,7 +151,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                 <SlidersHorizontal className="w-4 h-4" />
               </div>
               <div className="truncate">
-                <p className="text-xs font-black text-white tracking-wide truncate">GoldenFlix</p>
+                <p className="text-xs font-black text-white tracking-wide truncate">MASHHAD</p>
                 <p className="text-[10px] text-amber-400 font-semibold truncate">لوحة التحكم الشاملة</p>
               </div>
             </div>

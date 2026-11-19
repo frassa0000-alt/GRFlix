@@ -13,12 +13,12 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onBackHome, onNavigatePage
 
   const pillars = [
     {
-      titleAr: '01. رؤية GoldenFlix',
-      titleEn: '01. The GoldenFlix Vision',
+      titleAr: '01. رؤية MASHHAD',
+      titleEn: '01. The MASHHAD Vision',
       bodyAr:
-        'تأسست GoldenFlix لتقديم مكتبة أفلام ومسلسلات منظمة في بيئة بصرية داكنة مريحة للعين، تجمع بين سرعة الوصول إلى الأعمال المفضلة والتركيز على متعة المشاهدة دون فوضى أو تعقيد.',
+        'تأسست MASHHAD لتقديم مكتبة أفلام ومسلسلات منظمة في بيئة بصرية داكنة مريحة للعين، تجمع بين سرعة الوصول إلى الأعمال المفضلة والتركيز على متعة المشاهدة دون فوضى أو تعقيد.',
       bodyEn:
-        'GoldenFlix was built to present a curated library of movies and series inside a calm, dark-first viewing environment focused on effortless discovery and uninterrupted watching.',
+        'MASHHAD was built to present a curated library of movies and series inside a calm, dark-first viewing environment focused on effortless discovery and uninterrupted watching.',
     },
     {
       titleAr: '02. تجربة تشغيل متكاملة',
@@ -42,8 +42,8 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onBackHome, onNavigatePage
     {
       labelAr: 'اسم المنصة',
       labelEn: 'Platform Name',
-      valAr: 'GoldenFlix',
-      valEn: 'GoldenFlix',
+      valAr: 'MASHHAD',
+      valEn: 'MASHHAD',
     },
     {
       labelAr: 'الأجهزة المدعومة',
@@ -68,7 +68,7 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onBackHome, onNavigatePage
   return (
     <InfoPageLayout
       pageId="about"
-      title={t('من نحن — GoldenFlix', 'About GoldenFlix')}
+      title={t('من نحن — MASHHAD', 'About MASHHAD')}
       subtitle={t(
         'منصة رقمية مخصصة لعشاق السينما والمسلسلات، تجمع بين البساطة في التصميم وجودة العرض العالية.',
         'A digital streaming destination crafted for film and series enthusiasts, uniting clean design with refined playback.'
@@ -111,7 +111,7 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onBackHome, onNavigatePage
                   {spec.valAr.includes('@') ? (
                     <a
                       href={`mailto:${spec.valAr}`}
-                      className="text-[#F7C600] hover:underline"
+                      className="text-[#ea1d24] hover:underline"
                     >
                       {spec.valAr}
                     </a>

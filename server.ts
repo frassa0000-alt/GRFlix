@@ -75,11 +75,11 @@ const DEFAULT_CATEGORIES = [
 ];
 
 const DEFAULT_SITE_SETTINGS = {
-  siteName: 'GoldenFlix',
+  siteName: 'MASHHAD',
   siteTagline: 'عالم السينما والترفيه بين يديك',
-  logoText: 'GoldenFlix',
-  accentColor: '#facc15',
-  backgroundColor: '#0c0c0e',
+  logoText: 'MASHHAD',
+  accentColor: '#ea1d24',
+  backgroundColor: '#0f0c14',
   homeSections: {
     showHeroBanner: true,
     showCategories: true,
@@ -557,7 +557,7 @@ let activeSmtpPort = 465;
 let activeSmtpUser = '';
 let activeSmtpPass = '';
 let activeSmtpSecure = true;
-let activeSmtpFrom = '"GoldenFlix" <noreply@goldenflix.app>';
+let activeSmtpFrom = '"MASHHAD" <noreply@mashhad.app>';
 let mailTransporter: any = null;
 let isSmtpConfigured = false;
 let isSmtpVerified = false;
@@ -637,8 +637,8 @@ const getEffectiveMailConfig = (): RuntimeMailConfig => {
   const smtpFrom = isValidFromHeader(rawFrom)
     ? rawFrom
     : isValidEmailLike(smtpUser)
-    ? `"GoldenFlix" <${smtpUser}>`
-    : '"GoldenFlix" <noreply@goldenflix.app>';
+    ? `"MASHHAD" <${smtpUser}>`
+    : '"MASHHAD" <noreply@mashhad.app>';
 
   const resendApiKey = (hasSavedConfig ? (saved.resendApiKey ?? '') : (saved.resendApiKey ?? envResendKey)).trim();
   const supabaseUrl = (hasSavedConfig ? (saved.supabaseUrl ?? '') : (saved.supabaseUrl ?? envSupabaseUrl)).trim();
@@ -671,10 +671,10 @@ const reloadMailProviders = async (): Promise<void> => {
     if (!isValidHttpUrl(activeSupabaseUrl)) {
       supabaseStatusError =
         'رابط SUPABASE_URL غير صالح (يجب أن يبدأ بـ https:// مثل https://your-project.supabase.co)';
-      console.warn('[GoldenFlix Auth] Supabase skipped: invalid URL format.');
+      console.warn('[MASHHAD Auth] Supabase skipped: invalid URL format.');
     } else if (isPlaceholderValue(activeSupabaseAnonKey)) {
       supabaseStatusError = 'مفتاح SUPABASE_ANON_KEY مفقود أو غير صالح';
-      console.warn('[GoldenFlix Auth] Supabase skipped: missing anon key.');
+      console.warn('[MASHHAD Auth] Supabase skipped: missing anon key.');
     } else {
       try {
         supabaseServer = createClient(activeSupabaseUrl, activeSupabaseAnonKey, {
@@ -682,10 +682,10 @@ const reloadMailProviders = async (): Promise<void> => {
         });
         isSupabaseConfigured = true;
         supabaseStatusError = null;
-        console.log('[GoldenFlix Auth] Supabase Auth client initialized successfully.');
+        console.log('[MASHHAD Auth] Supabase Auth client initialized successfully.');
       } catch (err: any) {
         supabaseStatusError = err?.message || 'فشل تهيئة Supabase Auth';
-        console.warn('[GoldenFlix Auth] Supabase Auth init warning:', supabaseStatusError);
+        console.warn('[MASHHAD Auth] Supabase Auth init warning:', supabaseStatusError);
       }
     }
   } else {
@@ -702,7 +702,7 @@ const reloadMailProviders = async (): Promise<void> => {
   activeSmtpUser = cfg.smtpUser || '';
   activeSmtpPass = cfg.smtpPass || '';
   activeSmtpSecure = Boolean(cfg.smtpSecure);
-  activeSmtpFrom = cfg.smtpFrom || '"GoldenFlix" <noreply@goldenflix.app>';
+  activeSmtpFrom = cfg.smtpFrom || '"MASHHAD" <noreply@mashhad.app>';
 
   mailTransporter = null;
   isSmtpConfigured = false;
@@ -711,31 +711,31 @@ const reloadMailProviders = async (): Promise<void> => {
 
   if (!activeSmtpHost && !activeSmtpUser && !activeSmtpPass) {
     smtpLastError = 'لم يتم تزويد إعدادات خادم SMTP بعد. يرجى ضبط SMTP_USER و SMTP_PASS من لوحة تحكم المطور أو ملف .env';
-    console.log('[GoldenFlix Mailer] SMTP credentials not set. Configure in Developer Dashboard or .env.');
+    console.log('[MASHHAD Mailer] SMTP credentials not set. Configure in Developer Dashboard or .env.');
     return;
   }
 
   if (!isValidSmtpHost(activeSmtpHost)) {
     smtpLastError = `عنوان خادم البريد (SMTP_HOST) غير صالح: "${activeSmtpHost || 'فارغ'}" — مثال صحيح: smtp.gmail.com`;
-    console.warn('[GoldenFlix Mailer] Invalid SMTP_HOST configured:', activeSmtpHost);
+    console.warn('[MASHHAD Mailer] Invalid SMTP_HOST configured:', activeSmtpHost);
     return;
   }
 
   if (!isValidSmtpPort(activeSmtpPort)) {
     smtpLastError = `رقم المنفذ (SMTP_PORT) غير صالح: ${activeSmtpPort} — يجب أن يكون بين 1 و 65535 (مثل 465 أو 587)`;
-    console.warn('[GoldenFlix Mailer] Invalid SMTP_PORT configured:', activeSmtpPort);
+    console.warn('[MASHHAD Mailer] Invalid SMTP_PORT configured:', activeSmtpPort);
     return;
   }
 
   if (!activeSmtpUser || isPlaceholderValue(activeSmtpPass)) {
     smtpLastError = 'يرجى إدخال بريد المرسل (SMTP_USER) وكلمة مرور التطبيقات (SMTP_PASS) الصالحة';
-    console.warn('[GoldenFlix Mailer] Incomplete SMTP credentials.');
+    console.warn('[MASHHAD Mailer] Incomplete SMTP credentials.');
     return;
   }
 
   if (!isValidEmailLike(activeSmtpUser) && activeSmtpHost.includes('gmail')) {
     smtpLastError = `بريد المرسل (SMTP_USER) غير صالح: "${activeSmtpUser}" — يرجى إدخال بريد إلكتروني صحيح مثل frassa.wwindows@gmail.com`;
-    console.warn('[GoldenFlix Mailer] Invalid SMTP_USER email format:', activeSmtpUser);
+    console.warn('[MASHHAD Mailer] Invalid SMTP_USER email format:', activeSmtpUser);
     return;
   }
 
@@ -759,11 +759,11 @@ const reloadMailProviders = async (): Promise<void> => {
     await mailTransporter.verify();
     isSmtpVerified = true;
     smtpLastError = null;
-    console.log(`[GoldenFlix Mailer] SMTP Server verified and connected (${activeSmtpHost}:${activeSmtpPort}) for ${activeSmtpUser}`);
+    console.log(`[MASHHAD Mailer] SMTP Server verified and connected (${activeSmtpHost}:${activeSmtpPort}) for ${activeSmtpUser}`);
   } catch (err: any) {
     isSmtpVerified = false;
     smtpLastError = translateSmtpError(err?.message || 'فشل التحقق من بيانات خادم SMTP');
-    console.warn(`[GoldenFlix Mailer] SMTP verification warning on ${activeSmtpHost}:${activeSmtpPort}:`, err?.message || smtpLastError);
+    console.warn(`[MASHHAD Mailer] SMTP verification warning on ${activeSmtpHost}:${activeSmtpPort}:`, err?.message || smtpLastError);
   }
 };
 
@@ -811,35 +811,35 @@ const sendVerificationLinkEmail = async (
     throw new Error(`عنوان البريد الإلكتروني غير صالح: ${cleanEmail}`);
   }
 
-  const subject = `رابط الدخول المباشر إلى منصة GoldenFlix`;
+  const subject = `رابط الدخول المباشر إلى منصة MASHHAD`;
   const htmlContent = `
-      <div dir="rtl" style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0c0c0e; color: #ffffff; padding: 30px; border-radius: 16px; max-width: 540px; margin: 0 auto; border: 1px solid #27272a;">
+      <div dir="rtl" style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0f0c14; color: #ffffff; padding: 30px; border-radius: 16px; max-width: 540px; margin: 0 auto; border: 1px solid #272033;">
         <div style="text-align: center; margin-bottom: 24px;">
-          <h1 style="color: #facc15; font-size: 26px; margin: 0; font-weight: 900; letter-spacing: -0.5px;">Golden<span style="color: #ffffff;">Flix</span></h1>
+          <h1 style="color: #ffffff; font-size: 26px; margin: 0; font-weight: 900; letter-spacing: 0.08em;">MASH<span style="color: #ea1d24;">HAD</span></h1>
           <p style="color: #a1a1aa; font-size: 13px; margin-top: 6px;">عالم الترفيه بين يديك</p>
         </div>
-        <div style="background-color: #18181b; padding: 24px; border-radius: 12px; border: 1px solid #3f3f46; text-align: center;">
+        <div style="background-color: #17121f; padding: 24px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.08); text-align: center;">
           <h2 style="color: #ffffff; font-size: 18px; margin-top: 0;">مرحباً ${recipientName || 'بك'}</h2>
           <p style="color: #d4d4d8; font-size: 14px; line-height: 1.7;">
-            اضغط على الزر التالي ليتم ${purposeLabel} مباشرة وبشكل تلقائي في منصة GoldenFlix بدون الحاجة لإدخال أي رموز:
+            اضغط على الزر التالي ليتم ${purposeLabel} مباشرة وبشكل تلقائي في منصة MASHHAD بدون الحاجة لإدخال أي رموز:
           </p>
           <div style="margin: 28px 0;">
-            <a href="${verificationUrl}" target="_blank" rel="noopener noreferrer" style="display: inline-block; font-size: 15px; font-weight: 900; color: #000000; background: linear-gradient(135deg, #facc15, #eab308); padding: 14px 32px; border-radius: 12px; text-decoration: none; box-shadow: 0 4px 18px rgba(250, 204, 21, 0.35);">
+            <a href="${verificationUrl}" target="_blank" rel="noopener noreferrer" style="display: inline-block; font-size: 15px; font-weight: 900; color: #ffffff; background: #ea1d24; padding: 14px 32px; border-radius: 12px; text-decoration: none; box-shadow: 0 6px 22px rgba(234, 29, 36, 0.38);">
               تفعيل والدخول إلى الحساب الآن
             </a>
           </div>
           <p style="color: #a1a1aa; font-size: 12px; line-height: 1.6; word-break: break-all;">
             أو انسخ الرابط التالي وافتحه في متصفحك:<br/>
-            <a href="${verificationUrl}" style="color: #facc15; text-decoration: underline;">${verificationUrl}</a>
+            <a href="${verificationUrl}" style="color: #ea1d24; text-decoration: underline;">${verificationUrl}</a>
           </p>
-          <p style="color: #f59e0b; font-size: 12px; font-weight: bold; margin-bottom: 0; margin-top: 16px;">
+          <p style="color: #f87171; font-size: 12px; font-weight: bold; margin-bottom: 0; margin-top: 16px;">
             تنتهي صلاحية هذا الرابط خلال 15 دقيقة ويستخدم لمرة واحدة فقط.
           </p>
         </div>
         <p style="color: #71717a; font-size: 11px; text-align: center; margin-top: 24px; line-height: 1.5;">
           تم إرسال هذه الرسالة إلى: ${cleanEmail}<br/>
           إذا لم تطلب هذا الرابط، يمكنك تجاهل هذه الرسالة بأمان.<br/>
-          GoldenFlix © ${new Date().getFullYear()} - جميع الحقوق محفوظة.
+          MASHHAD © ${new Date().getFullYear()} - جميع الحقوق محفوظة.
         </p>
       </div>
     `;
@@ -849,7 +849,7 @@ const sendVerificationLinkEmail = async (
   // 1. Prefer verified SMTP so our branded Arabic direct-login link reaches the user's inbox
   if (mailTransporter && isSmtpConfigured) {
     try {
-      console.log(`[GoldenFlix Mailer] Dispatching login link email to ${cleanEmail} via SMTP (${activeSmtpHost}:${activeSmtpPort})...`);
+      console.log(`[MASHHAD Mailer] Dispatching login link email to ${cleanEmail} via SMTP (${activeSmtpHost}:${activeSmtpPort})...`);
       const info = await mailTransporter.sendMail({
         from: activeSmtpFrom,
         to: cleanEmail,
@@ -859,13 +859,13 @@ const sendVerificationLinkEmail = async (
 
       isSmtpVerified = true;
       smtpLastError = null;
-      console.log(`[GoldenFlix Mailer] Direct login link sent to ${cleanEmail} (MessageID: ${info.messageId})`);
+      console.log(`[MASHHAD Mailer] Direct login link sent to ${cleanEmail} (MessageID: ${info.messageId})`);
       return { provider: 'smtp', messageId: info.messageId };
     } catch (err: any) {
       smtpAttemptError = translateSmtpError(err?.message || 'خطأ في خادم البريد');
       smtpLastError = smtpAttemptError;
       isSmtpVerified = false;
-      console.warn(`[GoldenFlix Mailer] SMTP delivery failed to ${cleanEmail}:`, err?.message || smtpAttemptError);
+      console.warn(`[MASHHAD Mailer] SMTP delivery failed to ${cleanEmail}:`, err?.message || smtpAttemptError);
       if (!isResendConfigured && (!supabaseServer || !isSupabaseConfigured)) {
         throw new Error(smtpAttemptError);
       }
@@ -884,7 +884,7 @@ const sendVerificationLinkEmail = async (
         lowerFrom.includes('@hotmail.') ||
         lowerFrom.includes('@icloud.');
       const fromAddress = usesUnverifiedPublicDomain
-        ? 'GoldenFlix <onboarding@resend.dev>'
+        ? 'MASHHAD <onboarding@resend.dev>'
         : activeSmtpFrom;
       const resendRes = await fetch('https://api.resend.com/emails', {
         method: 'POST',
@@ -901,12 +901,12 @@ const sendVerificationLinkEmail = async (
       });
       const resendJson: any = await resendRes.json().catch(() => ({}));
       if (resendRes.ok && resendJson.id) {
-        console.log(`[GoldenFlix Mailer] Direct login link sent to ${cleanEmail} via Resend (ID: ${resendJson.id})`);
+        console.log(`[MASHHAD Mailer] Direct login link sent to ${cleanEmail} via Resend (ID: ${resendJson.id})`);
         return { provider: 'resend', messageId: resendJson.id };
       }
       throw new Error(resendJson.message || `خطأ من خدمة Resend (${resendRes.status})`);
     } catch (err: any) {
-      console.warn('[GoldenFlix Mailer] Resend API failure:', err.message);
+      console.warn('[MASHHAD Mailer] Resend API failure:', err.message);
       if (!supabaseServer || !isSupabaseConfigured) {
         throw new Error(`فشل إرسال البريد عبر Resend: ${err.message}`);
       }
@@ -916,7 +916,7 @@ const sendVerificationLinkEmail = async (
   // 3. Supabase Auth Magic Link delivery if configured
   if (supabaseServer && isSupabaseConfigured) {
     try {
-      console.log(`[GoldenFlix Mailer] Sending magic link to ${cleanEmail} via Supabase Auth (redirect: ${redirectBaseUrl})...`);
+      console.log(`[MASHHAD Mailer] Sending magic link to ${cleanEmail} via Supabase Auth (redirect: ${redirectBaseUrl})...`);
       const { error } = await supabaseServer.auth.signInWithOtp({
         email: cleanEmail,
         options: {
@@ -926,12 +926,12 @@ const sendVerificationLinkEmail = async (
       });
 
       if (!error) {
-        console.log(`[GoldenFlix Mailer] Magic link successfully dispatched by Supabase Auth to ${cleanEmail}`);
+        console.log(`[MASHHAD Mailer] Magic link successfully dispatched by Supabase Auth to ${cleanEmail}`);
         return { provider: 'supabase' };
       }
       throw new Error(error.message || 'فشل إرسال رابط الدخول عبر Supabase Auth');
     } catch (err: any) {
-      console.warn('[GoldenFlix Mailer] Supabase dispatch exception:', err.message);
+      console.warn('[MASHHAD Mailer] Supabase dispatch exception:', err.message);
       throw new Error(`فشل إرسال البريد عبر Supabase Auth: ${err.message}`);
     }
   }
@@ -1325,7 +1325,7 @@ app.post('/api/auth/register', async (req: Request, res: Response) => {
       joinedAt: existing ? existing.joinedAt : Date.now(),
       role: cleanEmail === PRIMARY_ADMIN_EMAIL ? 'مشرف المنصة' : 'عضو مسجل',
       favoriteGenre: 'أفلام سينمائية',
-      bio: 'مستمتع بمشاهدة أحدث الأعمال على GoldenFlix.',
+      bio: 'مستمتع بمشاهدة أحدث الأعمال على MASHHAD.',
       watchTimeMinutes: 0,
     };
 
@@ -1378,7 +1378,7 @@ app.post('/api/auth/register', async (req: Request, res: Response) => {
       provider: emailRes.provider,
     });
   } catch (err: any) {
-    console.warn('[GoldenFlix Auth] Registration email link dispatch unavailable:', err.message);
+    console.warn('[MASHHAD Auth] Registration email link dispatch unavailable:', err.message);
     return res.status(503).json({
       error: err.message || 'حدث خطأ أثناء إرسال رابط التفعيل إلى البريد الإلكتروني',
     });
@@ -1422,7 +1422,7 @@ app.post('/api/auth/send-login-link', async (req: Request, res: Response) => {
         joinedAt: Date.now(),
         role: cleanEmail === PRIMARY_ADMIN_EMAIL ? 'مشرف المنصة' : 'عضو مسجل',
         favoriteGenre: 'أفلام سينمائية',
-        bio: 'مستمتع بمشاهدة أحدث الأعمال على GoldenFlix.',
+        bio: 'مستمتع بمشاهدة أحدث الأعمال على MASHHAD.',
         watchTimeMinutes: 0,
       };
       isNewProvisional = true;
@@ -1488,7 +1488,7 @@ app.post('/api/auth/send-login-link', async (req: Request, res: Response) => {
       provider: emailRes.provider,
     });
   } catch (err: any) {
-    console.warn('[GoldenFlix Auth] Direct login link dispatch unavailable:', err.message);
+    console.warn('[MASHHAD Auth] Direct login link dispatch unavailable:', err.message);
     return res.status(503).json({
       error: err.message || 'فشل إرسال رابط الدخول إلى البريد الإلكتروني',
     });
@@ -1541,7 +1541,7 @@ app.post('/api/auth/verify-link', async (req: Request, res: Response) => {
       user: buildSafeUser(user),
     });
   } catch (err: any) {
-    console.warn('[GoldenFlix Auth] Link verification error:', err?.message || err);
+    console.warn('[MASHHAD Auth] Link verification error:', err?.message || err);
     return res.status(500).json({ error: 'حدث خطأ في الخادم أثناء تأكيد رابط الدخول' });
   }
 });
@@ -1611,7 +1611,7 @@ app.post('/api/auth/supabase-session', async (req: Request, res: Response) => {
         joinedAt: Date.now(),
         role: cleanEmail === PRIMARY_ADMIN_EMAIL ? 'مشرف المنصة' : 'عضو مسجل',
         favoriteGenre: 'أفلام سينمائية',
-        bio: 'مستمتع بمشاهدة أحدث الأعمال على GoldenFlix.',
+        bio: 'مستمتع بمشاهدة أحدث الأعمال على MASHHAD.',
         watchTimeMinutes: 0,
       };
       users.push(user);
@@ -1626,7 +1626,7 @@ app.post('/api/auth/supabase-session', async (req: Request, res: Response) => {
       user: buildSafeUser(user),
     });
   } catch (err: any) {
-    console.warn('[GoldenFlix Auth] Supabase magic link exchange error:', err?.message || err);
+    console.warn('[MASHHAD Auth] Supabase magic link exchange error:', err?.message || err);
     return res.status(500).json({ error: 'تعذر إتمام تسجيل الدخول عبر الرابط' });
   }
 });
@@ -1689,7 +1689,7 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
         links.push(newLink);
         writeAuthLinks(links);
       } catch (sendErr: any) {
-        console.warn('[GoldenFlix Auth] Could not send verification link during login:', sendErr.message);
+        console.warn('[MASHHAD Auth] Could not send verification link during login:', sendErr.message);
         return res.status(503).json({
           error: sendErr.message || 'الحساب غير مفعل وتعذر إرسال رابط التفعيل حالياً',
         });
@@ -1710,7 +1710,7 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
       user: buildSafeUser(user),
     });
   } catch (err: any) {
-    console.warn('[GoldenFlix Auth] Login error:', err?.message || err);
+    console.warn('[MASHHAD Auth] Login error:', err?.message || err);
     return res.status(500).json({ error: 'فشل تسجيل الدخول، يرجى المحاولة لاحقاً' });
   }
 });
@@ -1845,7 +1845,7 @@ app.post('/api/admin/mail-config', requireAdmin, requirePermission('canManageSet
       smtpSecure: effectiveSecure,
       smtpUser: cleanUser,
       smtpPass: cleanUser ? cleanPass : '',
-      smtpFrom: cleanFrom || (cleanUser ? `"GoldenFlix" <${cleanUser}>` : ''),
+      smtpFrom: cleanFrom || (cleanUser ? `"MASHHAD" <${cleanUser}>` : ''),
       resendApiKey: cleanResendKey,
       supabaseUrl: cleanSupabaseUrl,
       supabaseAnonKey: cleanSupabaseKey,
@@ -3537,7 +3537,14 @@ app.get('/api/notifications', (_req: Request, res: Response) => {
 
 app.get('/api/site-settings', (_req: Request, res: Response) => {
   const settings = readJsonFile<any>(SITE_SETTINGS_FILE, DEFAULT_SITE_SETTINGS);
-  return res.json({ ...DEFAULT_SITE_SETTINGS, ...settings });
+  const merged = { ...DEFAULT_SITE_SETTINGS, ...settings };
+  if (!merged.siteName || /^(goldenflix|goldenfelix|جولدن(\s+فليكس)?)$/i.test(String(merged.siteName).trim())) {
+    merged.siteName = 'MASHHAD';
+  }
+  if (!merged.logoText || /^(goldenflix|goldenfelix|جولدن(\s+فليكس)?)$/i.test(String(merged.logoText).trim())) {
+    merged.logoText = 'MASHHAD';
+  }
+  return res.json(merged);
 });
 
 const extractServerYouTubeId = (raw?: string): string | null => {
@@ -4503,7 +4510,14 @@ app.delete('/api/admin/audit-logs', requireAdmin, requireSuperAdmin, (req: Reque
 // Site Settings (General, Banners/Home, Player, Security, Storage)
 app.get('/api/admin/site-settings', requireAdmin, (_req: Request, res: Response) => {
   const settings = readJsonFile<any>(SITE_SETTINGS_FILE, DEFAULT_SITE_SETTINGS);
-  return res.json({ ...DEFAULT_SITE_SETTINGS, ...settings });
+  const merged = { ...DEFAULT_SITE_SETTINGS, ...settings };
+  if (!merged.siteName || /^(goldenflix|goldenfelix|جولدن(\s+فليكس)?)$/i.test(String(merged.siteName).trim())) {
+    merged.siteName = 'MASHHAD';
+  }
+  if (!merged.logoText || /^(goldenflix|goldenfelix|جولدن(\s+فليكس)?)$/i.test(String(merged.logoText).trim())) {
+    merged.logoText = 'MASHHAD';
+  }
+  return res.json(merged);
 });
 
 app.put('/api/admin/site-settings', requireAdmin, requirePermission('canManageSettings'), (req: Request, res: Response) => {
@@ -4561,7 +4575,7 @@ async function startServer() {
   }
 
   const server = app.listen(PORT, '0.0.0.0', () => {
-    console.log(`GoldenFlix server running on http://0.0.0.0:${PORT}`);
+    console.log(`MASHHAD server running on http://0.0.0.0:${PORT}`);
   });
   server.requestTimeout = 0;
   server.keepAliveTimeout = 65000;

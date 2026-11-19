@@ -51,9 +51,9 @@ export const InfoPageLayout: React.FC<InfoPageLayoutProps> = ({
         <button
           type="button"
           onClick={onBackHome}
-          className="inline-flex items-center gap-2 self-start min-h-[42px] px-4 py-2 rounded-xl bg-[#121218] hover:bg-[#191922] border border-white/12 hover:border-[#F7C600]/45 text-xs sm:text-sm font-bold text-zinc-200 hover:text-[#F7C600] transition-all duration-150 active:scale-[0.97] cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#F7C600]/60 whitespace-nowrap"
+          className="inline-flex items-center gap-2 self-start min-h-[42px] px-4 py-2 rounded-xl bg-[#17121f] hover:bg-[#1e1729] border border-white/12 hover:border-[#ea1d24]/60 text-xs sm:text-sm font-bold text-zinc-200 hover:text-white transition-all duration-150 active:scale-[0.97] cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#ea1d24]/60 whitespace-nowrap"
         >
-          <BackArrow className="w-4 h-4 text-[#F7C600] shrink-0" />
+          <BackArrow className="w-4 h-4 text-[#ea1d24] shrink-0" />
           <span>{t('العودة إلى الرئيسية', 'Back to Home')}</span>
         </button>
 
@@ -73,9 +73,9 @@ export const InfoPageLayout: React.FC<InfoPageLayoutProps> = ({
                   onNavigatePage(item.id);
                 }}
                 aria-current={active ? 'page' : undefined}
-                className={`inline-flex items-center min-h-[40px] px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap shrink-0 transition-all duration-150 active:scale-[0.96] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#F7C600]/60 ${
+                className={`inline-flex items-center min-h-[40px] px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap shrink-0 transition-all duration-150 active:scale-[0.96] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#ea1d24]/60 ${
                   active
-                    ? 'bg-[#F7C600] text-black font-black'
+                    ? 'bg-[#ea1d24] text-white font-black'
                     : 'text-zinc-300 hover:text-white hover:bg-white/[0.06]'
                 }`}
               >
@@ -89,7 +89,7 @@ export const InfoPageLayout: React.FC<InfoPageLayoutProps> = ({
       {/* Editorial Header */}
       <header className="space-y-3 max-w-2xl">
         <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-400 font-medium">
-          <span className="text-[#F7C600] font-bold">GoldenFlix</span>
+          <span className="text-[#ea1d24] font-black tracking-wider">MASHHAD</span>
           <span aria-hidden="true">·</span>
           <span>{updatedLabel}</span>
         </div>
@@ -104,7 +104,7 @@ export const InfoPageLayout: React.FC<InfoPageLayoutProps> = ({
       </header>
 
       {/* Main Content Container */}
-      <div className="rounded-2xl bg-[#0d0d12]/90 border border-white/[0.08] p-5 sm:p-8 shadow-[0_20px_50px_rgba(0,0,0,0.55)] space-y-8">
+      <div className="rounded-2xl bg-[#16121d]/95 border border-white/[0.08] p-5 sm:p-8 shadow-[0_20px_50px_rgba(0,0,0,0.55)] space-y-8">
         {children}
       </div>
 
@@ -115,13 +115,13 @@ export const InfoPageLayout: React.FC<InfoPageLayoutProps> = ({
           <a
             href="mailto:goldenflix.cinema@gmail.com"
             dir="ltr"
-            className="inline-flex items-center gap-1.5 font-bold text-[#F7C600] hover:underline transition-transform active:scale-[0.98]"
+            className="inline-flex items-center gap-1.5 font-bold text-[#ea1d24] hover:underline transition-transform active:scale-[0.98]"
           >
             <Mail className="w-3.5 h-3.5 shrink-0" />
             <span>goldenflix.cinema@gmail.com</span>
           </a>
         </div>
-        <span className="text-zinc-500">GoldenFlix</span>
+        <span className="text-zinc-500 font-black tracking-wider">MASHHAD</span>
       </div>
     </motion.article>
   );

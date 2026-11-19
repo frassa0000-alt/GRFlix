@@ -76,6 +76,7 @@ import { AdminDashboardModal } from './components/admin/AdminDashboardModal';
 import { CategoriesView } from './components/views/CategoriesView';
 import { HistoryView } from './components/views/HistoryView';
 import { FavoritesView } from './components/views/FavoritesView';
+import { MoviesShowcaseView } from './components/views/MoviesShowcaseView';
 import { MediaCard } from './components/cards/MediaCard';
 import { EmptyCinemaState } from './components/common/EmptyCinemaState';
 import { SiteFooter } from './components/layout/SiteFooter';
@@ -414,7 +415,12 @@ export default function App() {
           .replace(/\s+cinema\b/gi, '')
           .replace(/\s+(سينما|سيما)\b/g, '')
           .trim();
-        document.title = cleanSiteTitle || 'GoldenFlix';
+        document.title =
+          cleanSiteTitle && !/^(goldenflix|goldenfelix|جولدن(\s+فليكس)?)$/i.test(cleanSiteTitle)
+            ? cleanSiteTitle
+            : 'MASHHAD';
+      } else {
+        document.title = 'MASHHAD';
       }
     }
   }, []);
@@ -729,7 +735,7 @@ export default function App() {
 
       slides.push({
         id: `banner-${banner.id}`,
-        title: banner.title || linked?.titleAr || linked?.title || 'GoldenFlix',
+        title: banner.title || linked?.titleAr || linked?.title || 'MASHHAD',
         subtitle: banner.subtitle || linked?.description || '',
         imageUrl,
         ctaLabel: banner.ctaLabel || 'مشاهدة الآن',
@@ -932,148 +938,24 @@ export default function App() {
   return (
     <div
       dir={dir}
-      className="relative min-h-screen w-full bg-[#050507] text-zinc-100 flex flex-col overflow-x-hidden selection:bg-[#F7C600] selection:text-black"
+      className="relative min-h-screen w-full bg-[#0f0c14] text-zinc-100 flex flex-col overflow-x-hidden selection:bg-[#ea1d24] selection:text-white"
     >
-      {/* Cinema Obsidian Backdrop with Golden Light Curves & Translucent 35mm Film Strips */}
-      <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden bg-[#050507]" aria-hidden="true">
-        {/* Ambient Deep Gold Corner Glows */}
+      {/* Velvet Noir Backdrop with Subtle Cinema Crimson Corner Glows */}
+      <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden bg-[#0f0c14]" aria-hidden="true">
         <div
-          className="absolute -top-28 -right-24 w-[420px] h-[420px] rounded-full opacity-60"
+          className="absolute -top-32 -right-28 w-[440px] h-[440px] rounded-full opacity-55"
           style={{
             background:
-              'radial-gradient(circle, rgba(247,198,0,0.16) 0%, rgba(180,125,0,0.06) 42%, transparent 72%)',
+              'radial-gradient(circle, rgba(234,29,36,0.12) 0%, rgba(120,16,38,0.05) 45%, transparent 72%)',
           }}
         />
         <div
-          className="absolute -bottom-28 -left-24 w-[480px] h-[480px] rounded-full opacity-75"
+          className="absolute -bottom-32 -left-28 w-[460px] h-[460px] rounded-full opacity-50"
           style={{
             background:
-              'radial-gradient(circle, rgba(247,198,0,0.19) 0%, rgba(180,125,0,0.07) 44%, transparent 74%)',
+              'radial-gradient(circle, rgba(234,29,36,0.10) 0%, rgba(100,14,35,0.04) 45%, transparent 74%)',
           }}
         />
-
-        {/* Full-Viewport SVG: Luminous Golden Arcs + Perforated 35mm Cinema Film Strips */}
-        <svg
-          viewBox="0 0 1440 900"
-          preserveAspectRatio="xMidYMid slice"
-          className="absolute inset-0 w-full h-full"
-        >
-          <defs>
-            {/* Golden Rim Line Gradients */}
-            <linearGradient id="gfGoldCurveTop" x1="0%" y1="65%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#F7C600" stopOpacity="0.85" />
-              <stop offset="42%" stopColor="#F7C600" stopOpacity="0.22" />
-              <stop offset="78%" stopColor="#F7C600" stopOpacity="0.68" />
-              <stop offset="100%" stopColor="#F7C600" stopOpacity="0.95" />
-            </linearGradient>
-
-            <linearGradient id="gfGoldCurveBottom" x1="0%" y1="100%" x2="100%" y2="25%">
-              <stop offset="0%" stopColor="#F7C600" stopOpacity="0.95" />
-              <stop offset="32%" stopColor="#F7C600" stopOpacity="0.28" />
-              <stop offset="75%" stopColor="#F7C600" stopOpacity="0.52" />
-              <stop offset="100%" stopColor="#F7C600" stopOpacity="0.12" />
-            </linearGradient>
-
-            <linearGradient id="gfArcSurfaceWash" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#F7C600" stopOpacity="0.06" />
-              <stop offset="50%" stopColor="#ffffff" stopOpacity="0.025" />
-              <stop offset="100%" stopColor="#F7C600" stopOpacity="0.05" />
-            </linearGradient>
-
-            {/* Diagonal 35mm Perforated Film Strip Pattern */}
-            <pattern id="gfFilmStripPattern" width="76" height="58" patternUnits="userSpaceOnUse">
-              {/* Outer film rails */}
-              <rect x="0" y="0" width="76" height="58" fill="rgba(225, 162, 20, 0.21)" />
-              {/* Top sprocket holes */}
-              <rect x="5" y="4" width="7" height="5.5" rx="1" fill="#050507" />
-              <rect x="19" y="4" width="7" height="5.5" rx="1" fill="#050507" />
-              <rect x="33" y="4" width="7" height="5.5" rx="1" fill="#050507" />
-              <rect x="47" y="4" width="7" height="5.5" rx="1" fill="#050507" />
-              <rect x="61" y="4" width="7" height="5.5" rx="1" fill="#050507" />
-              {/* Main cinema frame */}
-              <rect x="4" y="13.5" width="32" height="31" rx="2" fill="#050507" />
-              <rect x="42" y="13.5" width="32" height="31" rx="2" fill="#050507" />
-              {/* Bottom sprocket holes */}
-              <rect x="5" y="48.5" width="7" height="5.5" rx="1" fill="#050507" />
-              <rect x="19" y="48.5" width="7" height="5.5" rx="1" fill="#050507" />
-              <rect x="33" y="48.5" width="7" height="5.5" rx="1" fill="#050507" />
-              <rect x="47" y="48.5" width="7" height="5.5" rx="1" fill="#050507" />
-              <rect x="61" y="48.5" width="7" height="5.5" rx="1" fill="#050507" />
-            </pattern>
-
-            <radialGradient id="gfFadeTopLeft" cx="15%" cy="10%" r="44%">
-              <stop offset="0%" stopColor="white" stopOpacity="1" />
-              <stop offset="60%" stopColor="white" stopOpacity="0.45" />
-              <stop offset="100%" stopColor="white" stopOpacity="0" />
-            </radialGradient>
-            <mask id="gfMaskTopLeft">
-              <rect width="1440" height="900" fill="url(#gfFadeTopLeft)" />
-            </mask>
-
-            <radialGradient id="gfFadeBottomRight" cx="88%" cy="88%" r="46%">
-              <stop offset="0%" stopColor="white" stopOpacity="1" />
-              <stop offset="60%" stopColor="white" stopOpacity="0.45" />
-              <stop offset="100%" stopColor="white" stopOpacity="0" />
-            </radialGradient>
-            <mask id="gfMaskBottomRight">
-              <rect width="1440" height="900" fill="url(#gfFadeBottomRight)" />
-            </mask>
-
-            <filter id="gfSoftGlow" x="-10%" y="-10%" width="120%" height="120%">
-              <feGaussianBlur stdDeviation="4" result="blur" />
-              <feMerge>
-                <feMergeNode in="blur" />
-                <feMergeNode in="SourceGraphic" />
-              </feMerge>
-            </filter>
-          </defs>
-
-          {/* Subtle Diagonal Curved Light Wash */}
-          <path
-            d="M -120 420 Q 520 120 1560 90 L 1560 720 Q 740 820 -120 790 Z"
-            fill="url(#gfArcSurfaceWash)"
-          />
-
-          {/* Top-Left Translucent Diagonal Film Strip */}
-          <g mask="url(#gfMaskTopLeft)" opacity="0.9">
-            <g transform="translate(-80, 140) rotate(-26)">
-              <rect x="0" y="0" width="740" height="58" fill="url(#gfFilmStripPattern)" />
-            </g>
-          </g>
-
-          {/* Bottom-Right Translucent Diagonal Film Strip */}
-          <g mask="url(#gfMaskBottomRight)" opacity="0.9">
-            <g transform="translate(820, 860) rotate(-32)">
-              <rect x="0" y="0" width="840" height="58" fill="url(#gfFilmStripPattern)" />
-            </g>
-          </g>
-
-          {/* Upper Sweeping Golden Curve */}
-          <path
-            d="M -60 400 Q 480 150 1490 95"
-            fill="none"
-            stroke="url(#gfGoldCurveTop)"
-            strokeWidth="2.4"
-            filter="url(#gfSoftGlow)"
-          />
-
-          {/* Lower Sweeping Golden Curve & Light Flare */}
-          <path
-            d="M -80 790 Q 640 620 1500 500"
-            fill="none"
-            stroke="url(#gfGoldCurveBottom)"
-            strokeWidth="2.6"
-            filter="url(#gfSoftGlow)"
-          />
-          <path
-            d="M 680 920 Q 1080 835 1480 810"
-            fill="none"
-            stroke="url(#gfGoldCurveTop)"
-            strokeWidth="1.8"
-            opacity="0.7"
-            filter="url(#gfSoftGlow)"
-          />
-        </svg>
       </div>
       {/* Top Cinema Header */}
       <TopHeader
@@ -1171,7 +1053,7 @@ export default function App() {
       )}
 
       {/* Main Content Stage */}
-      <main className="flex-1 w-full max-w-7xl mx-auto px-3 sm:px-6 pt-4 pb-10 md:pb-14">
+      <main className="flex-1 w-full max-w-7xl mx-auto px-3 sm:px-6 pt-3 pb-24 md:pb-14">
         {/* A. Active Search View or Results */}
         {searchQuery.trim().length > 0 || bottomNavTab === 'search' ? (
           <div className="py-3 space-y-5">
@@ -1336,6 +1218,24 @@ export default function App() {
             }}
             onNavigatePage={handleOpenInfoPage}
           />
+        ) : activeTab === 'movies' ? (
+          /* Movies Showcase View Matching Reference Screen */
+          <div className="py-2">
+            <MoviesShowcaseView
+              items={displayedTabItems}
+              allMoviesCount={tabFilteredItems.length}
+              availableYears={availableTabYears}
+              yearCounts={tabYearCounts}
+              selectedYear={selectedTabYear}
+              onSelectYear={setSelectedTabYear}
+              favorites={favorites}
+              onToggleFavorite={handleToggleFav}
+              history={history}
+              onSelectMedia={(m) => setSelectedMedia(m)}
+              onPlayMedia={(m) => handleStartPlay(m)}
+              onBrowseHome={() => handleTopTabSelect('home')}
+            />
+          </div>
         ) : activeTab !== 'home' ? (
           /* E. Top/Mobile Category Tab Filtered View */
           <div className="py-2 space-y-5">
@@ -1359,8 +1259,6 @@ export default function App() {
                         ? t('الأعلى تقييماً', 'Top Rated')
                         : activeTab === 'series'
                         ? t('المسلسلات', 'TV Series')
-                        : activeTab === 'movies'
-                        ? t('الأفلام السينمائية', 'Movies')
                         : activeTab === 'action'
                         ? t('أكشن وحركة', 'Action')
                         : activeTab === 'drama'
@@ -1510,7 +1408,7 @@ export default function App() {
                                 onClick={() => setSelectedTabYear(String(yr))}
                                 className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer tabular-nums ${
                                   activeYear
-                                    ? 'bg-[#F7C600] text-black font-black shadow-sm shadow-[#F7C600]/25'
+                                    ? 'bg-[#ea1d24] text-white font-black shadow-sm shadow-[#ea1d24]/30'
                                     : 'text-zinc-300 hover:text-white hover:bg-white/[0.05]'
                                 }`}
                               >
@@ -1518,8 +1416,8 @@ export default function App() {
                                 <span
                                   className={`text-[10px] px-1.5 py-0.5 rounded-md tabular-nums ${
                                     activeYear
-                                      ? 'bg-black/15 text-black'
-                                      : 'bg-zinc-800 text-zinc-400'
+                                      ? 'bg-black/25 text-white'
+                                      : 'bg-white/[0.06] text-zinc-400'
                                   }`}
                                 >
                                   {tabYearCounts[yr] || 0}
@@ -1580,16 +1478,17 @@ export default function App() {
               </div>
             ) : (
               <>
-                {/* 1. Featured Coverflow Poster Deck (Matching Video Reference) */}
+                {/* 1. Featured Coverflow Poster Deck (Matching Screen 1 Reference) */}
                 {siteSettings?.homeSections?.showHeroBanner !== false && (
                   <HeroBanner
                     slides={heroSlides}
                     onPlayMedia={(item) => handleStartPlay(item)}
                     onSelectMedia={(item) => setSelectedMedia(item)}
+                    siteName={siteSettings?.siteName}
                   />
                 )}
 
-                {/* 2. "For you" Video Row Immediately Below Coverflow Carousel */}
+                {/* 2. "For you" Landscape Video Row */}
                 {mediaItems.length > 0 &&
                   siteSettings?.homeSections?.showRecommendations !== false && (
                     <RecommendationSection
@@ -1607,7 +1506,7 @@ export default function App() {
                 {/* 3. Latest Movies Section */}
                 {latestMovies.length > 0 && siteSettings?.homeSections?.showLatestMovies !== false && (
                   <ContentSection
-                    title={t('أحدث الأفلام', 'Latest Movies')}
+                    title={t('أحدث الأفلام', 'Popular Movies')}
                     iconType="movies"
                     items={latestMovies}
                     onSelectMedia={(item) => setSelectedMedia(item)}
@@ -1621,10 +1520,10 @@ export default function App() {
                   />
                 )}
 
-                {/* 5. Latest Series Section */}
+                {/* 4. Latest Series Section */}
                 {seriesItems.length > 0 && siteSettings?.homeSections?.showSeries !== false && (
                   <ContentSection
-                    title={t('أحدث المسلسلات', 'Latest Series')}
+                    title={t('أحدث المسلسلات', 'New Series')}
                     iconType="series"
                     items={seriesItems}
                     onSelectMedia={(item) => setSelectedMedia(item)}
@@ -1660,7 +1559,7 @@ export default function App() {
                       </button>
                     </div>
 
-                    <div className="w-full rounded-3xl bg-[#101014]/95 border border-white/[0.08] py-12 sm:py-16 px-6 flex flex-col items-center justify-center text-center shadow-[0_20px_50px_rgba(0,0,0,0.65)]">
+                    <div className="w-full rounded-3xl bg-[#16121d]/95 border border-white/[0.08] py-12 sm:py-16 px-6 flex flex-col items-center justify-center text-center shadow-[0_20px_50px_rgba(0,0,0,0.65)]">
                       <Clapperboard className="w-12 h-12 sm:w-14 sm:h-14 text-zinc-600/85 mb-3" />
                       <h3 className="text-sm sm:text-base font-bold text-zinc-300">
                         {t('لا توجد محتويات حالياً', 'No content available right now')}
@@ -1673,7 +1572,7 @@ export default function App() {
                         <button
                           type="button"
                           onClick={handleOpenDeveloperSuite}
-                          className="mt-5 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#F7C600] hover:bg-[#ffd52e] text-black text-xs font-black shadow-[0_8px_20px_rgba(247,198,0,0.3)] transition-all cursor-pointer"
+                          className="mt-5 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#ea1d24] hover:bg-[#ff2b32] text-white text-xs font-black shadow-[0_8px_20px_rgba(234,29,36,0.3)] transition-all cursor-pointer"
                         >
                           <Plus className="w-4 h-4" />
                           <span>{t('فتح لوحة التحكم ورفع المحتوى', 'Open Admin Dashboard & Upload')}</span>
@@ -1740,9 +1639,9 @@ export default function App() {
                             whileTap={{ scale: 0.96 }}
                             type="button"
                             onClick={cat.onClick}
-                            className="group relative flex flex-col items-center justify-center gap-2 py-4 sm:py-6 px-1.5 sm:px-3 rounded-2xl bg-gradient-to-b from-[#17171e] via-[#111116] to-[#15120a] border border-white/[0.08] border-b-[#F7C600]/65 shadow-[0_10px_24px_-12px_rgba(247,198,0,0.45),inset_0_-12px_20px_-14px_rgba(247,198,0,0.28)] hover:border-[#F7C600]/75 transition-all cursor-pointer"
+                            className="group relative flex flex-col items-center justify-center gap-2 py-4 sm:py-6 px-1.5 sm:px-3 rounded-2xl bg-[#17121f] border border-white/[0.08] border-b-[#ea1d24]/60 shadow-[0_10px_24px_-12px_rgba(234,29,36,0.35),inset_0_-12px_20px_-14px_rgba(234,29,36,0.22)] hover:border-[#ea1d24]/75 transition-all cursor-pointer"
                           >
-                            <CatIcon className="w-5 h-5 sm:w-7 sm:h-7 text-zinc-200 group-hover:text-[#F7C600] transition-colors shrink-0" />
+                            <CatIcon className="w-5 h-5 sm:w-7 sm:h-7 text-zinc-200 group-hover:text-[#ea1d24] transition-colors shrink-0" />
                             <span className="text-[11px] sm:text-sm font-bold text-zinc-100 group-hover:text-white whitespace-nowrap truncate max-w-full">
                               {cat.label}
                             </span>
@@ -1857,6 +1756,8 @@ export default function App() {
         onToggleFavorite={() => selectedMedia && handleToggleFav(selectedMedia.id)}
         isAlertSubscribed={selectedMedia ? alertSubscribedIds.includes(selectedMedia.id) : false}
         onToggleAlert={() => selectedMedia && handleToggleMediaAlert(selectedMedia)}
+        relatedMedia={mediaItems}
+        onSelectMedia={(item) => setSelectedMedia(item)}
         isAdmin={isDeveloperUser || Boolean(adminAccess?.permissions?.canDeleteMedia)}
         onDeleteMovie={
           isDeveloperUser || Boolean(adminAccess?.permissions?.canDeleteMedia)

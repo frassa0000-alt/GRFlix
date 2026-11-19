@@ -102,20 +102,20 @@ export const RecommendationSection: React.FC<RecommendationSectionProps> = ({
   if (recommendedItems.length === 0) return null;
 
   return (
-    <section className="w-full mb-6 select-none">
-      {/* Clean Header Matching "For you" + "See all" in the video */}
+    <section className="w-full mb-5 select-none">
+      {/* Clean Header + Muted "View All" Text Link Matching Screen 1 */}
       <div className="flex items-center justify-between gap-2 mb-3">
         <h2 className="text-base sm:text-lg font-black text-white tracking-tight truncate">
-          {t('مقترح لك', 'For you')}
+          {t('قد يعجبك', 'For You')}
         </h2>
 
         {onViewAll && (
           <button
             type="button"
             onClick={onViewAll}
-            className="inline-flex items-center gap-1 text-xs font-semibold text-zinc-400 hover:text-white transition-colors cursor-pointer whitespace-nowrap"
+            className="inline-flex items-center gap-0.5 text-xs font-bold text-zinc-400 hover:text-white transition-colors cursor-pointer whitespace-nowrap"
           >
-            <span>{t('عرض الكل', 'See all')}</span>
+            <span>{t('عرض الكل', 'View All')}</span>
             {dir === 'ltr' ? (
               <ChevronRight className="w-3.5 h-3.5" />
             ) : (
@@ -125,14 +125,14 @@ export const RecommendationSection: React.FC<RecommendationSectionProps> = ({
         )}
       </div>
 
-      {/* Horizontal Carousel */}
+      {/* Landscape Horizontal Row Matching Screen 1 Top Row */}
       <div className="flex items-stretch gap-3 sm:gap-3.5 overflow-x-auto no-scrollbar scroll-smooth snap-x snap-mandatory overscroll-x-contain py-1">
         {recommendedItems.map((item, idx) => (
           <MediaCard
             key={`rec-${item.id}`}
             media={item}
             index={idx}
-            variant="poster"
+            variant="landscape"
             onClick={() => onSelectMedia(item)}
             isFavorite={favorites.includes(item.id)}
             onToggleFavorite={() => onToggleFavorite(item.id)}

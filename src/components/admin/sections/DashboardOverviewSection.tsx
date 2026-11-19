@@ -107,7 +107,7 @@ export const DashboardOverviewSection: React.FC<DashboardOverviewSectionProps> =
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-base sm:text-lg font-black text-white">
-            نظرة عامة على منصة GoldenFlix
+            نظرة عامة على منصة MASHHAD
           </h2>
           <p className="text-xs text-zinc-400 mt-0.5">
             بيانات حية متزامنة مباشرة مع قاعدة البيانات وسجلات المشاهدة الفعلية

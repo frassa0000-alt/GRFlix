@@ -35,10 +35,10 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
   };
 
   return (
-    <div className="fixed bottom-3 inset-x-0 z-40 md:hidden pb-[env(safe-area-inset-bottom)] flex justify-center px-4 pointer-events-none select-none">
+    <div className="fixed bottom-0 inset-x-0 z-40 md:hidden pointer-events-none select-none">
       <nav
         aria-label={t('التنقل السفلي للموبايل', 'Mobile bottom navigation')}
-        className="pointer-events-auto relative inline-flex items-center gap-2 sm:gap-3 rounded-full bg-[#151619]/95 backdrop-blur-xl border border-white/[0.1] p-1.5 shadow-[0_14px_34px_rgba(0,0,0,0.78)]"
+        className="pointer-events-auto relative w-full bg-[#130f18]/96 backdrop-blur-2xl border-t border-white/[0.06] px-6 pt-3 pb-[calc(0.85rem+env(safe-area-inset-bottom))] shadow-[0_-12px_32px_rgba(0,0,0,0.8)] flex items-center justify-around"
       >
         {tabs.map((tab) => {
           const Icon = tab.icon;
@@ -49,28 +49,27 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
             <motion.button
               key={tab.id}
               type="button"
-              whileTap={{ scale: 0.92 }}
-              transition={{ type: 'spring', stiffness: 520, damping: 30 }}
+              whileTap={{ scale: 0.88 }}
               onClick={() => onSelectTab(tab.id)}
               aria-label={label}
               title={label}
-              className="relative w-12 h-12 rounded-full flex items-center justify-center transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+              className="relative min-w-[48px] h-10 flex items-center justify-center cursor-pointer focus:outline-none"
             >
-              {active && (
-                <motion.div
-                  layoutId="bottomNavActiveCircle"
-                  transition={{ type: 'spring', stiffness: 460, damping: 32 }}
-                  className="absolute inset-0 rounded-full bg-white shadow-[0_4px_14px_rgba(0,0,0,0.35)]"
-                />
-              )}
-
-              <span className="relative z-10 flex items-center justify-center">
+              <motion.span
+                animate={active ? { scale: 1.12 } : { scale: 1 }}
+                transition={{ type: 'spring', stiffness: 460, damping: 26 }}
+                className="flex items-center justify-center"
+              >
                 <Icon
-                  className={`w-[21px] h-[21px] transition-colors duration-200 stroke-[2.1] ${
-                    active ? 'text-[#151619]' : 'text-white'
+                  className={`w-[22px] h-[22px] transition-colors duration-200 ${
+                    active
+                      ? tab.id === 'settings'
+                        ? 'text-[#ea1d24] stroke-[#ea1d24] stroke-[2.3]'
+                        : 'text-[#ea1d24] fill-[#ea1d24] stroke-[#ea1d24] stroke-[1.8]'
+                      : 'text-zinc-400 hover:text-zinc-200 stroke-[1.8]'
                   }`}
                 />
-              </span>
+              </motion.span>
             </motion.button>
           );
         })}
@@ -78,4 +77,3 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
     </div>
   );
 };
-

@@ -206,7 +206,7 @@ export function formatUserProfile(
     firestoreData?.name ||
     user.displayName ||
     user.email?.split('@')[0] ||
-    'مشاهد GoldenFlix';
+    'مشاهد MASHHAD';
 
   const defaultPhoto =
     user.photoURL ||
@@ -230,7 +230,7 @@ export function formatUserProfile(
     favoriteGenre: firestoreData?.favoriteGenre || 'أفلام سينمائية',
     bio:
       firestoreData?.bio ||
-      'مستمتع بمشاهدة أحدث الأعمال بجودة فائقة على منصة GoldenFlix.',
+      'مستمتع بمشاهدة أحدث الأعمال بجودة فائقة على منصة MASHHAD.',
     watchTimeMinutes: firestoreData?.watchTimeMinutes || 0,
   };
 }
@@ -278,7 +278,7 @@ async function ensureFirestoreUserDocument(
     preferredName?.trim() ||
     user.displayName?.trim() ||
     cleanEmail.split('@')[0] ||
-    'GoldenFlix Member';
+    'MASHHAD Member';
   const rawPhotoURL =
     preferredPhoto ||
     user.photoURL ||
@@ -314,7 +314,7 @@ async function ensureFirestoreUserDocument(
       joinedAt: Date.now(),
       role: isVerifiedAdmin ? 'مشرف المنصة' : 'عضو مسجل',
       favoriteGenre: 'أفلام سينمائية',
-      bio: 'مستمتع بمشاهدة أحدث الأعمال على GoldenFlix.',
+      bio: 'مستمتع بمشاهدة أحدث الأعمال على MASHHAD.',
       watchTimeMinutes: 0,
     };
     try {
@@ -560,7 +560,7 @@ export async function updateUserProfile(
       updates.displayName ||
       currentUser.displayName ||
       currentUser.email?.split('@')[0] ||
-      'عضو GoldenFlix';
+      'عضو MASHHAD';
 
     try {
       const userDocRef = doc(db, 'users', uid);
@@ -613,8 +613,8 @@ export async function updateUserProfile(
   return {
     uid,
     id: uid,
-    name: updates.displayName || 'عضو GoldenFlix',
-    displayName: updates.displayName || 'عضو GoldenFlix',
+    name: updates.displayName || 'عضو MASHHAD',
+    displayName: updates.displayName || 'عضو MASHHAD',
     email: '',
     emailVerified: true,
     picture: updates.photoURL || '',

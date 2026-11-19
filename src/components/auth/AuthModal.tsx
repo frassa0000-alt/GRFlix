@@ -374,8 +374,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
         {/* Compact Brand Header */}
         <div className="text-center pb-2.5">
-          <h2 className="text-base font-black text-white tracking-tight">
-            Golden<span className="text-amber-400">Flix</span>
+          <h2 className="text-base font-black text-white tracking-wider">
+            MASH<span className="text-[#ea1d24]">HAD</span>
           </h2>
 
           {/* Transparent Frameless Looping Video Preview */}
@@ -387,11 +387,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               loop
               playsInline
               preload="auto"
-              aria-label="GoldenFlix"
+              aria-label="MASHHAD"
               className="w-[100px] h-[55px] shrink-0 object-contain bg-transparent pointer-events-none select-none"
             />
             <div className={`min-w-0 flex-1 ${dir === 'ltr' ? 'text-left' : 'text-right'}`}>
-              <p className="text-[11px] font-black text-amber-400 leading-tight">
+              <p className="text-[11px] font-black text-[#ea1d24] leading-tight">
                 {t('تصفح في موقعنا الان', 'Browse on our site now')}
               </p>
               <p className="text-[10.5px] font-bold text-zinc-200 leading-snug mt-0.5">

@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { Play, Star, Heart, EyeOff, Bell, BellRing, Clock } from 'lucide-react';
+import { Play, Heart, EyeOff, Bell, BellRing, Clock } from 'lucide-react';
 import { MediaItem, WatchProgress } from '../../types';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { hasPlayableMediaVideo } from '../../services/releaseAlertService';
 import { getMediaProgress } from '../../services/storage';
-import { getEffectiveMediaRating } from '../../utils/rating';
+import { formatQualityLabel } from '../../utils/quality';
 
 export interface MediaCardProps {
   media?: MediaItem;
@@ -36,7 +36,7 @@ export const MediaCard: React.FC<MediaCardProps> = ({
   inGrid = false,
   index = 0,
 }) => {
-  const { dir, t, getMediaTitle, translateGenre } = useLanguage();
+  const { dir, t, getMediaTitle } = useLanguage();
   const currentItem = media || item;
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
@@ -68,7 +68,6 @@ export const MediaCard: React.FC<MediaCardProps> = ({
   const displayTitle = getMediaTitle(currentItem);
   const isHiddenItem = currentItem.isPublished === false;
   const isComingSoonItem = !hasPlayableMediaVideo(currentItem);
-  const effectiveRating = getEffectiveMediaRating(currentItem);
 
   const resolvedProgress =
     typeof watchProgress === 'number'
@@ -89,51 +88,42 @@ export const MediaCard: React.FC<MediaCardProps> = ({
         : 0
       : 0;
 
-  const categoryName =
-    currentItem.genres && currentItem.genres.length > 0 && typeof currentItem.genres[0] === 'string'
-      ? translateGenre(currentItem.genres[0])
-      : currentItem.type === 'movie'
-      ? t('فيلم', 'Movie')
-      : currentItem.type === 'series'
-      ? t('مسلسل', 'Series')
-      : t('أنمي', 'Anime');
-
   return (
     <motion.article
-      initial={{ opacity: 0, y: 10 }}
+      initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25, delay: Math.min(index * 0.03, 0.18), ease: [0.16, 1, 0.3, 1] }}
-      whileHover={{ y: -4 }}
+      transition={{ duration: 0.22, delay: Math.min(index * 0.025, 0.16), ease: [0.16, 1, 0.3, 1] }}
+      whileHover={{ y: -3 }}
       whileTap={{ scale: 0.98 }}
       onClick={handleClick}
       className={`group relative flex flex-col flex-shrink-0 cursor-pointer select-none ${
         inGrid
           ? 'w-full'
           : isLandscape
-          ? 'w-[240px] sm:w-[275px] md:w-[300px]'
-          : 'w-[142px] sm:w-[164px] md:w-[184px]'
+          ? 'w-[210px] sm:w-[244px] md:w-[268px]'
+          : 'w-[122px] sm:w-[144px] md:w-[166px]'
       }`}
     >
-      {/* Clean Rounded Poster Artwork Frame Matching Video Reference */}
+      {/* Thumbnail Frame */}
       <div
-        className={`relative w-full overflow-hidden bg-[#13141a] rounded-[20px] transition-all duration-300 shadow-[0_14px_30px_rgba(0,0,0,0.7)] group-hover:shadow-[0_20px_42px_rgba(0,0,0,0.9)] ${
+        className={`relative w-full overflow-hidden bg-[#17121f] rounded-[14px] transition-all duration-300 shadow-[0_10px_24px_rgba(0,0,0,0.55)] group-hover:shadow-[0_16px_32px_rgba(0,0,0,0.85)] ${
           isLandscape ? 'aspect-video' : 'aspect-[2/3]'
         } ${
           isHiddenItem
             ? 'ring-1 ring-amber-400/50 opacity-95'
-            : 'ring-1 ring-white/[0.08] group-hover:ring-white/25'
+            : 'ring-1 ring-white/[0.08] group-hover:ring-[#ea1d24]/60'
         }`}
       >
         {!imageLoaded && !imageError && displayImage && (
-          <div className="absolute inset-0 bg-[#16171f] flex items-center justify-center">
+          <div className="absolute inset-0 bg-[#1a1524] flex items-center justify-center">
             <Play className="w-6 h-6 text-zinc-700" />
           </div>
         )}
 
         {imageError || !displayImage ? (
-          <div className="absolute inset-0 bg-gradient-to-br from-zinc-900 via-[#14151c] to-zinc-950 flex flex-col items-center justify-center p-4 text-center">
-            <Play className="w-7 h-7 text-[#F7C600]/60 mb-1.5" />
-            <span className="text-xs text-zinc-300 font-bold line-clamp-2">
+          <div className="absolute inset-0 bg-gradient-to-br from-[#1f1929] via-[#15111c] to-[#0f0c14] flex flex-col items-center justify-center p-3 text-center">
+            <Play className="w-6 h-6 text-[#ea1d24]/70 mb-1.5" />
+            <span className="text-[11px] text-zinc-300 font-bold line-clamp-2">
               {displayTitle}
             </span>
           </div>
@@ -151,131 +141,110 @@ export const MediaCard: React.FC<MediaCardProps> = ({
           />
         )}
 
-        {/* Minimal Status Indicators Only When Coming Soon or Hidden */}
-        {(isComingSoonItem || isHiddenItem) && (
-          <div className="absolute top-2.5 inset-x-2.5 flex items-center gap-1 z-10 pointer-events-none">
+        {/* Subtle Top Corner Status & Hover Actions */}
+        <div className="absolute top-2 inset-x-2 flex items-center justify-between gap-1 z-10 pointer-events-none">
+          <div className="flex items-center gap-1">
+            {currentItem.videoQuality && (
+              <span className="bg-black/60 backdrop-blur-md text-white font-black text-[9px] px-1.5 py-0.5 rounded border border-white/10">
+                {formatQualityLabel(currentItem.videoQuality).toUpperCase()}
+              </span>
+            )}
             {isComingSoonItem && (
-              <span className="inline-flex items-center gap-1 bg-black/70 backdrop-blur-md text-[#F7C600] font-bold text-[10px] px-2 py-0.5 rounded-full border border-[#F7C600]/30">
-                <Clock className="w-2.5 h-2.5" />
+              <span className="inline-flex items-center gap-0.5 bg-black/70 backdrop-blur-md text-zinc-200 font-bold text-[9px] px-1.5 py-0.5 rounded border border-white/15">
+                <Clock className="w-2.5 h-2.5 text-[#ea1d24]" />
                 <span>{t('قريباً', 'Soon')}</span>
               </span>
             )}
             {isHiddenItem && (
-              <span className="inline-flex items-center gap-1 bg-black/75 backdrop-blur-md border border-amber-400/50 text-amber-300 font-bold text-[10px] px-2 py-0.5 rounded-full">
+              <span className="inline-flex items-center bg-black/75 backdrop-blur-md border border-amber-400/50 text-amber-300 font-bold text-[9px] px-1.5 py-0.5 rounded">
                 <EyeOff className="w-2.5 h-2.5" />
-                <span>{t('مخفي', 'Hidden')}</span>
               </span>
             )}
           </div>
-        )}
 
-        {/* Quick Favorite & Alert Corner Actions (Subtle, appear cleanly on hover or when active) */}
-        <div
-          className={`absolute bottom-2.5 inset-x-2.5 flex items-center justify-between gap-1.5 z-20 transition-opacity duration-200 ${
-            isFavorite || isAlertSubscribed
-              ? 'opacity-100'
-              : 'opacity-100 sm:opacity-0 sm:group-hover:opacity-100'
-          }`}
-        >
-          {onToggleAlert ? (
+          <div className="flex items-center gap-1">
+            {onToggleAlert && isComingSoonItem && (
+              <button
+                type="button"
+                onClick={handleAlertClick}
+                title={
+                  isAlertSubscribed
+                    ? t('إلغاء التنبيه', 'Disable alert')
+                    : t('تنبيهي عند الإضافة', 'Notify me')
+                }
+                aria-label={t('تنبيه', 'Alert')}
+                className={`pointer-events-auto w-6 h-6 rounded-full flex items-center justify-center transition-all backdrop-blur-md cursor-pointer ${
+                  isAlertSubscribed
+                    ? 'bg-[#ea1d24] text-white opacity-100'
+                    : 'bg-black/55 text-white/85 hover:text-white border border-white/15 opacity-0 group-hover:opacity-100'
+                }`}
+              >
+                {isAlertSubscribed ? (
+                  <BellRing className="w-3 h-3" />
+                ) : (
+                  <Bell className="w-3 h-3" />
+                )}
+              </button>
+            )}
+
             <button
               type="button"
-              onClick={handleAlertClick}
-              title={
-                isAlertSubscribed
-                  ? t('إلغاء تنبيهي عند الإضافة', 'Disable release alert')
-                  : t('تنبيهي عند الإضافة', 'Notify me when added')
-              }
+              onClick={handleFavoriteClick}
               aria-label={
-                isAlertSubscribed
-                  ? t('إلغاء تنبيهي عند الإضافة', 'Disable release alert')
-                  : t('تنبيهي عند الإضافة', 'Notify me when added')
+                isFavorite
+                  ? t('إزالة من المفضلة', 'Remove from favorites')
+                  : t('إضافة إلى المفضلة', 'Add to favorites')
               }
-              className={`w-8 h-8 rounded-full flex items-center justify-center transition-all active:scale-90 cursor-pointer backdrop-blur-md ${
-                isAlertSubscribed
-                  ? 'bg-[#F7C600] text-black shadow-md'
-                  : 'bg-black/55 text-white/85 hover:text-[#F7C600] border border-white/15'
+              className={`pointer-events-auto w-6 h-6 rounded-full flex items-center justify-center transition-all backdrop-blur-md cursor-pointer ${
+                isFavorite
+                  ? 'bg-[#ea1d24] text-white opacity-100 shadow-sm'
+                  : 'bg-black/55 text-white/85 hover:text-white border border-white/15 opacity-0 group-hover:opacity-100'
               }`}
             >
-              {isAlertSubscribed ? (
-                <BellRing className="w-3.5 h-3.5" />
-              ) : (
-                <Bell className="w-3.5 h-3.5" />
-              )}
+              <Heart className={`w-3 h-3 ${isFavorite ? 'fill-current' : ''}`} />
             </button>
-          ) : (
-            <span />
-          )}
-
-          <button
-            type="button"
-            onClick={handleFavoriteClick}
-            aria-label={
-              isFavorite
-                ? t('إزالة من المفضلة', 'Remove from favorites')
-                : t('إضافة إلى المفضلة', 'Add to favorites')
-            }
-            className={`w-8 h-8 rounded-full flex items-center justify-center transition-all active:scale-90 cursor-pointer backdrop-blur-md ${
-              isFavorite
-                ? 'bg-rose-500 text-white shadow-md'
-                : 'bg-black/55 text-white/85 hover:text-rose-400 border border-white/15'
-            }`}
-          >
-            <Heart className={`w-3.5 h-3.5 ${isFavorite ? 'fill-current' : ''}`} />
-          </button>
-        </div>
-
-        {/* Clean Frosted Center Play Orb on Hover */}
-        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none bg-black/20">
-          <div className="w-11 h-11 rounded-full bg-white/25 backdrop-blur-md border border-white/35 text-white flex items-center justify-center shadow-2xl transform scale-85 group-hover:scale-100 transition-transform duration-200">
-            <Play className="w-4.5 h-4.5 fill-current ml-0.5" />
           </div>
         </div>
-      </div>
 
-      {/* Clean Minimal Title & Single-Line Metadata Below Artwork */}
-      <div className={`pt-2 px-1 ${dir === 'ltr' ? 'text-left' : 'text-right'}`}>
-        <h3 className="font-bold text-white text-xs sm:text-sm truncate group-hover:text-[#F7C600] transition-colors">
-          {displayTitle}
-        </h3>
-
-        <div className="flex items-center gap-1.5 text-[11px] text-zinc-400 mt-0.5 truncate tabular-nums">
-          <span className="truncate">{categoryName}</span>
-          {currentItem.year ? (
-            <>
-              <span aria-hidden="true">·</span>
-              <span>{currentItem.year}</span>
-            </>
-          ) : null}
-          <span aria-hidden="true">·</span>
-          <span className="inline-flex items-center gap-0.5 text-zinc-200 font-semibold shrink-0">
-            <Star className="w-2.5 h-2.5 fill-[#F7C600] text-[#F7C600]" />
-            <span>{effectiveRating.toFixed(1)}</span>
-          </span>
+        {/* Play Orb Hover Overlay */}
+        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none bg-black/25">
+          <div className="w-9 h-9 rounded-full bg-[#ea1d24] text-white flex items-center justify-center shadow-[0_8px_22px_rgba(234,29,36,0.55)] transform scale-85 group-hover:scale-100 transition-transform duration-200">
+            <Play className="w-4 h-4 fill-current ml-0.5" />
+          </div>
         </div>
 
+        {/* Clean Portrait Bottom Gradient & Title on Poster Variant */}
+        {!isLandscape && (
+          <div
+            className={`absolute inset-x-0 bottom-0 pt-8 pb-2 px-2 bg-gradient-to-t from-black/90 via-black/45 to-transparent pointer-events-none ${
+              dir === 'ltr' ? 'text-left' : 'text-right'
+            }`}
+          >
+            <h3 className="font-black text-white text-[11px] sm:text-xs truncate drop-shadow">
+              {displayTitle}
+            </h3>
+          </div>
+        )}
+
+        {/* Watch Progress Bar Inside Thumbnail Matching Reference Screen 1 */}
         {watchedPercent > 0 && (
-          <div className="mt-1.5">
+          <div className="absolute bottom-2 inset-x-2.5 h-1 rounded-full bg-white/25 overflow-hidden z-10 pointer-events-none">
             <div
-              className="w-full h-1 rounded-full bg-white/10 overflow-hidden"
-              role="progressbar"
-              aria-valuenow={watchedPercent}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-label={t(`تمت مشاهدة ${watchedPercent}%`, `${watchedPercent}% watched`)}
-            >
-              <div
-                className={`h-full rounded-full transition-all duration-300 ${
-                  watchedPercent >= 95
-                    ? 'bg-emerald-400'
-                    : 'bg-gradient-to-r from-amber-500 to-[#F7C600]'
-                }`}
-                style={{ width: `${watchedPercent}%` }}
-              />
-            </div>
+              className="h-full rounded-full bg-white"
+              style={{ width: `${watchedPercent}%` }}
+            />
           </div>
         )}
       </div>
+
+      {/* Landscape Card Footer: Clean Single-Line Title Directly Below Thumbnail Matching Screen 1 */}
+      {isLandscape && (
+        <div className={`pt-2 px-0.5 ${dir === 'ltr' ? 'text-left' : 'text-right'}`}>
+          <h3 className="font-black text-zinc-100 group-hover:text-white text-xs sm:text-[13px] truncate transition-colors">
+            {displayTitle}
+          </h3>
+        </div>
+      )}
     </motion.article>
   );
 };

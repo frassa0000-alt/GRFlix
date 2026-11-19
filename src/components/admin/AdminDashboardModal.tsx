@@ -306,7 +306,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
                 <Shield className="w-5 h-5" />
               </div>
               <div>
-                <h2 className="text-sm font-black text-white">لوحة إدارة GoldenFlix</h2>
+                <h2 className="text-sm font-black text-white">لوحة إدارة MASHHAD</h2>
                 <p className="text-[11px] font-mono text-zinc-400">
                   {normalizedUserEmail || PRIMARY_ADMIN_EMAIL}
                 </p>
@@ -434,7 +434,7 @@ export const AdminDashboardModal: React.FC<AdminDashboardModalProps> = ({
             </button>
 
             <div className="flex items-center gap-1.5 text-xs min-w-0">
-              <span className="text-zinc-500 hidden sm:inline">GoldenFlix Admin</span>
+              <span className="text-zinc-500 hidden sm:inline">MASHHAD Admin</span>
               <ChevronLeft className="w-3.5 h-3.5 text-zinc-600 hidden sm:inline" />
               <span className="text-zinc-400 hidden md:inline">{activeNavMeta.group}</span>
               <ChevronLeft className="w-3.5 h-3.5 text-zinc-600 hidden md:inline" />

@@ -246,7 +246,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
       ? t('مشرف المنصة', 'Platform Admin')
       : t('عضو مسجل', 'Verified Member');
 
-  const displayName = user?.displayName || user?.name || 'GoldenFlix User';
+  const displayName = user?.displayName || user?.name || 'MASHHAD User';
   const resolvedAvatar =
     photoUrl ||
     user?.picture ||
@@ -510,7 +510,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                             <Crown className="w-[18px] h-[18px] text-[#F7C600] shrink-0 stroke-[1.8]" />
                             <div className="min-w-0">
                               <span className="block text-xs font-bold text-zinc-100 truncate">
-                                {t('اشتراك VIP الحصري', 'GoldenFlix VIP')}
+                                {t('اشتراك VIP الحصري', 'MASHHAD VIP')}
                               </span>
                             </div>
                           </div>

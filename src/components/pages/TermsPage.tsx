@@ -16,9 +16,9 @@ export const TermsPage: React.FC<TermsPageProps> = ({ onBackHome, onNavigatePage
       titleAr: '01. القبول بشروط الاستخدام',
       titleEn: '01. Acceptance of Terms',
       bodyAr:
-        'باستخدامك لموقع GoldenFlix أو تصفحك أيّاً من أقسامه ومحتوياته، فإنك توافق على الالتزام بهذه الشروط والأحكام وبسياسة الخصوصية المعمول بها في المنصة.',
+        'باستخدامك لموقع MASHHAD أو تصفحك أيّاً من أقسامه ومحتوياته، فإنك توافق على الالتزام بهذه الشروط والأحكام وبسياسة الخصوصية المعمول بها في المنصة.',
       bodyEn:
-        'By accessing or using GoldenFlix, you agree to comply with these Terms of Use and our active Privacy Policy.',
+        'By accessing or using MASHHAD, you agree to comply with these Terms of Use and our active Privacy Policy.',
     },
     {
       titleAr: '02. الاستخدام الشخصي المشروع',
@@ -32,17 +32,17 @@ export const TermsPage: React.FC<TermsPageProps> = ({ onBackHome, onNavigatePage
       titleAr: '03. حسابات المستخدمين والأمان',
       titleEn: '03. User Accounts & Responsibility',
       bodyAr:
-        'يتحمل المستخدم مسؤولية الحفاظ على سرية بيانات الدخول الخاصة به وصحة البريد الإلكتروني المسجل. يحتفظ فريق GoldenFlix بحق تعليق أي حساب يخالف قواعد الاستخدام الآمن.',
+        'يتحمل المستخدم مسؤولية الحفاظ على سرية بيانات الدخول الخاصة به وصحة البريد الإلكتروني المسجل. يحتفظ فريق MASHHAD بحق تعليق أي حساب يخالف قواعد الاستخدام الآمن.',
       bodyEn:
-        'You are responsible for safeguarding your account credentials and maintaining an accurate email address. GoldenFlix reserves the right to suspend accounts involved in abusive behavior.',
+        'You are responsible for safeguarding your account credentials and maintaining an accurate email address. MASHHAD reserves the right to suspend accounts involved in abusive behavior.',
     },
     {
       titleAr: '04. الملكية الفكرية وحقوق النشر',
       titleEn: '04. Intellectual Property & Copyright',
       bodyAr:
-        'جميع عناصر الهوية البصرية والتصميم والشعارات والبرمجيات الخاصة بـ GoldenFlix محفوظة للمنصة. وفي حال وجود أي ملاحظة أو طلب بخصوص حقوق محتوى، يرجى مراسلتنا رسمياً ليتم التعامل معه فوراً.',
+        'جميع عناصر الهوية البصرية والتصميم والشعارات والبرمجيات الخاصة بـ MASHHAD محفوظة للمنصة. وفي حال وجود أي ملاحظة أو طلب بخصوص حقوق محتوى، يرجى مراسلتنا رسمياً ليتم التعامل معه فوراً.',
       bodyEn:
-        'All GoldenFlix branding, interface design, logos, and platform software belong to GoldenFlix. For any copyright or content ownership inquiry, please contact us directly for prompt review.',
+        'All MASHHAD branding, interface design, logos, and platform software belong to MASHHAD. For any copyright or content ownership inquiry, please contact us directly for prompt review.',
     },
     {
       titleAr: '05. استمرارية الخدمة والتعديلات',
@@ -67,8 +67,8 @@ export const TermsPage: React.FC<TermsPageProps> = ({ onBackHome, onNavigatePage
       pageId="terms"
       title={t('شروط الاستخدام', 'Terms of Use')}
       subtitle={t(
-        'الضوابط والقواعد المنظمة لاستخدام منصة GoldenFlix بما يضمن تجربة مشاهدة آمنة ومنظمة للجميع.',
-        'The guidelines governing use of GoldenFlix to keep the streaming experience safe and clear for everyone.'
+        'الضوابط والقواعد المنظمة لاستخدام منصة MASHHAD بما يضمن تجربة مشاهدة آمنة ومنظمة للجميع.',
+        'The guidelines governing use of MASHHAD to keep the streaming experience safe and clear for everyone.'
       )}
       updatedLabel={t('سارية اعتباراً من 2026', 'Effective 2026')}
       onBackHome={onBackHome}

@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { MediaItem, MediaType, WatchProgress } from '../../types';
 import { MediaCard } from '../cards/MediaCard';
 import { EmptyCinemaState } from '../common/EmptyCinemaState';
-import { Heart, Film, LayoutGrid, Tv } from 'lucide-react';
+import { Film, LayoutGrid, Tv } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
 
 interface FavoritesViewProps {
@@ -40,40 +40,27 @@ export const FavoritesView: React.FC<FavoritesViewProps> = ({
 
   return (
     <div className="px-1 sm:px-2 py-2 space-y-5 animate-fade-in">
-      {/* Header when items exist */}
+      {/* Centered Header Matching Reference Screen 2 ("My List") */}
       {favoriteMedia.length > 0 && (
-        <div className="flex items-center justify-between border-b border-white/[0.08] pb-3">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-full bg-[#F7C600]/12 border border-[#F7C600]/30 flex items-center justify-center text-[#F7C600]">
-              <Heart className="w-4.5 h-4.5 fill-[#F7C600]/20" />
-            </div>
-            <div>
-              <h2 className="text-base font-black text-white">
-                {t('قائمتي المفضلة', 'My Favorites')}
-              </h2>
-              <p className="text-[11px] text-zinc-400">
-                {t(
-                  'الأعمال السينمائية التي قمت بإضافتها للمفضلة',
-                  'Movies and series you bookmarked'
-                )}
-              </p>
-            </div>
-          </div>
-          <span className="text-xs font-bold text-[#F7C600] tabular-nums">
-            {favoriteMedia.length} {t('في المفضلة', 'saved')}
-          </span>
+        <div className="text-center space-y-1">
+          <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+            {t('قائمتي', 'My List')}
+          </h2>
+          <p className="text-xs font-bold text-zinc-400 tabular-nums">
+            {favoriteMedia.length} {t('أعمال محفوظة', 'saved titles')}
+          </p>
         </div>
       )}
 
-      {/* Filter Tabs */}
+      {/* Clean Velvet Noir Filter Tabs */}
       {favoriteMedia.length > 0 && (
-        <div className="grid grid-cols-3 gap-1.5 p-1 bg-[#121217] rounded-full border border-white/[0.08]">
+        <div className="max-w-md mx-auto grid grid-cols-3 gap-1.5 p-1 bg-[#17121f] rounded-xl border border-white/[0.08]">
           <button
             type="button"
             onClick={() => setSelectedType('all')}
-            className={`py-2 px-3 rounded-full text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+            className={`py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
               selectedType === 'all'
-                ? 'bg-[#F7C600] text-black shadow-md shadow-[#F7C600]/20 font-black'
+                ? 'bg-[#ea1d24] text-white shadow font-black'
                 : 'text-zinc-400 hover:text-white'
             }`}
           >
@@ -85,9 +72,9 @@ export const FavoritesView: React.FC<FavoritesViewProps> = ({
           <button
             type="button"
             onClick={() => setSelectedType('movie')}
-            className={`py-2 px-3 rounded-full text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+            className={`py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
               selectedType === 'movie'
-                ? 'bg-[#F7C600] text-black shadow-md shadow-[#F7C600]/20 font-black'
+                ? 'bg-[#ea1d24] text-white shadow font-black'
                 : 'text-zinc-400 hover:text-white'
             }`}
           >
@@ -97,9 +84,9 @@ export const FavoritesView: React.FC<FavoritesViewProps> = ({
           <button
             type="button"
             onClick={() => setSelectedType('series')}
-            className={`py-2 px-3 rounded-full text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+            className={`py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
               selectedType === 'series'
-                ? 'bg-[#F7C600] text-black shadow-md shadow-[#F7C600]/20 font-black'
+                ? 'bg-[#ea1d24] text-white shadow font-black'
                 : 'text-zinc-400 hover:text-white'
             }`}
           >
@@ -109,15 +96,15 @@ export const FavoritesView: React.FC<FavoritesViewProps> = ({
         </div>
       )}
 
-      {/* Empty State matching 3D Cinema Box Reference */}
+      {/* Empty State */}
       {favoriteMedia.length === 0 ? (
         <EmptyCinemaState
-          titleStart={t('مكتبتك', 'Your Library is')}
+          titleStart={t('مكتبتك', 'Your List is')}
           titleHighlight={t('فارغة', 'Empty')}
           titleEnd={t('حالياً', 'Right Now')}
           subtitle={t(
-            'ستجد هنا أفلامك ومسلسلاتك المفضلة بعد إضافتها',
-            'Your favorite movies and series will appear here once added'
+            'ستجد هنا أفلامك ومسلسلاتك المحفوظة بعد إضافتها',
+            'Your bookmarked movies and series will appear here'
           )}
           ctaLabel={t('تصفح المحتوى', 'Browse Content')}
           onCtaClick={onBrowseContent}
@@ -133,12 +120,13 @@ export const FavoritesView: React.FC<FavoritesViewProps> = ({
           showHeartAccent={false}
         />
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3.5 sm:gap-4">
           {filteredFavorites.map((item) => (
             <MediaCard
               key={item.id}
               item={item}
               inGrid={true}
+              variant="poster"
               onSelect={() => onSelectMedia(item)}
               isFavorite={true}
               onToggleFavorite={() => onToggleFavorite(item.id)}
