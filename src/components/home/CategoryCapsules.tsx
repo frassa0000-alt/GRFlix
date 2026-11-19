@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Sparkles, Flame, Clock, Star, Film, Tv, PlaySquare, Heart } from 'lucide-react';
+import { Home, Flame, Clock, Star, Film, Tv, PlaySquare, Heart } from 'lucide-react';
 import { ActiveTab } from '../../types';
 
 interface CategoryCapsulesProps {
@@ -23,7 +23,7 @@ export const CategoryCapsules: React.FC<CategoryCapsulesProps> = ({
       id: 'home',
       label: 'الرئيسية',
       renderIcon: (isActive) => (
-        <Sparkles className={`w-3 h-3 transition-transform duration-300 ${isActive ? 'scale-110' : ''}`} />
+        <Home className={`w-3 h-3 transition-transform duration-300 ${isActive ? 'scale-110' : ''}`} />
       ),
     },
     {

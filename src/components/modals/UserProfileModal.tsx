@@ -12,7 +12,7 @@ import {
   Film,
   Camera,
   Crown,
-  Sparkles,
+  FileText,
   RefreshCw,
   Mail,
   ChevronLeft,
@@ -484,7 +484,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                           className="w-full min-h-[48px] px-4 py-3 rounded-2xl bg-[#17181f] hover:bg-[#1d1e27] border border-white/[0.06] flex items-center justify-between gap-3 transition-colors cursor-pointer"
                         >
                           <div className="flex items-center gap-3 min-w-0">
-                            <Sparkles className="w-[18px] h-[18px] text-zinc-200 shrink-0 stroke-[1.8]" />
+                            <FileText className="w-[18px] h-[18px] text-zinc-200 shrink-0 stroke-[1.8]" />
                             <span className="text-xs font-bold text-zinc-100 truncate">
                               {t('النبذة الشخصية', 'Bio')}
                             </span>

@@ -19,7 +19,7 @@ import {
   X,
 } from 'lucide-react';
 import { CategoryItem, Episode, MediaItem, Season, VideoSourceOption } from '../../../types';
-import { resolveMediaFormat } from '../../../utils/videoEngines';
+import { normalizeExternalHttpUrl, resolveMediaFormat } from '../../../utils/videoEngines';
 import {
   extractVideoDurationFromFile,
   formatAdminErrorMessage,
@@ -299,7 +299,7 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
       return;
     }
 
-    let finalVideoUrl = epVideoUrl.trim();
+    let finalVideoUrl = normalizeExternalHttpUrl(epVideoUrl);
     let finalFileSize = epFileSize;
 
     if (epVideoFile) {
@@ -320,8 +320,8 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
     }
 
     const episodeSources: VideoSourceOption[] = [];
-    const trimmedGr = epGrUrl.trim();
-    const trimmedG = epGUrl.trim();
+    const trimmedGr = normalizeExternalHttpUrl(epGrUrl);
+    const trimmedG = normalizeExternalHttpUrl(epGUrl);
     if (finalVideoUrl && (trimmedGr || trimmedG)) {
       episodeSources.push({
         id: 'primary',
@@ -910,25 +910,25 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
                   </button>
 
                   <input
-                    type="url"
+                    type="text"
                     dir="ltr"
                     value={epVideoUrl}
                     onChange={(e) => setEpVideoUrl(e.target.value)}
-                    placeholder="أو رابط يوتيوب / فيديو مباشر (YouTube أو /uploads/...)"
+                    placeholder="أو رابط حلقة من أي موقع / يوتيوب / /uploads/..."
                     className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono"
                   />
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <input
-                      type="url"
+                      type="text"
                       dir="ltr"
                       value={epGrUrl}
                       onChange={(e) => setEpGrUrl(e.target.value)}
-                      placeholder="رابط مشغل GR (غير يوتيوب / MP4 / Embed)"
+                      placeholder="رابط مشغل GR (أي موقع / MP4 / M3U8 / Embed)"
                       className="w-full bg-zinc-950 border border-amber-400/25 rounded-xl px-3 py-2 text-white font-mono text-[11px]"
                     />
                     <input
-                      type="url"
+                      type="text"
                       dir="ltr"
                       value={epGUrl}
                       onChange={(e) => setEpGUrl(e.target.value)}

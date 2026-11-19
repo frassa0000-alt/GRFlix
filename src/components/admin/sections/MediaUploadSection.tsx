@@ -3,6 +3,7 @@ import {
   AlertCircle,
   CheckCircle2,
   Clock,
+  Download,
   Film,
   Image as ImageIcon,
   Layers,
@@ -11,7 +12,6 @@ import {
   Play,
   Plus,
   RefreshCw,
-  Sparkles,
   Trash2,
   UploadCloud,
   X,
@@ -39,7 +39,13 @@ import {
   YouTubeOEmbedMetadata,
 } from '../../../utils/youtube';
 import { analyzeMediaFromLinkAndMeta } from '../../../utils/mediaLinkAnalyzer';
-import { resolveMediaFormat } from '../../../utils/videoEngines';
+import {
+  isExternalHttpUrl,
+  normalizeExternalHttpUrl,
+  resolveMediaFormat,
+} from '../../../utils/videoEngines';
+import { extractExternalStream } from '../../../services/api';
+import { VideoPlayer } from '../../player/VideoPlayer';
 
 interface QueueVideoTask {
   id: string;
@@ -362,7 +368,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
     const genresArabic = resolvedGenres
       .map((slug) => genreChoices.find((g) => g.slug === slug)?.nameAr || GENRE_LABELS_AR_LOOKUP(slug))
       .join('، ');
-    const summaryText = `تم التحليل تلقائياً من الرابط: ${TYPE_NAME_MAP[analyzed.mediaType]} • التصنيف: ${genresArabic} • التقييم المقترح: ⭐ ${analyzed.rating.toFixed(1)}`;
+    const summaryText = `تم التحليل تلقائياً من الرابط: ${TYPE_NAME_MAP[analyzed.mediaType]} • التصنيف: ${genresArabic} • التقييم المقترح: ${analyzed.rating.toFixed(1)}`;
     setLinkAnalysisNote(summaryText);
     if (meta?.title) {
       setYoutubeMetaNote(`${meta.title} — ${summaryText}`);
@@ -374,7 +380,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
   const GENRE_LABELS_AR_LOOKUP = (slug: string) => GENRE_NAME_MAP[slug] || slug;
 
   const analyzeUrlWithMetadata = async (rawUrl: string) => {
-    const cleanUrl = rawUrl.trim();
+    const cleanUrl = normalizeExternalHttpUrl(rawUrl);
     if (!cleanUrl) return;
     const ytId = extractYouTubeVideoId(cleanUrl);
     if (ytId) {
@@ -382,6 +388,32 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
       try {
         const meta = await fetchYouTubeOEmbedMetadata(cleanUrl);
         applyLinkAnalysis(cleanUrl, meta);
+      } finally {
+        setIsFetchingYoutubeMeta(false);
+      }
+    } else if (isExternalHttpUrl(cleanUrl)) {
+      setIsFetchingYoutubeMeta(true);
+      try {
+        const ext = await extractExternalStream(cleanUrl);
+        applyLinkAnalysis(
+          cleanUrl,
+          ext
+            ? {
+                title: ext.title,
+                thumbnailUrl: ext.posterUrl,
+              }
+            : null
+        );
+        if (ext?.streams && ext.streams.length > 0) {
+          const top = ext.streams[0];
+          setLinkAnalysisNote(
+            `تم استخراج ${ext.streams.length} بث فيديو حقيقي (${top.format.toUpperCase()} • ${top.quality}) وسيشتغل داخل مشغل الموقع مباشرة!`
+          );
+        } else if (ext?.embedUrl) {
+          setLinkAnalysisNote(
+            'تم تجهيز الرابط بنجاح وسيتم تشغيله عبر مشغل الموقع التلقائي مع تجاوز الحظر!'
+          );
+        }
       } finally {
         setIsFetchingYoutubeMeta(false);
       }
@@ -395,7 +427,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
       uploadSourceMode === 'youtube'
         ? youtubeUrlInput.trim()
         : uploadSourceMode === 'external'
-        ? externalVideoUrl.trim()
+        ? normalizeExternalHttpUrl(externalVideoUrl)
         : '';
 
     if (!candidate) return;
@@ -496,11 +528,14 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
 
       const cleanExtraSources = extraSources
         .filter((s) => s.url.trim())
-        .map((s) => ({
-          ...s,
-          url: s.url.trim(),
-          format: isYouTubeUrl(s.url) ? 'youtube' : s.format || resolveMediaFormat(s.url),
-        }));
+        .map((s) => {
+          const cleanSrcUrl = normalizeExternalHttpUrl(s.url);
+          return {
+            ...s,
+            url: cleanSrcUrl,
+            format: isYouTubeUrl(cleanSrcUrl) ? 'youtube' : s.format || resolveMediaFormat(cleanSrcUrl),
+          };
+        });
 
       // 2. Coming soon teaser (no video uploaded yet — visitors can subscribe to 'تنبيهي عند الإضافة')
       if (uploadSourceMode === 'coming_soon') {
@@ -541,21 +576,21 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
         (queue.length === 0 || (uploadSourceMode !== 'file' && activeQueue.length === 0 && !hasCompletedTask)) &&
         (hasYoutubeUrl || hasExternalUrl)
       ) {
-        // 2b. Saving via YouTube link or direct external stream URL (no device file queue)
+        // 2b. Saving via YouTube link or direct/external universal stream URL (no device file queue)
         const rawMainUrl =
           uploadSourceMode === 'youtube'
             ? trimmedYoutubeUrl
-            : trimmedExternalUrl || trimmedYoutubeUrl;
+            : normalizeExternalHttpUrl(trimmedExternalUrl) || trimmedYoutubeUrl;
         const isYt = isYouTubeUrl(rawMainUrl);
         const mainUrl = isYt ? getYouTubeCanonicalUrl(rawMainUrl) || rawMainUrl : rawMainUrl;
-        const isHls = !isYt && mainUrl.toLowerCase().includes('.m3u8');
+        const resolvedFmt = isYt ? 'youtube' : resolveMediaFormat(mainUrl);
 
         const allSources: VideoSourceOption[] = [
           {
             id: `src-main-${Date.now()}`,
             label: isYt ? 'مشغل يوتيوب (YouTube)' : `المصدر الرئيسي (${videoQuality})`,
             url: mainUrl,
-            format: isYt ? 'youtube' : isHls ? 'hls' : 'mp4',
+            format: resolvedFmt,
             quality: videoQuality,
             isDefault: true,
           },
@@ -608,7 +643,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
                     },
                   ]
                 : undefined,
-            storageType: isYt ? 'youtube' : 'server',
+            storageType: isYt ? 'youtube' : isExternalHttpUrl(mainUrl) ? 'external' : 'server',
           },
           token
         );
@@ -911,7 +946,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
                     {isFetchingYoutubeMeta ? (
                       <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                     ) : (
-                      <Sparkles className="w-3.5 h-3.5" />
+                      <Download className="w-3.5 h-3.5" />
                     )}
                     <span>جلب البيانات</span>
                   </button>
@@ -1153,13 +1188,13 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
         {uploadSourceMode === 'external' && (
           <div className="space-y-2.5">
             <label className="block text-xs font-black text-white">
-              رابط بث مباشر (MP4 / HLS .m3u8 أو يوتيوب):
+              رابط فيلم أو بث من أي موقع أو منصة في العالم (صفحة فيلم / MP4 / M3U8 / MPD):
             </label>
             <div className="flex flex-wrap sm:flex-nowrap items-center gap-2">
               <input
-                type="url"
+                type="text"
                 dir="ltr"
-                placeholder="https://cdn.example.com/movie/master.m3u8"
+                placeholder="https://... (لصق رابط الفيلم من أي موقع في العالم)"
                 value={externalVideoUrl}
                 onChange={(e) => {
                   setExternalVideoUrl(e.target.value);
@@ -1173,23 +1208,29 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
                     type="button"
                     disabled={isFetchingYoutubeMeta}
                     onClick={() => {
-                      lastAnalyzedLinkRef.current = externalVideoUrl.trim();
-                      void analyzeUrlWithMetadata(externalVideoUrl);
+                      const norm = normalizeExternalHttpUrl(externalVideoUrl);
+                      lastAnalyzedLinkRef.current = norm;
+                      void analyzeUrlWithMetadata(norm);
                     }}
                     className="px-3.5 py-2.5 rounded-xl bg-amber-400/15 hover:bg-amber-400/25 text-amber-300 text-xs font-black border border-amber-400/35 flex items-center gap-1.5 cursor-pointer shrink-0"
                   >
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>تحليل الرابط</span>
+                    {isFetchingYoutubeMeta ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Link2 className="w-3.5 h-3.5" />
+                    )}
+                    <span>استخراج وتحليل الرابط</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => {
-                      setPreviewVideoSrc(externalVideoUrl.trim());
-                      setPreviewTitle(titleAr || 'معاينة الرابط');
+                      setPreviewVideoSrc(normalizeExternalHttpUrl(externalVideoUrl));
+                      setPreviewTitle(titleAr || 'معاينة داخل مشغل الموقع');
                     }}
-                    className="px-3.5 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 text-xs font-bold border border-white/10 cursor-pointer shrink-0"
+                    className="px-3.5 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 text-xs font-bold border border-white/10 cursor-pointer shrink-0 flex items-center gap-1.5"
                   >
-                    معاينة
+                    <Play className="w-3.5 h-3.5 fill-current" />
+                    <span>معاينة وتشغيل</span>
                   </button>
                 </>
               )}
@@ -1676,7 +1717,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
               className="sm:col-span-3 bg-zinc-950 border border-white/10 rounded-xl px-2.5 py-2 text-xs text-white"
             />
             <input
-              type="url"
+              type="text"
               dir="ltr"
               value={src.url}
               onChange={(e) => {
@@ -1756,41 +1797,64 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
         )}
       </button>
 
-      {/* Local / YouTube Video Preview Modal */}
-      {previewVideoSrc && (
-        <div
-          className="fixed inset-0 z-[130] bg-black/90 backdrop-blur-md flex items-center justify-center p-4"
-          dir="rtl"
-        >
-          <div className="bg-[#111116] border border-white/15 rounded-2xl w-full max-w-3xl overflow-hidden shadow-2xl">
-            <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
-              <p className="text-xs sm:text-sm font-black text-white truncate">
-                معاينة الفيديو: {previewTitle}
-              </p>
-              <button
-                type="button"
-                onClick={() => setPreviewVideoSrc(null)}
-                className="w-8 h-8 rounded-lg bg-zinc-900 text-zinc-400 hover:text-white flex items-center justify-center cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="bg-black aspect-video">
-              {isYouTubeUrl(previewVideoSrc) ? (
-                <iframe
-                  src={getYouTubeEmbedUrl(previewVideoSrc, { autoplay: true }) || ''}
-                  title={previewTitle || 'YouTube Preview'}
-                  className="w-full h-full border-0"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                  allowFullScreen
-                />
-              ) : (
-                <video src={previewVideoSrc} controls autoPlay className="w-full h-full object-contain" />
-              )}
+      {/* Video Preview Modal — uses GoldenFlix's real VideoPlayer for external links */}
+      {previewVideoSrc &&
+        (isExternalHttpUrl(previewVideoSrc) ? (
+          <VideoPlayer
+            media={{
+              id: `preview-${Date.now()}`,
+              type: mediaType,
+              title: previewTitle || titleEn || 'Preview',
+              titleAr: previewTitle || titleAr || 'معاينة المشغل',
+              description: description || '',
+              posterUrl: posterPreview || posterUrl || '',
+              bannerUrl: bannerPreview || bannerUrl || posterPreview || posterUrl || '',
+              videoUrl: previewVideoSrc,
+              videoQuality: videoQuality || '1080p',
+              ageRating: ageRating || '+16',
+              duration: duration || '120 دقيقة',
+              year: Number(year) || new Date().getFullYear(),
+              rating: Number(rating) || 8.5,
+              genres: selectedGenres,
+              isPublished: true,
+              createdAt: Date.now(),
+            }}
+            onClose={() => setPreviewVideoSrc(null)}
+          />
+        ) : (
+          <div
+            className="fixed inset-0 z-[130] bg-black/90 backdrop-blur-md flex items-center justify-center p-4"
+            dir="rtl"
+          >
+            <div className="bg-[#111116] border border-white/15 rounded-2xl w-full max-w-3xl overflow-hidden shadow-2xl">
+              <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
+                <p className="text-xs sm:text-sm font-black text-white truncate">
+                  معاينة الفيديو: {previewTitle}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setPreviewVideoSrc(null)}
+                  className="w-8 h-8 rounded-lg bg-zinc-900 text-zinc-400 hover:text-white flex items-center justify-center cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="bg-black aspect-video">
+                {isYouTubeUrl(previewVideoSrc) ? (
+                  <iframe
+                    src={getYouTubeEmbedUrl(previewVideoSrc, { autoplay: true }) || ''}
+                    title={previewTitle || 'YouTube Preview'}
+                    className="w-full h-full border-0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowFullScreen
+                  />
+                ) : (
+                  <video src={previewVideoSrc} controls autoPlay className="w-full h-full object-contain" />
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        ))}
     </form>
   );
 };

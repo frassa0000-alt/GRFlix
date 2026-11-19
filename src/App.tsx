@@ -1800,6 +1800,7 @@ export default function App() {
         onOpenRegister={handleOpenRegister}
         onOpenProfileModal={() => setIsUserProfileOpen(true)}
         hasAdminAccess={hasAdminAccess}
+        siteName={siteSettings?.siteName}
       />
 
       {/* Real Email Verification Authentication Modal */}

@@ -12,7 +12,7 @@ import {
   PlusCircle,
   RefreshCw,
   Search,
-  Sparkles,
+  Star,
   Trash2,
   Tv,
   X,
@@ -26,6 +26,7 @@ import {
   updateMovieInDatabases,
 } from '../../../services/movieService';
 import { getYouTubeThumbnailUrl, isYouTubeUrl } from '../../../utils/youtube';
+import { isExternalHttpUrl, normalizeExternalHttpUrl } from '../../../utils/videoEngines';
 
 interface MediaCatalogSectionProps {
   mode: 'movie' | 'series';
@@ -166,7 +167,7 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
     setIsSavingEdit(true);
     setActionError(null);
     try {
-      const nextVideoUrl = (editingItem.videoUrl || '').trim();
+      const nextVideoUrl = normalizeExternalHttpUrl(editingItem.videoUrl || '');
       const isYt = isYouTubeUrl(nextVideoUrl);
       const nextPoster =
         (editingItem.posterUrl || '').trim() ||
@@ -186,7 +187,7 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
           bannerUrl: (editingItem.bannerUrl || '').trim() || nextPoster,
           videoUrl: nextVideoUrl,
           isComingSoon: !nextVideoUrl && editingItem.type !== 'series',
-          storageType: isYt ? 'youtube' : editingItem.storageType || 'server',
+          storageType: isYt ? 'youtube' : isExternalHttpUrl(nextVideoUrl) ? 'external' : editingItem.storageType || 'server',
           year: Number(editingItem.year) || new Date().getFullYear(),
           duration: editingItem.duration || '120 دقيقة',
           videoQuality: editingItem.videoQuality || '1080p',
@@ -491,7 +492,7 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
                             }`}
                             title="تعيين كعمل مميز في البانر الرئيسي"
                           >
-                            <Sparkles className="w-3 h-3" />
+                            <Star className="w-3 h-3" />
                             <span>مميز</span>
                           </button>
 
@@ -641,14 +642,14 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
               </div>
               <div className="sm:col-span-2">
                 <label className="block text-zinc-400 mb-1 font-bold">
-                  رابط الفيديو أو يوتيوب (YouTube / MP4 / HLS)
+                  رابط الفيلم أو الفيديو من أي موقع أو منصة (YouTube / MP4 / HLS / رابط خارجي)
                 </label>
                 <input
-                  type="url"
+                  type="text"
                   dir="ltr"
                   value={editingItem.videoUrl || ''}
                   onChange={(e) => setEditingItem({ ...editingItem, videoUrl: e.target.value })}
-                  placeholder="https://www.youtube.com/watch?v=... أو /uploads/videos/..."
+                  placeholder="https://... أو /uploads/videos/..."
                   className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono"
                 />
               </div>

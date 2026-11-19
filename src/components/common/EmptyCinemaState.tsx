@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { Play, Film } from 'lucide-react';
+import { Play, Film, Heart } from 'lucide-react';
 import emptyCinemaBoxImg from '../../assets/images/empty_cinema_box_1794772467523.jpg';
 import { useLanguage } from '../../contexts/LanguageContext';
 
@@ -75,9 +75,10 @@ export const EmptyCinemaState: React.FC<EmptyCinemaStateProps> = ({
       <p className="text-xs sm:text-sm text-zinc-400 max-w-xs sm:max-w-sm leading-relaxed mb-7">
         {subtitleText}{' '}
         {showHeartAccent && (
-          <span className="inline-block text-[#F7C600] align-middle" aria-hidden="true">
-            💛
-          </span>
+          <Heart
+            className="inline-block w-3.5 h-3.5 text-[#F7C600] fill-[#F7C600] align-middle"
+            aria-hidden="true"
+          />
         )}
       </p>
 

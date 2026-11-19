@@ -384,7 +384,7 @@ export const CinemaIntro: React.FC<CinemaIntroProps> = ({ onComplete }) => {
               animate={{ scale: 1, opacity: 1 }}
               transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
               className="flex items-baseline justify-center text-[42px] sm:text-[66px] md:text-[78px] font-black tracking-tight leading-none text-[#0B0B0F]"
-              style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}
+              style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", system-ui, sans-serif' }}
             >
               <span>G</span>
 

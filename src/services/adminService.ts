@@ -251,6 +251,19 @@ export interface StreamTestResult {
   contentLength?: number;
   supportsRange?: boolean;
   format?: string;
+  extractedStreams?: Array<{
+    url: string;
+    proxiedUrl: string;
+    format: string;
+    quality: string;
+    label: string;
+    preferProxy?: boolean;
+  }>;
+  bestPlayableUrl?: string;
+  embedUrl?: string;
+  proxiedEmbedUrl?: string;
+  title?: string;
+  posterUrl?: string;
   error?: string;
 }
 

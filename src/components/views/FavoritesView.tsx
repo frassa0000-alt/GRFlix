@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { MediaItem, MediaType, WatchProgress } from '../../types';
 import { MediaCard } from '../cards/MediaCard';
 import { EmptyCinemaState } from '../common/EmptyCinemaState';
-import { Heart, Film, Sparkles, Tv } from 'lucide-react';
+import { Heart, Film, LayoutGrid, Tv } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
 
 interface FavoritesViewProps {
@@ -77,7 +77,7 @@ export const FavoritesView: React.FC<FavoritesViewProps> = ({
                 : 'text-zinc-400 hover:text-white'
             }`}
           >
-            <Sparkles className="w-3.5 h-3.5" />
+            <LayoutGrid className="w-3.5 h-3.5" />
             <span>
               {t('الكل', 'All')} ({favoriteMedia.length})
             </span>

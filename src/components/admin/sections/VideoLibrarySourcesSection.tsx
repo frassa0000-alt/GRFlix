@@ -34,7 +34,12 @@ import {
   VideoSourceOption,
 } from '../../../types';
 import { extractYouTubeVideoId, getYouTubeEmbedUrl, isYouTubeUrl } from '../../../utils/youtube';
-import { resolveMediaFormat } from '../../../utils/videoEngines';
+import {
+  isExternalHttpUrl,
+  normalizeExternalHttpUrl,
+  resolveMediaFormat,
+} from '../../../utils/videoEngines';
+import { VideoPlayer } from '../../player/VideoPlayer';
 
 interface VideoLibrarySourcesSectionProps {
   mode: 'video_library' | 'playback_links';
@@ -235,7 +240,8 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
     }
   };
 
-  const handleRunTestUrl = async (key: string, url: string) => {
+  const handleRunTestUrl = async (key: string, rawUrl: string) => {
+    const url = normalizeExternalHttpUrl(rawUrl);
     setTestingUrlKey(key);
     try {
       const ytId = extractYouTubeVideoId(url);
@@ -290,7 +296,7 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
   const handleAddSource = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newUrl.trim()) return;
-    const trimmed = newUrl.trim();
+    const trimmed = normalizeExternalHttpUrl(newUrl);
     const effectiveFormat = isYouTubeUrl(trimmed) ? 'youtube' : newFormat;
     const item: VideoSourceOption = {
       id: `src-${Date.now()}`,
@@ -726,7 +732,7 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
                 className="sm:col-span-3 bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white"
               />
               <input
-                type="url"
+                type="text"
                 dir="ltr"
                 required
                 value={newUrl}
@@ -737,7 +743,7 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
                     setNewFormat(resolveMediaFormat(val));
                   }
                 }}
-                placeholder="https://youtube.com/watch?v=... أو /uploads/videos/..."
+                placeholder="رابط فيلم من أي موقع في العالم أو https://... أو /uploads/videos/..."
                 className="sm:col-span-5 bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono"
               />
               <select
@@ -770,14 +776,24 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
                 <span>إضافة وحفظ المصدر</span>
               </button>
               {newUrl.trim() && (
-                <button
-                  type="button"
-                  onClick={() => handleRunTestUrl('draft', newUrl.trim())}
-                  className="px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-sky-300 font-bold border border-white/10 flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Wifi className="w-3.5 h-3.5" />
-                  <span>اختبار الرابط قبل الإضافة</span>
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => handleRunTestUrl('draft', newUrl.trim())}
+                    className="px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-sky-300 font-bold border border-white/10 flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Wifi className="w-3.5 h-3.5" />
+                    <span>اختبار واستخراج الرابط</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewSrc(normalizeExternalHttpUrl(newUrl))}
+                    className="px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-amber-300 font-bold border border-white/10 flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Play className="w-3.5 h-3.5 fill-current" />
+                    <span>تشغيل معاينة</span>
+                  </button>
+                </>
               )}
             </div>
 
@@ -790,7 +806,11 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
                 }`}
               >
                 {testResults['draft'].ok
-                  ? `الرابط يعمل (HTTP ${testResults['draft'].status}) • الصيغة: ${testResults['draft'].format} • دعم التقديم Range: ${testResults['draft'].supportsRange ? 'نعم' : 'لا'}`
+                  ? `الرابط يعمل (HTTP ${testResults['draft'].status}) • الصيغة: ${testResults['draft'].format} • دعم التقديم Range: ${testResults['draft'].supportsRange ? 'نعم' : 'لا'}${
+                      testResults['draft'].extractedStreams?.length
+                        ? ` • بثوث مستخرجة: ${testResults['draft'].extractedStreams.length}`
+                        : ''
+                    }`
                   : testResults['draft'].error}
               </div>
             )}
@@ -908,6 +928,26 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
               })
             )}
           </div>
+
+          {previewSrc && selectedMedia && isExternalHttpUrl(previewSrc) && (
+            <VideoPlayer
+              media={{
+                ...selectedMedia,
+                videoUrl: previewSrc,
+                sources: [
+                  {
+                    id: 'preview-source',
+                    label: newLabel || 'معاينة المصدر',
+                    url: previewSrc,
+                    format: resolveMediaFormat(previewSrc),
+                    quality: newQuality || 'HD',
+                    isDefault: true,
+                  },
+                ],
+              }}
+              onClose={() => setPreviewSrc(null)}
+            />
+          )}
         </>
       )}
     </div>

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   X,
@@ -6,8 +6,6 @@ import {
   LayoutGrid,
   Heart,
   Clock,
-  ChevronLeft,
-  ChevronRight,
   User,
   Tv,
   LogIn,
@@ -15,8 +13,10 @@ import {
   ShieldCheck,
   Flame,
   Star,
-  Sparkles,
+  Clapperboard,
   Globe,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { ActiveTab, BottomNavTab, GoogleUserProfile } from '../../types';
 import { useLanguage } from '../../contexts/LanguageContext';
@@ -35,7 +35,41 @@ interface SideMenuDrawerProps {
   onOpenRegister: () => void;
   onOpenProfileModal: () => void;
   hasAdminAccess?: boolean;
+  siteName?: string;
 }
+
+interface MenuRowConfig {
+  key: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  onClick: () => void;
+  count?: number;
+  subtitle?: string;
+  avatarUrl?: string;
+}
+
+const GoldenFlixEmblem: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' }) => (
+  <svg
+    viewBox="0 0 28 28"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    className={className}
+    aria-hidden="true"
+  >
+    <path
+      d="M5.5 6.2L14 14.2L22.5 6.2L24.5 9.6L14 23.5L3.5 9.6L5.5 6.2Z"
+      fill="currentColor"
+      fillOpacity="0.94"
+    />
+    <path
+      d="M9.5 4.5L14 9.5L18.5 4.5"
+      stroke="currentColor"
+      strokeWidth="2.1"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
 
 export const SideMenuDrawer: React.FC<SideMenuDrawerProps> = ({
   isOpen,
@@ -51,14 +85,22 @@ export const SideMenuDrawer: React.FC<SideMenuDrawerProps> = ({
   onOpenRegister,
   onOpenProfileModal,
   hasAdminAccess = false,
+  siteName = 'GoldenFlix',
 }) => {
   const { lang, dir, setLang, t } = useLanguage();
-  const [copiedLink, setCopiedLink] = React.useState(false);
-  const copyTimerRef = React.useRef<number | null>(null);
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [hoveredKey, setHoveredKey] = useState<string | null>(null);
 
   const isDeveloperUser =
     (googleUser?.email || '').trim().toLowerCase() === 'frassa.wwindows@gmail.com';
   const canAccessAdmin = isDeveloperUser || Boolean(hasAdminAccess);
+  const brandTitle = (siteName || '').trim() || 'GoldenFlix';
+
+  useEffect(() => {
+    if (isOpen) {
+      setHoveredKey(null);
+    }
+  }, [isOpen]);
 
   const handleCopySiteLink = async () => {
     const siteUrl = 'https://gr-flix.vercel.app/';
@@ -83,14 +125,6 @@ export const SideMenuDrawer: React.FC<SideMenuDrawerProps> = ({
       }
       document.body.removeChild(textarea);
     }
-
-    setCopiedLink(true);
-    if (copyTimerRef.current) {
-      window.clearTimeout(copyTimerRef.current);
-    }
-    copyTimerRef.current = window.setTimeout(() => {
-      setCopiedLink(false);
-    }, 1800);
   };
 
   const handleNav = (tab: ActiveTab) => {
@@ -98,21 +132,241 @@ export const SideMenuDrawer: React.FC<SideMenuDrawerProps> = ({
     onClose();
   };
 
-  const ArrowEnd = dir === 'ltr' ? ChevronRight : ChevronLeft;
+  // Preserve earlier rule: never show 'home' inside Settings
+  const resolvedActiveKey =
+    activeTab && activeTab !== 'home' ? activeTab : 'movies';
+  const highlightedKey = hoveredKey || resolvedActiveKey;
 
-  const navItems: {
-    id: ActiveTab;
-    labelAr: string;
-    labelEn: string;
-    icon: React.ComponentType<{ className?: string }>;
-    iconAccent?: string;
-  }[] = [
-    { id: 'movies', labelAr: 'الأفلام السينمائية', labelEn: 'Movies', icon: Film },
-    { id: 'latest', labelAr: 'أحدث الإضافات', labelEn: 'Latest Releases', icon: Sparkles, iconAccent: 'text-amber-400' },
-    { id: 'trending', labelAr: 'الأكثر مشاهدة', labelEn: 'Most Watched', icon: Flame, iconAccent: 'text-rose-400' },
-    { id: 'top_rated', labelAr: 'الأعلى تقييماً', labelEn: 'Top Rated', icon: Star, iconAccent: 'text-yellow-400' },
-    { id: 'series', labelAr: 'المسلسلات التلفزيونية', labelEn: 'TV Series', icon: Tv },
+  const menuItems: MenuRowConfig[] = [
+    {
+      key: 'movies',
+      label: t('الأفلام السينمائية', 'Movies'),
+      icon: Film,
+      onClick: () => handleNav('movies'),
+    },
+    {
+      key: 'series',
+      label: t('المسلسلات التلفزيونية', 'TV Series'),
+      icon: Tv,
+      onClick: () => handleNav('series'),
+    },
+    {
+      key: 'latest',
+      label: t('أحدث الإضافات', 'Latest Releases'),
+      icon: Clapperboard,
+      onClick: () => handleNav('latest'),
+    },
+    {
+      key: 'trending',
+      label: t('الأكثر مشاهدة', 'Most Watched'),
+      icon: Flame,
+      onClick: () => handleNav('trending'),
+    },
+    {
+      key: 'top_rated',
+      label: t('الأعلى تقييماً', 'Top Rated'),
+      icon: Star,
+      onClick: () => handleNav('top_rated'),
+    },
+    {
+      key: 'categories',
+      label: t('التصنيفات والأنواع', 'Categories'),
+      icon: LayoutGrid,
+      onClick: () => {
+        onSelectBottomTab('categories');
+        onClose();
+      },
+    },
+    {
+      key: 'favorites',
+      label: t('المفضلة', 'Favorites'),
+      icon: Heart,
+      count: favoritesCount,
+      onClick: () => {
+        onSelectBottomTab('favorites');
+        onClose();
+      },
+    },
+    {
+      key: 'history',
+      label: t('سجل المشاهدة', 'Watch History'),
+      icon: Clock,
+      count: historyCount,
+      onClick: () => {
+        onSelectBottomTab('history');
+        onClose();
+      },
+    },
   ];
+
+  if (googleUser) {
+    menuItems.push({
+      key: 'account',
+      label: googleUser.name || t('حسابي', 'Profile'),
+      subtitle: googleUser.email,
+      avatarUrl: googleUser.picture || googleUser.photoURL,
+      icon: User,
+      onClick: () => {
+        onClose();
+        onOpenProfileModal();
+      },
+    });
+  } else {
+    menuItems.push(
+      {
+        key: 'account',
+        label: t('تسجيل الدخول', 'Sign In'),
+        icon: LogIn,
+        onClick: () => {
+          onClose();
+          onOpenLogin();
+        },
+      },
+      {
+        key: 'register',
+        label: t('إنشاء حساب جديد', 'Create Account'),
+        icon: UserPlus,
+        onClick: () => {
+          onClose();
+          onOpenRegister();
+        },
+      }
+    );
+  }
+
+  if (canAccessAdmin) {
+    menuItems.push({
+      key: 'admin',
+      label: isDeveloperUser
+        ? t('حساب مطور', 'Developer Console')
+        : t('لوحة الإدارة المتعاونة', 'Admin Console'),
+      icon: ShieldCheck,
+      onClick: () => {
+        onClose();
+        onOpenAdminDashboard();
+      },
+    });
+  }
+
+  const CollapseChevron =
+    dir === 'ltr'
+      ? isCollapsed
+        ? ChevronRight
+        : ChevronLeft
+      : isCollapsed
+      ? ChevronLeft
+      : ChevronRight;
+
+  const renderActiveRowBackdrop = (isHighlighted: boolean) => {
+    if (!isHighlighted) return null;
+    return (
+      <motion.span
+        layoutId="settingsMonochromeActiveBox"
+        transition={{ type: 'spring', stiffness: 430, damping: 32 }}
+        style={{
+          background:
+            'linear-gradient(125deg, rgba(255,255,255,0.13) 0%, rgba(28,28,32,0.92) 34%, rgba(12,12,15,0.98) 76%, rgba(255,255,255,0.08) 100%)',
+        }}
+        className="pointer-events-none absolute inset-0 rounded-xl border border-white/60 shadow-[inset_0_1px_0_rgba(255,255,255,0.28),0_6px_18px_rgba(0,0,0,0.45)]"
+      />
+    );
+  };
+
+  const renderMenuRow = (item: MenuRowConfig) => {
+    const Icon = item.icon;
+    const isHighlighted = highlightedKey === item.key;
+
+    return (
+      <motion.button
+        key={item.key}
+        type="button"
+        onClick={item.onClick}
+        onMouseEnter={() => setHoveredKey(item.key)}
+        onFocus={() => setHoveredKey(item.key)}
+        whileTap={{ scale: 0.985 }}
+        title={isCollapsed ? item.label : undefined}
+        className={`relative w-full min-h-[44px] rounded-xl flex items-center transition-colors cursor-pointer group outline-none border ${
+          isCollapsed ? 'justify-center px-0' : 'justify-between px-2.5'
+        } ${
+          isHighlighted
+            ? 'border-transparent bg-transparent'
+            : 'border-white/[0.07] bg-[#161619] hover:bg-[#1b1b1f] hover:border-white/[0.13]'
+        }`}
+      >
+        {renderActiveRowBackdrop(isHighlighted)}
+
+        <div
+          className={`relative z-10 flex items-center min-w-0 ${
+            isCollapsed ? 'justify-center' : 'gap-2.5'
+          }`}
+        >
+          {/* Rounded-Square Icon Tile: Solid White on Active, Dark Outlined Box on Inactive */}
+          <span
+            className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 overflow-hidden transition-all duration-200 ${
+              item.avatarUrl
+                ? isHighlighted
+                  ? 'ring-2 ring-white bg-white'
+                  : 'ring-1 ring-white/20 bg-[#1e1e23]'
+                : isHighlighted
+                ? 'bg-white text-[#0d0d0f] shadow-[0_2px_10px_rgba(255,255,255,0.25)]'
+                : 'border border-white/[0.11] bg-[#1c1c20] text-zinc-300 group-hover:text-white group-hover:border-white/25'
+            }`}
+          >
+            {item.avatarUrl ? (
+              <img
+                src={item.avatarUrl}
+                alt={item.label}
+                referrerPolicy="no-referrer"
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <Icon className="w-[15px] h-[15px] stroke-[2]" />
+            )}
+          </span>
+
+          <AnimatePresence initial={false}>
+            {!isCollapsed && (
+              <motion.div
+                initial={{ opacity: 0, x: dir === 'ltr' ? -5 : 5 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: dir === 'ltr' ? -5 : 5 }}
+                transition={{ duration: 0.15 }}
+                className="min-w-0 flex flex-col text-start"
+              >
+                <span
+                  className={`text-[13.5px] tracking-tight truncate whitespace-nowrap ${
+                    isHighlighted
+                      ? 'text-white font-semibold'
+                      : 'text-zinc-200 group-hover:text-white font-medium'
+                  }`}
+                >
+                  {item.label}
+                </span>
+                {item.subtitle && (
+                  <span className="text-[10px] text-zinc-400 truncate font-mono leading-tight">
+                    {item.subtitle}
+                  </span>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* Clean Minimal Count Indicator */}
+        {!isCollapsed && typeof item.count === 'number' && item.count > 0 && (
+          <span
+            className={`relative z-10 min-w-[22px] h-[20px] px-1.5 rounded-md border text-[11px] font-medium tabular-nums flex items-center justify-center shrink-0 transition-colors ${
+              isHighlighted
+                ? 'border-white/40 bg-white/15 text-white'
+                : 'border-white/[0.1] bg-white/[0.03] text-zinc-400'
+            }`}
+          >
+            {item.count}
+          </span>
+        )}
+      </motion.button>
+    );
+  };
 
   return (
     <AnimatePresence>
@@ -121,381 +375,222 @@ export const SideMenuDrawer: React.FC<SideMenuDrawerProps> = ({
           dir={dir}
           className="fixed inset-0 z-[60] overflow-hidden select-none font-sans"
         >
-          {/* Dark overlay backdrop */}
+          {/* Dimmed Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
             onClick={onClose}
-            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+            className="absolute inset-0 bg-black/80 backdrop-blur-md"
           />
 
-          {/* Side Drawer Panel with Directional Spring Slide */}
-          <motion.div
-            initial={{ x: dir === 'ltr' ? '-100%' : '100%' }}
-            animate={{ x: 0 }}
-            exit={{ x: dir === 'ltr' ? '-100%' : '100%' }}
-            transition={{ type: 'spring', stiffness: 360, damping: 34 }}
-            className={`absolute top-0 bottom-0 w-[88vw] max-w-[360px] bg-[#0e0f13] border-white/[0.08] shadow-2xl flex flex-col h-full max-h-screen overflow-y-auto overscroll-contain z-10 ${
-              dir === 'ltr' ? 'left-0 border-r text-left' : 'right-0 border-l text-right'
+          {/* Matte Obsidian Floating Sidebar Panel (Expanded & Collapsed Icon Rail) */}
+          <motion.aside
+            initial={{
+              x: dir === 'ltr' ? '-108%' : '108%',
+              opacity: 0.65,
+            }}
+            animate={{
+              x: 0,
+              opacity: 1,
+              width: isCollapsed ? 66 : 302,
+              borderRadius: isCollapsed ? 18 : 20,
+            }}
+            exit={{
+              x: dir === 'ltr' ? '-108%' : '108%',
+              opacity: 0.4,
+            }}
+            transition={{ type: 'spring', stiffness: 360, damping: 32 }}
+            onMouseLeave={() => setHoveredKey(null)}
+            style={{ maxWidth: 'calc(100vw - 24px)' }}
+            className={`absolute top-3 bottom-3 flex flex-col overflow-hidden bg-[#111113] border border-white/[0.07] shadow-[0_24px_80px_rgba(0,0,0,0.9)] z-10 ${
+              dir === 'ltr' ? 'left-3 text-left' : 'right-3 text-right'
             }`}
           >
-            {/* Clean Minimal Centered Header */}
-            <div className="relative flex items-center justify-center px-4 pt-5 pb-3 shrink-0">
-              <h2 className="text-base font-black text-white tracking-tight">
-                {t('الإعدادات والقائمة', 'Settings & Menu')}
-              </h2>
-              <button
-                onClick={onClose}
-                type="button"
-                className={`absolute ${
-                  dir === 'ltr' ? 'right-4' : 'left-4'
-                } w-8 h-8 rounded-full bg-[#181920] hover:bg-zinc-800 text-zinc-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer border border-white/[0.06]`}
-                title={t('إغلاق القائمة', 'Close menu')}
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="px-4 pb-6 space-y-5 flex-1">
-              {/* 1. User Profile Summary Card */}
-              {googleUser ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    onClose();
-                    onOpenProfileModal();
-                  }}
-                  className="w-full flex items-center gap-3.5 p-3.5 rounded-2xl bg-[#17181f] hover:bg-[#1c1d26] border border-white/[0.06] transition-all cursor-pointer group text-start"
-                >
-                  <div className="relative shrink-0">
-                    {googleUser.picture || googleUser.photoURL ? (
-                      <img
-                        src={googleUser.picture || googleUser.photoURL}
-                        alt={googleUser.name}
-                        referrerPolicy="no-referrer"
-                        className="w-12 h-12 rounded-full object-cover border border-white/15"
-                      />
-                    ) : (
-                      <div className="w-12 h-12 rounded-full bg-zinc-800 text-[#F7C600] flex items-center justify-center font-black text-base border border-white/10">
-                        {(googleUser.displayName || googleUser.name || 'G').trim().charAt(0).toUpperCase()}
-                      </div>
-                    )}
-                    <div
-                      className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-[#F7C600] text-black flex items-center justify-center shadow"
-                      title={t('حساب مؤكد', 'Verified Account')}
-                    >
-                      <ShieldCheck className="w-2.5 h-2.5 stroke-[2.5]" />
-                    </div>
-                  </div>
-
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <h4
-                        dir={/^[A-Za-z0-9_.\s-]+$/.test(googleUser.name || '') ? 'ltr' : undefined}
-                        className="text-sm font-black text-white group-hover:text-[#F7C600] transition-colors truncate"
-                      >
-                        {googleUser.name}
-                      </h4>
-                    </div>
-                    <p className="text-[11px] text-zinc-400 truncate mt-0.5 font-mono">
-                      {googleUser.email}
-                    </p>
-                    <p className="text-[10px] text-zinc-500 mt-0.5 font-medium">
-                      {isDeveloperUser
-                        ? t('المطور والمشرف', 'Developer & Admin')
-                        : hasAdminAccess
-                        ? t('مشرف متعاون', 'Co-Editor Admin')
-                        : t('عضو مفعل', 'Member')}
-                    </p>
-                  </div>
-
-                  <ArrowEnd className="w-4 h-4 text-zinc-500 group-hover:text-zinc-200 transition-colors shrink-0" />
-                </button>
-              ) : (
-                <div className="rounded-2xl bg-[#17181f] border border-white/[0.06] p-3.5 space-y-3">
-                  <div
-                    onClick={() => {
-                      onClose();
-                      onOpenLogin();
-                    }}
-                    className="flex items-center gap-3 cursor-pointer group"
-                  >
-                    <div className="w-12 h-12 rounded-full bg-[#22232c] text-[#F7C600] flex items-center justify-center shrink-0 border border-white/[0.06]">
-                      <User className="w-5 h-5" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <h4 className="text-sm font-bold text-white group-hover:text-[#F7C600] transition-colors truncate">
-                        {t('تسجيل الدخول إلى حسابك', 'Sign In to Your Account')}
-                      </h4>
-                      <p className="text-[11px] text-zinc-400 truncate mt-0.5">
-                        {t('احفظ مفضلتك وسجل المشاهدة وصورتك', 'Save favorites, history & profile photo')}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onClose();
-                        onOpenLogin();
-                      }}
-                      className="py-2 px-2 rounded-xl bg-[#F7C600] hover:bg-[#ffd426] text-black text-xs font-black flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
-                    >
-                      <LogIn className="w-3.5 h-3.5 shrink-0" />
-                      <span>{t('تسجيل الدخول', 'Sign In')}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onClose();
-                        onOpenRegister();
-                      }}
-                      className="py-2 px-2 rounded-xl bg-[#22232c] hover:bg-[#2a2b36] text-zinc-100 border border-white/10 text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
-                    >
-                      <UserPlus className="w-3.5 h-3.5 shrink-0 text-[#F7C600]" />
-                      <span>{t('إنشاء حساب', 'Sign Up')}</span>
-                    </button>
-                  </div>
+            {/* Minimalist Top Bar: Brand Identity + Collapse Chevron & Close */}
+            <div
+              className={`relative z-10 flex items-center shrink-0 pt-4 pb-3 ${
+                isCollapsed ? 'justify-center px-2' : 'justify-between px-3.5'
+              }`}
+            >
+              {!isCollapsed && (
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="w-7 h-7 rounded-lg bg-white text-[#0d0d0f] flex items-center justify-center shrink-0 shadow-sm">
+                    <GoldenFlixEmblem className="w-4 h-4" />
+                  </span>
+                  <span className="text-[14.5px] font-bold tracking-tight text-white truncate">
+                    {brandTitle}
+                  </span>
                 </div>
               )}
 
-              {/* 2. Account & Preferences Group */}
-              <div>
-                <div className="text-[11px] font-bold text-zinc-400 px-1.5 mb-2">
-                  {t('الحساب والتفضيلات', 'Account & Preferences')}
-                </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setIsCollapsed((prev) => !prev)}
+                  className="w-8 h-8 rounded-lg text-zinc-400 hover:text-white hover:bg-white/[0.06] flex items-center justify-center transition-colors cursor-pointer"
+                  aria-label={
+                    isCollapsed ? t('توسيع القائمة', 'Expand') : t('طي القائمة', 'Collapse')
+                  }
+                  title={
+                    isCollapsed
+                      ? t('توسيع القائمة', 'Expand Menu')
+                      : t('طي للأيقونات', 'Collapse Rail')
+                  }
+                >
+                  <CollapseChevron className="w-4 h-4 stroke-[2]" />
+                </button>
 
-                <div className="rounded-2xl bg-[#17181f] border border-white/[0.06] overflow-hidden divide-y divide-white/[0.06]">
-                  {/* Language Row */}
-                  <div className="px-3.5 py-2.5 flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <Globe className="w-[18px] h-[18px] text-zinc-300 shrink-0 stroke-[1.9]" />
-                      <span className="text-xs font-bold text-zinc-100 truncate">
+                {!isCollapsed && (
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="w-8 h-8 rounded-lg text-zinc-400 hover:text-white hover:bg-white/[0.06] flex items-center justify-center transition-colors cursor-pointer"
+                    aria-label={t('إغلاق الإعدادات', 'Close Settings')}
+                    title={t('إغلاق', 'Close')}
+                  >
+                    <X className="w-4 h-4 stroke-[2]" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Unified Stacked Box List — NO Section Dividers ("بدون اي جدوله") */}
+            <div className="relative z-10 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain scrollbar-none px-3">
+              <div className="space-y-2 pb-2">
+                {menuItems.map(renderMenuRow)}
+
+                {/* Language Switch Row matching identical stacked card box */}
+                <div
+                  onMouseEnter={() => setHoveredKey('language')}
+                  onClick={
+                    isCollapsed
+                      ? () => setLang(lang === 'ar' ? 'en' : 'ar')
+                      : undefined
+                  }
+                  role={isCollapsed ? 'button' : undefined}
+                  tabIndex={isCollapsed ? 0 : undefined}
+                  title={isCollapsed ? t('تبديل اللغة', 'Switch Language') : undefined}
+                  className={`relative w-full min-h-[44px] rounded-xl flex items-center transition-colors group border ${
+                    isCollapsed
+                      ? 'justify-center px-0 cursor-pointer'
+                      : 'justify-between px-2.5'
+                  } ${
+                    highlightedKey === 'language'
+                      ? 'border-transparent bg-transparent'
+                      : 'border-white/[0.07] bg-[#161619] hover:bg-[#1b1b1f] hover:border-white/[0.13]'
+                  }`}
+                >
+                  {renderActiveRowBackdrop(highlightedKey === 'language')}
+
+                  <div
+                    className={`relative z-10 flex items-center min-w-0 ${
+                      isCollapsed ? 'justify-center' : 'gap-2.5'
+                    }`}
+                  >
+                    <span
+                      className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-all duration-200 ${
+                        highlightedKey === 'language'
+                          ? 'bg-white text-[#0d0d0f] shadow-[0_2px_10px_rgba(255,255,255,0.25)]'
+                          : 'border border-white/[0.11] bg-[#1c1c20] text-zinc-300 group-hover:text-white group-hover:border-white/25'
+                      }`}
+                    >
+                      <Globe className="w-[15px] h-[15px] stroke-[2]" />
+                    </span>
+
+                    {!isCollapsed && (
+                      <span
+                        className={`text-[13.5px] tracking-tight truncate ${
+                          highlightedKey === 'language'
+                            ? 'text-white font-semibold'
+                            : 'text-zinc-200 group-hover:text-white font-medium'
+                        }`}
+                      >
                         {t('لغة الموقع', 'Language')}
                       </span>
-                    </div>
+                    )}
+                  </div>
 
-                    <div className="flex items-center gap-1 bg-[#101116] p-0.5 rounded-lg border border-white/[0.06] shrink-0">
+                  {!isCollapsed && (
+                    <div className="relative z-10 flex items-center gap-0.5 bg-[#0e0e10] p-0.5 rounded-lg border border-white/[0.1] shrink-0">
                       <button
                         type="button"
                         onClick={() => setLang('ar')}
-                        className={`relative px-2.5 py-1 rounded-md text-[11px] font-bold transition-colors cursor-pointer ${
-                          lang === 'ar' ? 'text-black font-black' : 'text-zinc-400 hover:text-white'
+                        className={`relative px-2 py-0.5 rounded-md text-[11px] font-semibold transition-colors cursor-pointer ${
+                          lang === 'ar' ? 'text-[#0d0d0f]' : 'text-zinc-400 hover:text-zinc-200'
                         }`}
                       >
                         {lang === 'ar' && (
                           <motion.span
-                            layoutId="drawerLangPill"
+                            layoutId="drawerLangPillMonochrome"
                             transition={{ type: 'spring', stiffness: 420, damping: 30 }}
-                            className="absolute inset-0 rounded-md bg-[#F7C600]"
+                            className="absolute inset-0 rounded-md bg-white shadow-sm"
                           />
                         )}
-                        <span className="relative z-10">العربية</span>
+                        <span className="relative z-10">عربي</span>
                       </button>
                       <button
                         type="button"
                         onClick={() => setLang('en')}
-                        className={`relative px-2.5 py-1 rounded-md text-[11px] font-bold transition-colors cursor-pointer ${
-                          lang === 'en' ? 'text-black font-black' : 'text-zinc-400 hover:text-white'
+                        className={`relative px-2 py-0.5 rounded-md text-[11px] font-semibold transition-colors cursor-pointer ${
+                          lang === 'en' ? 'text-[#0d0d0f]' : 'text-zinc-400 hover:text-zinc-200'
                         }`}
                       >
                         {lang === 'en' && (
                           <motion.span
-                            layoutId="drawerLangPill"
+                            layoutId="drawerLangPillMonochrome"
                             transition={{ type: 'spring', stiffness: 420, damping: 30 }}
-                            className="absolute inset-0 rounded-md bg-[#F7C600]"
+                            className="absolute inset-0 rounded-md bg-white shadow-sm"
                           />
                         )}
-                        <span className="relative z-10">English</span>
+                        <span className="relative z-10">EN</span>
                       </button>
                     </div>
-                  </div>
-
-                  {/* Admin Console Row (only for authorized developer / co-editors) */}
-                  {canAccessAdmin && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onClose();
-                        onOpenAdminDashboard();
-                      }}
-                      className="w-full px-3.5 py-3 flex items-center justify-between gap-2 hover:bg-white/[0.03] transition-colors cursor-pointer"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <ShieldCheck className="w-[18px] h-[18px] text-[#F7C600] shrink-0 stroke-[1.9]" />
-                        <span className="text-xs font-bold text-[#F7C600] truncate">
-                          {isDeveloperUser
-                            ? t('حساب مطور', 'Developer Console')
-                            : t('لوحة الإدارة المتعاونة', 'Admin Console')}
-                        </span>
-                      </div>
-                      <ArrowEnd className="w-4 h-4 text-zinc-500 shrink-0" />
-                    </button>
                   )}
                 </div>
-              </div>
-
-              {/* 3. Browse & Sections Group */}
-              <div>
-                <div className="text-[11px] font-bold text-zinc-400 px-1.5 mb-2">
-                  {t('الأقسام والتصفح', 'Browse & Sections')}
-                </div>
-
-                <div className="rounded-2xl bg-[#17181f] border border-white/[0.06] overflow-hidden divide-y divide-white/[0.06]">
-                  {navItems.map((item) => {
-                    const Icon = item.icon;
-                    const isActive = activeTab === item.id;
-                    return (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() => handleNav(item.id)}
-                        className="w-full px-3.5 py-3 flex items-center justify-between gap-2 hover:bg-white/[0.03] active:bg-white/[0.05] transition-colors cursor-pointer"
-                      >
-                        <div className="flex items-center gap-3 min-w-0">
-                          <Icon
-                            className={`w-[18px] h-[18px] shrink-0 stroke-[1.9] ${
-                              isActive ? 'text-[#F7C600]' : item.iconAccent || 'text-zinc-300'
-                            }`}
-                          />
-                          <span
-                            className={`text-xs truncate ${
-                              isActive ? 'text-[#F7C600] font-black' : 'text-zinc-100 font-semibold'
-                            }`}
-                          >
-                            {lang === 'en' ? item.labelEn : item.labelAr}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          {isActive && (
-                            <span className="text-[11px] font-bold text-[#F7C600]">
-                              {t('نشط', 'Active')}
-                            </span>
-                          )}
-                          <ArrowEnd className="w-4 h-4 text-zinc-500" />
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* 4. Library & Personal Lists Group */}
-              <div>
-                <div className="text-[11px] font-bold text-zinc-400 px-1.5 mb-2">
-                  {t('التصنيفات والمكتبة', 'Categories & Library')}
-                </div>
-
-                <div className="rounded-2xl bg-[#17181f] border border-white/[0.06] overflow-hidden divide-y divide-white/[0.06]">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onSelectBottomTab('categories');
-                      onClose();
-                    }}
-                    className="w-full px-3.5 py-3 flex items-center justify-between gap-2 hover:bg-white/[0.03] transition-colors cursor-pointer"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <LayoutGrid className="w-[18px] h-[18px] text-amber-400 shrink-0 stroke-[1.9]" />
-                      <span className="text-xs font-semibold text-zinc-100 truncate">
-                        {t('جميع التصنيفات والأنواع', 'All Categories & Genres')}
-                      </span>
-                    </div>
-                    <ArrowEnd className="w-4 h-4 text-zinc-500 shrink-0" />
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onSelectBottomTab('favorites');
-                      onClose();
-                    }}
-                    className="w-full px-3.5 py-3 flex items-center justify-between gap-2 hover:bg-white/[0.03] transition-colors cursor-pointer"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <Heart className="w-[18px] h-[18px] text-rose-400 shrink-0 stroke-[1.9]" />
-                      <span className="text-xs font-semibold text-zinc-100 truncate">
-                        {t('قائمتي المفضلة', 'My Favorites')}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      {favoritesCount > 0 && (
-                        <span className="text-[11px] text-zinc-400 font-mono tabular-nums">
-                          {favoritesCount}
-                        </span>
-                      )}
-                      <ArrowEnd className="w-4 h-4 text-zinc-500" />
-                    </div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onSelectBottomTab('history');
-                      onClose();
-                    }}
-                    className="w-full px-3.5 py-3 flex items-center justify-between gap-2 hover:bg-white/[0.03] transition-colors cursor-pointer"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <Clock className="w-[18px] h-[18px] text-sky-400 shrink-0 stroke-[1.9]" />
-                      <span className="text-xs font-semibold text-zinc-100 truncate">
-                        {t('سجل المشاهدة', 'Watch History')}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      {historyCount > 0 && (
-                        <span className="text-[11px] text-zinc-400 font-mono tabular-nums">
-                          {historyCount}
-                        </span>
-                      )}
-                      <ArrowEnd className="w-4 h-4 text-zinc-500" />
-                    </div>
-                  </button>
-                </div>
-              </div>
-
-              {/* Quiet Footer Version */}
-              <div className="pt-1 text-center text-[10px] text-zinc-500 font-mono">
-                GoldenFlix v2.5
-              </div>
-
-              {/* Miniature Looping Site-Link Video at Very Bottom */}
-              <div className="pb-4 flex flex-col items-center justify-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={handleCopySiteLink}
-                  title={t('اضغط لنسخ رابط الموقع', 'Click to copy site link')}
-                  aria-label={t(
-                    'نسخ رابط الموقع https://gr-flix.vercel.app/',
-                    'Copy site link https://gr-flix.vercel.app/'
-                  )}
-                  className="relative w-[128px] aspect-video rounded-xl overflow-hidden border border-white/10 hover:border-[#F7C600]/45 shadow-md transition-colors cursor-pointer active:scale-[0.98] bg-[#17181f]"
-                >
-                  <video
-                    src="/assets/settings-site-link.mp4"
-                    autoPlay
-                    loop
-                    muted
-                    playsInline
-                    disablePictureInPicture
-                    controls={false}
-                    className="w-full h-full object-cover pointer-events-none select-none"
-                  />
-                </button>
-
-                {copiedLink && (
-                  <span className="text-[10px] font-bold text-[#F7C600]">
-                    {t('تم نسخ الرابط ✓', 'Link copied ✓')}
-                  </span>
-                )}
               </div>
             </div>
-          </motion.div>
+
+            {/* Centered Transparent Miniature Site-Link Video at Bottom (No Box, No Side Text) */}
+            <div className="relative z-10 shrink-0 px-3 pt-2 pb-3 flex flex-col items-center justify-center gap-2">
+              <button
+                type="button"
+                onClick={handleCopySiteLink}
+                title="https://gr-flix.vercel.app/"
+                aria-label={t(
+                  'نسخ رابط الموقع https://gr-flix.vercel.app/',
+                  'Copy site link https://gr-flix.vercel.app/'
+                )}
+                className={`bg-transparent border-0 p-0 shadow-none outline-none cursor-pointer active:scale-[0.97] transition-transform flex items-center justify-center ${
+                  isCollapsed ? 'w-11 aspect-video' : 'w-[128px] aspect-video'
+                }`}
+              >
+                <video
+                  src="/assets/settings-site-link.mp4"
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  disablePictureInPicture
+                  controls={false}
+                  className="w-full h-full object-contain bg-transparent pointer-events-none select-none"
+                />
+              </button>
+
+              {isCollapsed && (
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="w-9 h-9 rounded-lg text-zinc-400 hover:text-white hover:bg-white/[0.06] flex items-center justify-center transition-colors cursor-pointer"
+                  aria-label={t('إغلاق الإعدادات', 'Close Settings')}
+                  title={t('إغلاق', 'Close')}
+                >
+                  <X className="w-4 h-4 stroke-[2]" />
+                </button>
+              )}
+            </div>
+          </motion.aside>
         </div>
       )}
     </AnimatePresence>

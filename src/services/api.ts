@@ -798,3 +798,47 @@ export const fetchVideoStreams = async (
   }
 };
 
+export interface ExtractedStreamCandidate {
+  url: string;
+  proxiedUrl: string;
+  format: 'hls' | 'mp4' | 'webm' | 'dash';
+  quality: string;
+  label: string;
+  referer: string;
+  preferProxy: boolean;
+  priority: number;
+}
+
+export interface UniversalExtractionResponse {
+  ok: boolean;
+  inputUrl: string;
+  finalUrl: string;
+  kind: 'stream' | 'embed' | 'youtube' | 'unresolved';
+  streams: ExtractedStreamCandidate[];
+  embedUrl?: string;
+  proxiedEmbedUrl?: string;
+  frameBlocked?: boolean;
+  cloudflareBlocked?: boolean;
+  httpStatus?: number;
+  posterUrl?: string;
+  title?: string;
+  diagnostics?: string;
+  error?: string;
+}
+
+// Extract direct playable streams or forced-playback proxy URLs from ANY external website/platform link
+export const extractExternalStream = async (
+  url: string,
+  referer?: string
+): Promise<UniversalExtractionResponse | null> => {
+  try {
+    const params = new URLSearchParams({ url });
+    if (referer) params.set('referer', referer);
+    const res = await fetch(`/api/stream/extract?${params.toString()}`);
+    const data = await safeParseJsonResponse(res, '');
+    return data && typeof data === 'object' ? (data as UniversalExtractionResponse) : null;
+  } catch {
+    return null;
+  }
+};
+

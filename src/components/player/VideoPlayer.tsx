@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Hls from 'hls.js';
+import * as dashjs from 'dashjs';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   AlertCircle,
@@ -17,9 +18,9 @@ import {
   Minimize,
   Pause,
   Play,
-  RefreshCw,
   RotateCcw,
   RotateCw,
+  RefreshCw,
   Server,
   Settings,
   SlidersHorizontal,
@@ -32,7 +33,13 @@ import {
 } from 'lucide-react';
 import { Episode, MediaItem, PlayerSettingsConfig, VideoSourceOption } from '../../types';
 import { PlayerCinemaIntro } from './PlayerCinemaIntro';
-import { fetchVideoStreams, VideoStreamsResponse } from '../../services/api';
+import {
+  ExtractedStreamCandidate,
+  extractExternalStream,
+  fetchVideoStreams,
+  UniversalExtractionResponse,
+  VideoStreamsResponse,
+} from '../../services/api';
 import { getMediaProgress, saveWatchProgress } from '../../services/storage';
 import {
   getActiveSubtitleText,
@@ -53,9 +60,18 @@ import {
   YTPlayerInstance,
 } from '../../utils/youtube';
 import {
+  buildEmbedProxyUrl,
+  buildStreamProxyUrl,
   convertToUniversalEmbedUrl,
   getPipedMirrorEmbedUrl,
+  isDashStreamUrl,
+  isDirectMediaFileUrl,
+  isExternalHttpUrl,
   isHlsStreamUrl,
+  isLikelyFrameBlockedHost,
+  isProxiedEmbedUrl,
+  isProxiedStreamUrl,
+  normalizeExternalHttpUrl,
 } from '../../utils/videoEngines';
 import {
   formatQualityLabel,
@@ -93,13 +109,15 @@ interface OrderedServerItem {
   shortLabel: string;
   label: string;
   url: string;
-  format: 'mp4' | 'hls' | 'webm' | 'youtube' | 'embed';
+  format: 'mp4' | 'hls' | 'dash' | 'webm' | 'youtube' | 'embed';
   qualityLabel: string;
   qualityRank: number;
   isDefault: boolean;
+  referer?: string;
   engineType:
     | 'direct-mp4'
     | 'hls-adaptive'
+    | 'dash-adaptive'
     | 'youtube-embed'
     | 'youtube-nocookie'
     | 'universal-embed'
@@ -178,6 +196,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<Hls | null>(null);
+  const dashRef = useRef<dashjs.MediaPlayerClass | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const controlsTimerRef = useRef<number | null>(null);
   const seekFeedbackTimerRef = useRef<number | null>(null);
@@ -194,6 +213,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
   const isPlayingRef = useRef<boolean>(false);
   const revealedOnPointerDownRef = useRef<boolean>(false);
   const failedServerIdsRef = useRef<Set<string>>(new Set());
+  const proxyTriedUrlsRef = useRef<Set<string>>(new Set());
   const failoverTimerRef = useRef<number | null>(null);
 
   // Flatten series episodes if available
@@ -246,7 +266,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
   const isPreRollIntroActiveRef = useRef<boolean>(true);
 
   // Playback & stream state
-  const [selectedSourceUrl, setSelectedSourceUrl] = useState<string>(baseVideoUrl);
+  const [selectedSourceUrl, setSelectedSourceUrl] = useState<string>(() =>
+    normalizeExternalHttpUrl(baseVideoUrl)
+  );
   const [activeServerId, setActiveServerId] = useState<string>(() =>
     extractLocalVideoFilename(baseVideoUrl)
       ? 'server-gr'
@@ -258,6 +280,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
   const [resolvedServerAlts, setResolvedServerAlts] = useState<
     Array<{ label: string; url: string; format: string }>
   >([]);
+  const [extractedByUrl, setExtractedByUrl] = useState<Record<string, UniversalExtractionResponse>>({});
+  const [pendingExtractionUrls, setPendingExtractionUrls] = useState<Record<string, boolean>>({});
   const [failoverNotice, setFailoverNotice] = useState<string | null>(null);
   const [ytQualityOptions, setYtQualityOptions] = useState<QualityOption[]>([]);
   const [activeYtQualityId, setActiveYtQualityId] = useState<string>('auto');
@@ -403,10 +427,84 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
     };
   }, [media.id, activeEpisode?.id, baseVideoUrl]);
 
+  // Universal deep extraction for any external http(s) non-YouTube URL so ANY platform link plays in GoldenFlix's real player
+  const externalCandidatesToExtract = useMemo(() => {
+    const rawUrls = [
+      baseVideoUrl,
+      ...availableCustomSources.map((s) => s?.url || ''),
+      ...resolvedServerAlts.map((s) => s?.url || ''),
+    ];
+    const unique: string[] = [];
+    const seen = new Set<string>();
+    for (const raw of rawUrls) {
+      const norm = normalizeExternalHttpUrl(raw);
+      if (
+        !norm ||
+        seen.has(norm) ||
+        !isExternalHttpUrl(norm) ||
+        isYouTubeUrl(norm) ||
+        isProxiedStreamUrl(norm) ||
+        isProxiedEmbedUrl(norm)
+      ) {
+        continue;
+      }
+      seen.add(norm);
+      unique.push(norm);
+    }
+    return unique.slice(0, 5);
+  }, [availableCustomSources, baseVideoUrl, resolvedServerAlts]);
+
+  useEffect(() => {
+    const toFetch = externalCandidatesToExtract.filter((u) => !extractedByUrl[u]);
+    if (toFetch.length === 0) return;
+
+    let cancelled = false;
+    setPendingExtractionUrls((prev) => {
+      const next = { ...prev };
+      toFetch.forEach((u) => {
+        next[u] = true;
+      });
+      return next;
+    });
+
+    toFetch.forEach((targetUrl) => {
+      void extractExternalStream(targetUrl)
+        .then((res) => {
+          if (cancelled) return;
+          if (res) {
+            setExtractedByUrl((prev) => ({ ...prev, [targetUrl]: res }));
+          } else {
+            setExtractedByUrl((prev) => ({
+              ...prev,
+              [targetUrl]: {
+                ok: false,
+                inputUrl: targetUrl,
+                finalUrl: targetUrl,
+                kind: 'unresolved',
+                streams: [],
+              },
+            }));
+          }
+        })
+        .finally(() => {
+          if (cancelled) return;
+          setPendingExtractionUrls((prev) => {
+            const next = { ...prev };
+            delete next[targetUrl];
+            return next;
+          });
+        });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [externalCandidatesToExtract, retryToken]);
+
   const orderedServers = useMemo<OrderedServerItem[]>(() => {
     const rawList: Array<Omit<OrderedServerItem, 'orderNumber'>> = [];
     const seenKeys = new Set<string>();
-    const normalizeUrlKey = (u: string) => u.trim().split('?')[0];
+    const normalizeUrlKey = (u: string) => u.trim();
 
     let hasGrServer = false;
     let hasGServer = false;
@@ -441,6 +539,305 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
       });
     }
 
+    const pushExternalSourceWithExtraction = (
+      rawUrl: string,
+      opts: {
+        idPrefix: string;
+        shortLabel?: string;
+        rawLabel?: string;
+        declaredFormat?: string;
+        quality?: string;
+        isDefault?: boolean;
+        preferInsertFront?: boolean;
+      }
+    ) => {
+      const normalized = normalizeExternalHttpUrl(rawUrl);
+      if (!normalized) return;
+
+      const isYt = opts.declaredFormat === 'youtube' || isYouTubeUrl(normalized);
+      if (isYt) {
+        ytPrimaryUrl = ytPrimaryUrl || normalized;
+        const key = `yt::${normalized}`;
+        if (seenKeys.has(key)) return;
+        seenKeys.add(key);
+        const entry: Omit<OrderedServerItem, 'orderNumber'> = {
+          id: opts.idPrefix,
+          shortLabel: 'YouTube',
+          label: opts.rawLabel ? formatQualityLabel(opts.rawLabel) : 'مشغل يوتيوب القياسي (YouTube)',
+          url: normalized,
+          format: 'youtube',
+          qualityLabel: opts.quality || (opts.rawLabel ? formatQualityLabel(opts.rawLabel) : '1080p'),
+          qualityRank: getQualityRank(opts.quality || opts.rawLabel),
+          isDefault: Boolean(opts.isDefault) && !hasGrServer,
+          engineType: 'youtube-embed',
+        };
+        if (opts.preferInsertFront) rawList.unshift(entry);
+        else rawList.push(entry);
+        return;
+      }
+
+      const extraction = extractedByUrl[normalized];
+      const extractedStreams: ExtractedStreamCandidate[] = extraction?.streams || [];
+
+      const assignServerIdentity = (fallbackShort: string) => {
+        const rawLbl = (opts.rawLabel || '').trim();
+        const explicitGr = /\bgr\b/i.test(rawLbl) || opts.idPrefix === 'server-gr';
+        const explicitG = !explicitGr && (/\bg\b/i.test(rawLbl) || opts.idPrefix === 'server-g');
+
+        let assignedShort = fallbackShort || (rawLbl ? formatQualityLabel(rawLbl) : '');
+        let assignedId = opts.idPrefix;
+
+        if (explicitGr || (!hasGrServer && !explicitG)) {
+          hasGrServer = true;
+          assignedShort = explicitGr ? rawLbl : 'مشغل GR';
+          if (!rawList.some((x) => x.id === 'server-gr')) assignedId = 'server-gr';
+        } else if (explicitG || !hasGServer) {
+          hasGServer = true;
+          assignedShort = explicitG ? rawLbl : 'مشغل G';
+          if (!rawList.some((x) => x.id === 'server-g')) assignedId = 'server-g';
+        }
+        return { assignedId, assignedShort };
+      };
+
+      // Case A: Extractor uncovered real playable media streams (HLS / MP4 / WebM / DASH) -> ALWAYS play in GoldenFlix's real player!
+      if (extractedStreams.length > 0) {
+        const insertedEntries: Array<Omit<OrderedServerItem, 'orderNumber'>> = [];
+
+        extractedStreams.slice(0, 4).forEach((cand, cIdx) => {
+          const primaryUrl = cand.preferProxy ? cand.proxiedUrl : cand.url;
+          const secondaryUrl = cand.preferProxy ? cand.url : cand.proxiedUrl;
+
+          const engineType: OrderedServerItem['engineType'] =
+            cand.format === 'hls'
+              ? 'hls-adaptive'
+              : cand.format === 'dash'
+              ? 'dash-adaptive'
+              : 'direct-mp4';
+
+          const { assignedId, assignedShort } = assignServerIdentity(
+            cIdx === 0 ? 'مشغل GR' : cIdx === 1 ? 'مشغل G' : `جودة ${cand.quality}`
+          );
+
+          if (!seenKeys.has(primaryUrl)) {
+            seenKeys.add(primaryUrl);
+            insertedEntries.push({
+              id: cIdx === 0 ? assignedId : `${opts.idPrefix}-ext-${cIdx}`,
+              shortLabel: assignedShort,
+              label: `${assignedShort} • ${cand.label}${cand.preferProxy ? ' (بث مباشر محمي)' : ''}`,
+              url: primaryUrl,
+              format: cand.format,
+              qualityLabel: cand.quality,
+              qualityRank: getQualityRank(cand.quality),
+              isDefault: Boolean(opts.isDefault) && cIdx === 0,
+              referer: cand.referer,
+              engineType,
+            });
+          }
+
+          // Add opposite (proxy/direct) mirror for the top stream so automatic failover stays inside real <video> player
+          if (cIdx === 0 && secondaryUrl && !seenKeys.has(secondaryUrl)) {
+            seenKeys.add(secondaryUrl);
+            const altIdentity = assignServerIdentity(cand.preferProxy ? 'المباشر' : 'مشغل G');
+            insertedEntries.push({
+              id: altIdentity.assignedId === assignedId ? `${opts.idPrefix}-mirror` : altIdentity.assignedId,
+              shortLabel: altIdentity.assignedShort,
+              label: `${altIdentity.assignedShort} • ${
+                cand.preferProxy ? 'اتصال مباشر من المصدر' : 'سيرفر تجاوز الحجب Proxy'
+              }`,
+              url: secondaryUrl,
+              format: cand.format,
+              qualityLabel: cand.quality,
+              qualityRank: getQualityRank(cand.quality),
+              isDefault: false,
+              referer: cand.referer,
+              engineType,
+            });
+          }
+        });
+
+        // Optional embed backup ONLY at the very end in case all direct/proxy streams fail
+        if (extraction?.proxiedEmbedUrl && !seenKeys.has(extraction.proxiedEmbedUrl)) {
+          seenKeys.add(extraction.proxiedEmbedUrl);
+          insertedEntries.push({
+            id: `${opts.idPrefix}-embed-fallback`,
+            shortLabel: 'مشغل بديل',
+            label: 'المشغل البديل • عرض الصفحة المدمجة',
+            url: extraction.proxiedEmbedUrl,
+            format: 'embed',
+            qualityLabel: 'Auto',
+            qualityRank: 100,
+            isDefault: false,
+            engineType: 'universal-embed',
+          });
+        }
+
+        if (opts.preferInsertFront) {
+          rawList.unshift(...insertedEntries);
+        } else {
+          rawList.push(...insertedEntries);
+        }
+        return;
+      }
+
+      // Case B: Extraction returned embed fallback (no raw .m3u8/.mp4 found on page)
+      if (extraction && extraction.kind === 'embed' && (extraction.embedUrl || extraction.proxiedEmbedUrl)) {
+        const directEmbed = convertToUniversalEmbedUrl(extraction.embedUrl || normalized) || extraction.embedUrl;
+        const mustUseProxyFirst =
+          Boolean(extraction.frameBlocked) ||
+          Boolean(extraction.cloudflareBlocked) ||
+          isLikelyFrameBlockedHost(directEmbed || normalized);
+        const proxiedEmbed =
+          extraction.proxiedEmbedUrl ||
+          (directEmbed ? buildEmbedProxyUrl(directEmbed, normalized) : buildEmbedProxyUrl(normalized));
+
+        if (mustUseProxyFirst && proxiedEmbed) {
+          const { assignedId, assignedShort } = assignServerIdentity('مشغل GR');
+          if (!seenKeys.has(proxiedEmbed)) {
+            seenKeys.add(proxiedEmbed);
+            const item: Omit<OrderedServerItem, 'orderNumber'> = {
+              id: assignedId,
+              shortLabel: assignedShort,
+              label: `${assignedShort} • مشغل كسر الحظر (Proxy Embed)`,
+              url: proxiedEmbed,
+              format: 'embed',
+              qualityLabel: opts.quality || 'HD',
+              qualityRank: getQualityRank(opts.quality),
+              isDefault: Boolean(opts.isDefault),
+              engineType: 'universal-embed',
+            };
+            if (opts.preferInsertFront) rawList.unshift(item);
+            else rawList.push(item);
+          }
+
+          if (directEmbed && !seenKeys.has(directEmbed)) {
+            seenKeys.add(directEmbed);
+            const alt = assignServerIdentity('مشغل G');
+            rawList.push({
+              id: alt.assignedId === assignedId ? `${opts.idPrefix}-direct-embed` : alt.assignedId,
+              shortLabel: alt.assignedShort,
+              label: `${alt.assignedShort} • المشغل المدمج التلقائي`,
+              url: directEmbed,
+              format: 'embed',
+              qualityLabel: 'HD',
+              qualityRank: 720,
+              isDefault: false,
+              engineType: 'universal-embed',
+            });
+          }
+          return;
+        }
+
+        const { assignedId, assignedShort } = assignServerIdentity('مشغل GR');
+
+        if (directEmbed && !seenKeys.has(directEmbed)) {
+          seenKeys.add(directEmbed);
+          const item: Omit<OrderedServerItem, 'orderNumber'> = {
+            id: assignedId,
+            shortLabel: assignedShort,
+            label: `${assignedShort} • المشغل المدمج التلقائي`,
+            url: directEmbed,
+            format: 'embed',
+            qualityLabel: opts.quality || 'HD',
+            qualityRank: getQualityRank(opts.quality),
+            isDefault: Boolean(opts.isDefault),
+            engineType: 'universal-embed',
+          };
+          if (opts.preferInsertFront) rawList.unshift(item);
+          else rawList.push(item);
+        }
+
+        if (proxiedEmbed && !seenKeys.has(proxiedEmbed)) {
+          seenKeys.add(proxiedEmbed);
+          const alt = assignServerIdentity('مشغل G');
+          rawList.push({
+            id: alt.assignedId === assignedId ? `${opts.idPrefix}-proxy-embed` : alt.assignedId,
+            shortLabel: alt.assignedShort,
+            label: `${alt.assignedShort} • مشغل كسر الحظر (Proxy Embed)`,
+            url: proxiedEmbed,
+            format: 'embed',
+            qualityLabel: 'HD',
+            qualityRank: 720,
+            isDefault: false,
+            engineType: 'universal-embed',
+          });
+        }
+        return;
+      }
+
+      // Case C: Pre-extraction or direct URL fallback
+      const rawEmbedUrl = convertToUniversalEmbedUrl(normalized);
+      const embedUrl =
+        rawEmbedUrl && isLikelyFrameBlockedHost(rawEmbedUrl)
+          ? buildEmbedProxyUrl(rawEmbedUrl, normalized)
+          : rawEmbedUrl;
+      const isHls = !embedUrl && (opts.declaredFormat === 'hls' || isHlsStreamUrl(normalized));
+      const isDash = !embedUrl && isDashStreamUrl(normalized);
+      const targetUrl =
+        embedUrl ||
+        (isLikelyFrameBlockedHost(normalized) ? buildEmbedProxyUrl(normalized) : normalized);
+      if (seenKeys.has(targetUrl)) return;
+      seenKeys.add(targetUrl);
+
+      const { assignedId, assignedShort } = assignServerIdentity(opts.rawLabel || 'مشغل GR');
+      const entry: Omit<OrderedServerItem, 'orderNumber'> = {
+        id: assignedId,
+        shortLabel: assignedShort,
+        label: opts.rawLabel
+          ? `${assignedShort} • ${formatQualityLabel(opts.rawLabel)}`
+          : `${assignedShort} • ${
+              isProxiedEmbedUrl(targetUrl)
+                ? 'مشغل كسر الحظر (Proxy Embed)'
+                : embedUrl
+                ? 'المشغل المدمج المستقل'
+                : isHls
+                ? 'البث التكيفي HLS'
+                : isDash
+                ? 'البث التكيفي DASH'
+                : 'سيرفر الموقع المباشر'
+            }`,
+        url: targetUrl,
+        format: embedUrl || isProxiedEmbedUrl(targetUrl) ? 'embed' : isHls ? 'hls' : isDash ? 'dash' : opts.declaredFormat === 'webm' ? 'webm' : 'mp4',
+        qualityLabel: opts.quality || (opts.rawLabel ? formatQualityLabel(opts.rawLabel) : 'الأصلية'),
+        qualityRank: getQualityRank(opts.quality || opts.rawLabel),
+        isDefault: Boolean(opts.isDefault),
+        engineType:
+          embedUrl || isProxiedEmbedUrl(targetUrl)
+            ? 'universal-embed'
+            : isHls
+            ? 'hls-adaptive'
+            : isDash
+            ? 'dash-adaptive'
+            : 'direct-mp4',
+      };
+      if (opts.preferInsertFront) rawList.unshift(entry);
+      else rawList.push(entry);
+
+      if (
+        extraction &&
+        !embedUrl &&
+        !isHls &&
+        !isDash &&
+        !isDirectMediaFileUrl(normalized) &&
+        isExternalHttpUrl(normalized)
+      ) {
+        const lastResortEmbed = extraction.proxiedEmbedUrl || buildEmbedProxyUrl(normalized);
+        if (!seenKeys.has(lastResortEmbed)) {
+          seenKeys.add(lastResortEmbed);
+          rawList.push({
+            id: `${opts.idPrefix}-forced-embed`,
+            shortLabel: 'مشغل بديل',
+            label: 'المشغل البديل • عرض الصفحة المدمجة',
+            url: lastResortEmbed,
+            format: 'embed',
+            qualityLabel: 'Auto',
+            qualityRank: 100,
+            isDefault: false,
+            engineType: 'universal-embed',
+          });
+        }
+      }
+    };
+
     const mergedCustomSources: VideoSourceOption[] = [
       ...availableCustomSources,
       ...resolvedServerAlts.map((alt, i) => ({
@@ -462,109 +859,26 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
       });
 
     sortedCustom.forEach((src, idx) => {
-      const isYt = src.format === 'youtube' || isYouTubeUrl(src.url);
-      if (isYt && !ytPrimaryUrl) {
-        ytPrimaryUrl = src.url;
-      }
-      const key = `${isYt ? 'yt' : 'direct'}::${normalizeUrlKey(src.url)}`;
-      if (!normalizeUrlKey(src.url) || seenKeys.has(key)) return;
-      seenKeys.add(key);
-
-      const embedUrl = !isYt ? convertToUniversalEmbedUrl(src.url) : null;
-      const isHls = !isYt && !embedUrl && (src.format === 'hls' || isHlsSource(src.url));
-
-      if (isYt) {
-        rawList.push({
-          id: src.id || `server-youtube-${idx}`,
-          shortLabel: 'YouTube',
-          label: src.label ? formatQualityLabel(src.label) : 'مشغل يوتيوب القياسي',
-          url: src.url,
-          format: 'youtube',
-          qualityLabel: src.label ? formatQualityLabel(src.label) : '1080p',
-          qualityRank: getQualityRank(src.label),
-          isDefault: Boolean(src.isDefault) && rawList.length === 0,
-          engineType: 'youtube-embed',
-        });
-        return;
-      }
-
-      const rawLabel = (src.label || '').trim();
-      const explicitGr = /\bgr\b/i.test(rawLabel) || src.id === 'server-gr';
-      const explicitG = !explicitGr && (/\bg\b/i.test(rawLabel) || src.id === 'server-g');
-
-      let assignedShort = rawLabel ? formatQualityLabel(rawLabel) : '';
-      let assignedId = src.id || `custom-${idx}`;
-
-      if (explicitGr || (!hasGrServer && !explicitG)) {
-        hasGrServer = true;
-        assignedShort = explicitGr ? rawLabel : 'مشغل GR';
-        assignedId = hasGrServer && !rawList.some((x) => x.id === 'server-gr') ? 'server-gr' : assignedId;
-      } else if (explicitG || !hasGServer) {
-        hasGServer = true;
-        assignedShort = explicitG ? rawLabel : 'مشغل G';
-        assignedId = hasGServer && !rawList.some((x) => x.id === 'server-g') ? 'server-g' : assignedId;
-      }
-
-      rawList.push({
-        id: assignedId,
-        shortLabel: assignedShort || 'مشغل GR',
-        label: rawLabel
-          ? `${assignedShort} • ${formatQualityLabel(rawLabel)}`
-          : `${assignedShort} • سيرفر الموقع`,
-        url: embedUrl || src.url,
-        format: embedUrl ? 'embed' : isHls ? 'hls' : src.format === 'webm' ? 'webm' : 'mp4',
-        qualityLabel: src.quality || (src.label ? formatQualityLabel(src.label) : 'HD'),
-        qualityRank: getQualityRank(src.quality || src.label),
+      pushExternalSourceWithExtraction(src.url, {
+        idPrefix: src.id || `custom-${idx}`,
+        rawLabel: src.label,
+        declaredFormat: src.format,
+        quality: src.quality,
         isDefault: Boolean(src.isDefault) && rawList.length === 0,
-        engineType: embedUrl ? 'universal-embed' : isHls ? 'hls-adaptive' : 'direct-mp4',
       });
     });
 
-    const baseKey = normalizeUrlKey(baseVideoUrl || '');
-    if (baseKey) {
-      const baseIsYt = isYouTubeUrl(baseVideoUrl);
-      const baseCheckKey = `${baseIsYt ? 'yt' : 'direct'}::${baseKey}`;
-      if (!seenKeys.has(baseCheckKey) && !seenKeys.has(baseKey)) {
-        seenKeys.add(baseCheckKey);
-        const embedUrl = !baseIsYt ? convertToUniversalEmbedUrl(baseVideoUrl) : null;
-        const isHls = !baseIsYt && !embedUrl && isHlsSource(baseVideoUrl);
-
-        if (baseIsYt) {
-          ytPrimaryUrl = ytPrimaryUrl || baseVideoUrl;
-          rawList.unshift({
-            id: 'server-youtube',
-            shortLabel: 'YouTube',
-            label: 'مشغل يوتيوب القياسي (YouTube)',
-            url: baseVideoUrl,
-            format: 'youtube',
-            qualityLabel: media.videoQuality ? formatQualityLabel(media.videoQuality) : '1080p',
-            qualityRank: getQualityRank(media.videoQuality),
-            isDefault: !hasGrServer,
-            engineType: 'youtube-embed',
-          });
-        } else {
-          const srvId = !hasGrServer ? 'server-gr' : !hasGServer ? 'server-g' : 'server-primary';
-          const shortLbl = !hasGrServer ? 'مشغل GR' : !hasGServer ? 'مشغل G' : 'الرئيسي';
-          if (!hasGrServer) hasGrServer = true;
-          else if (!hasGServer) hasGServer = true;
-          rawList.unshift({
-            id: srvId,
-            shortLabel: shortLbl,
-            label: `${shortLbl} • ${
-              embedUrl ? 'المشغل المدمج المستقل' : isHls ? 'البث التكيفي HLS' : 'سيرفر الموقع المباشر'
-            }`,
-            url: embedUrl || baseVideoUrl,
-            format: embedUrl ? 'embed' : isHls ? 'hls' : 'mp4',
-            qualityLabel: media.videoQuality ? formatQualityLabel(media.videoQuality) : 'الأصلية',
-            qualityRank: getQualityRank(media.videoQuality),
-            isDefault: true,
-            engineType: embedUrl ? 'universal-embed' : isHls ? 'hls-adaptive' : 'direct-mp4',
-          });
-        }
-      }
+    if (baseVideoUrl && baseVideoUrl.trim()) {
+      pushExternalSourceWithExtraction(baseVideoUrl, {
+        idPrefix: isYouTubeUrl(baseVideoUrl) ? 'server-youtube' : 'server-primary',
+        declaredFormat: isYouTubeUrl(baseVideoUrl) ? 'youtube' : undefined,
+        quality: media.videoQuality,
+        isDefault: rawList.length === 0,
+        preferInsertFront: rawList.length === 0,
+      });
     }
 
-    // Ensure GoldenFlix non-YouTube / mirror players GR and G are ALWAYS available as ready fallback/switch servers
+    // Ensure GoldenFlix non-YouTube / mirror players GR and G are ALWAYS available as ready fallback/switch servers for YouTube
     if (ytPrimaryUrl) {
       if (!hasGrServer) {
         hasGrServer = true;
@@ -600,12 +914,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
       }
     }
 
-    // Prioritize explicit non-YouTube GR/G first if a native stream exists, otherwise keep default YouTube + GR + G
     return rawList.map((item, idx) => ({
       ...item,
       orderNumber: idx + 1,
     }));
-  }, [availableCustomSources, baseVideoUrl, media.videoQuality, resolvedServerAlts, serverStreamData]);
+  }, [availableCustomSources, baseVideoUrl, extractedByUrl, media.videoQuality, resolvedServerAlts, serverStreamData]);
 
   const resolvedActiveServer = useMemo(() => {
     const byId = orderedServers.find((s) => s.id === activeServerId);
@@ -614,16 +927,92 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
     return byUrl || orderedServers[0] || null;
   }, [activeServerId, orderedServers, selectedSourceUrl]);
 
+  // Sync selectedSourceUrl automatically when universal extractor resolves a real stream for the active server
+  useEffect(() => {
+    if (
+      resolvedActiveServer?.url &&
+      resolvedActiveServer.url !== selectedSourceUrl &&
+      !isProxiedStreamUrl(selectedSourceUrl)
+    ) {
+      setSelectedSourceUrl(resolvedActiveServer.url);
+    }
+  }, [resolvedActiveServer?.url, selectedSourceUrl]);
+
+  const activeNormalizedSource = useMemo(
+    () => normalizeExternalHttpUrl(baseVideoUrl || selectedSourceUrl),
+    [baseVideoUrl, selectedSourceUrl]
+  );
+
+  const isWaitingForExtraction = useMemo(() => {
+    if (!activeNormalizedSource) return false;
+    if (!pendingExtractionUrls[activeNormalizedSource]) return false;
+    // Direct file/HLS links can start playing immediately while extraction completes; arbitrary webpage URLs wait cleanly so HTML isn't fed to <video>
+    if (isDirectMediaFileUrl(selectedSourceUrl) || isHlsStreamUrl(selectedSourceUrl) || isDashStreamUrl(selectedSourceUrl)) {
+      return false;
+    }
+    return isExternalHttpUrl(selectedSourceUrl) && !isYouTubeUrl(selectedSourceUrl);
+  }, [activeNormalizedSource, pendingExtractionUrls, selectedSourceUrl]);
+
   const activeEngineType = resolvedActiveServer?.engineType;
   const universalEmbedUrl = useMemo(() => {
+    if (isWaitingForExtraction) return null;
+    if (isProxiedStreamUrl(selectedSourceUrl)) return null;
+    if (isProxiedEmbedUrl(selectedSourceUrl)) return selectedSourceUrl;
     if (activeEngineType === 'universal-embed') {
-      return convertToUniversalEmbedUrl(selectedSourceUrl) || selectedSourceUrl;
+      const converted = convertToUniversalEmbedUrl(selectedSourceUrl) || selectedSourceUrl;
+      const ext = extractedByUrl[normalizeExternalHttpUrl(selectedSourceUrl)];
+      if (ext?.frameBlocked || isLikelyFrameBlockedHost(converted)) {
+        return ext?.proxiedEmbedUrl || buildEmbedProxyUrl(converted, baseVideoUrl);
+      }
+      return converted;
     }
-    if (!isYouTubeUrl(selectedSourceUrl) && !isHlsSource(selectedSourceUrl)) {
-      return convertToUniversalEmbedUrl(selectedSourceUrl);
+    if (
+      !isYouTubeUrl(selectedSourceUrl) &&
+      !isHlsStreamUrl(selectedSourceUrl) &&
+      !isDashStreamUrl(selectedSourceUrl) &&
+      !isDirectMediaFileUrl(selectedSourceUrl)
+    ) {
+      const ext = extractedByUrl[normalizeExternalHttpUrl(selectedSourceUrl)];
+      if (ext && ext.streams.length > 0) return null;
+      const converted = convertToUniversalEmbedUrl(selectedSourceUrl);
+      if (converted && (ext?.frameBlocked || isLikelyFrameBlockedHost(converted))) {
+        return ext?.proxiedEmbedUrl || buildEmbedProxyUrl(converted, baseVideoUrl);
+      }
+      return converted;
     }
     return null;
-  }, [activeEngineType, selectedSourceUrl]);
+  }, [activeEngineType, baseVideoUrl, extractedByUrl, isWaitingForExtraction, selectedSourceUrl]);
+
+  // Listen for runtime stream extraction or Cloudflare challenge bridge events from /api/stream/embed-proxy
+  useEffect(() => {
+    const onMessage = (ev: MessageEvent) => {
+      const data = ev.data;
+      if (!data || typeof data !== 'object') return;
+      if (data.type === 'goldenflix-extracted-stream' && typeof data.url === 'string') {
+        const streamUrl = data.url.trim();
+        if (/^https?:\/\//i.test(streamUrl)) {
+          const proxied = buildStreamProxyUrl(streamUrl, typeof data.referer === 'string' ? data.referer : undefined);
+          hasFatalErrorRef.current = false;
+          setErrorMessage(null);
+          setSelectedSourceUrl(proxied);
+        }
+      } else if (data.type === 'goldenflix-embed-status' && data.status === 'cloudflare-blocked') {
+        // Automatically fail over to an alternate working server if available (skipping direct frame-blocked copy)
+        const currentSrvId = resolvedActiveServer?.id || activeServerId;
+        const altValid = orderedServers.find(
+          (s) =>
+            s.id !== currentSrvId &&
+            !failedServerIdsRef.current.has(s.id) &&
+            !isLikelyFrameBlockedHost(s.url)
+        );
+        if (altValid) {
+          attemptAutomaticFailoverRef.current('المصدر محمي بتحقق أمان مباشر');
+        }
+      }
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [activeServerId, orderedServers, resolvedActiveServer?.id]);
 
   const isUniversalEmbedMode = Boolean(universalEmbedUrl);
   const isYouTubeSource = useMemo(
@@ -671,14 +1060,16 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
 
   // Sync source state when episode/media changes
   useEffect(() => {
+    const cleanBaseUrl = normalizeExternalHttpUrl(baseVideoUrl);
     manualQualityChosenRef.current = false;
     failedServerIdsRef.current.clear();
+    proxyTriedUrlsRef.current.clear();
     setFailoverNotice(null);
-    setSelectedSourceUrl(baseVideoUrl);
+    setSelectedSourceUrl(cleanBaseUrl);
     setActiveServerId(
-      extractLocalVideoFilename(baseVideoUrl)
+      extractLocalVideoFilename(cleanBaseUrl)
         ? 'server-gr'
-        : isYouTubeUrl(baseVideoUrl)
+        : isYouTubeUrl(cleanBaseUrl)
         ? 'server-youtube'
         : 'server-gr'
     );
@@ -1007,11 +1398,65 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
     attemptAutomaticFailoverRef.current = triggerFailoverToNextServer;
   }, [triggerFailoverToNextServer]);
 
-  // Initialize playback engine (YouTube IFrame API / YouTube-NoCookie / Universal Embed / HLS.js / Native MP4)
+  const trySwitchCurrentStreamToProxy = useCallback(
+    (reason?: string): boolean => {
+      if (!navigator.onLine) return false;
+      const currentUrl = selectedSourceUrl;
+      if (
+        !currentUrl ||
+        isProxiedStreamUrl(currentUrl) ||
+        isProxiedEmbedUrl(currentUrl) ||
+        !isExternalHttpUrl(currentUrl) ||
+        proxyTriedUrlsRef.current.has(currentUrl)
+      ) {
+        return false;
+      }
+
+      proxyTriedUrlsRef.current.add(currentUrl);
+      const video = videoRef.current;
+      if (video && video.currentTime > 0) {
+        pendingSeekRef.current = video.currentTime;
+      }
+      resumeAutoplayRef.current = true;
+      hasFatalErrorRef.current = false;
+      setErrorMessage(null);
+      setIsLoading(true);
+      const proxied = buildStreamProxyUrl(currentUrl, resolvedActiveServer?.referer);
+      setSelectedSourceUrl(proxied);
+      setFailoverNotice(
+        reason
+          ? `${reason} — تم تفعيل البروكسي الداخلي لتشغيل الفيلم`
+          : 'تم تفعيل البروكسي الداخلي لتجاوز قيود المصدر'
+      );
+      if (failoverTimerRef.current) {
+        window.clearTimeout(failoverTimerRef.current);
+      }
+      failoverTimerRef.current = window.setTimeout(() => {
+        setFailoverNotice(null);
+      }, 4000);
+      return true;
+    },
+    [resolvedActiveServer?.referer, selectedSourceUrl]
+  );
+
+  const trySwitchCurrentStreamToProxyRef = useRef(trySwitchCurrentStreamToProxy);
+  useEffect(() => {
+    trySwitchCurrentStreamToProxyRef.current = trySwitchCurrentStreamToProxy;
+  }, [trySwitchCurrentStreamToProxy]);
+
+  // Initialize playback engine (YouTube IFrame API / YouTube-NoCookie / Universal Embed / HLS.js / DASH.js / Native MP4)
   useEffect(() => {
     if (hlsRef.current) {
       hlsRef.current.destroy();
       hlsRef.current = null;
+    }
+    if (dashRef.current) {
+      try {
+        dashRef.current.reset();
+      } catch {
+        // Ignore DASH cleanup errors
+      }
+      dashRef.current = null;
     }
 
     if (ytPlayerRef.current) {
@@ -1036,6 +1481,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
       hasFatalErrorRef.current = true;
       setIsLoading(false);
       setErrorMessage('لا يوجد اتصال بالإنترنت. تأكد من اتصالك بالشبكة ثم أعد المحاولة.');
+      return;
+    }
+
+    if (isWaitingForExtraction) {
+      setIsLoading(true);
+      setHlsQualityOptions([]);
+      setYtQualityOptions([]);
       return;
     }
 
@@ -1455,6 +1907,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
             return;
           }
 
+          if (trySwitchCurrentStreamToProxyRef.current('تجاوز قيود البث التكيفي')) {
+            hls.destroy();
+            hlsRef.current = null;
+            return;
+          }
+
           if (attemptAutomaticFailoverRef.current('تعذر تحميل البث التكيفي')) {
             hls.destroy();
             hlsRef.current = null;
@@ -1484,6 +1942,44 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
         setIsLoading(false);
         setErrorMessage('المتصفح الحالي لا يدعم تشغيل بث HLS (.m3u8).');
       }
+    } else if (isDashStreamUrl(selectedSourceUrl)) {
+      let cancelledDash = false;
+      try {
+        const dashPlayer = dashjs.MediaPlayer().create();
+        dashRef.current = dashPlayer;
+        dashPlayer.initialize(
+          video,
+          selectedSourceUrl,
+          !isPreRollIntroActiveRef.current || resumeAutoplayRef.current
+        );
+        dashPlayer.on(dashjs.MediaPlayer.events?.ERROR || 'error', () => {
+          if (cancelledDash) return;
+          if (trySwitchCurrentStreamToProxyRef.current('تجاوز قيود بث DASH')) {
+            return;
+          }
+          if (attemptAutomaticFailoverRef.current('تعذر تحميل بث DASH')) {
+            return;
+          }
+          hasFatalErrorRef.current = true;
+          setIsLoading(false);
+          setIsPlaying(false);
+          setErrorMessage('تعذر تشغيل بث DASH (.mpd) في المتصفح الحالي.');
+        });
+      } catch {
+        video.src = selectedSourceUrl;
+        video.load();
+      }
+      return () => {
+        cancelledDash = true;
+        if (dashRef.current) {
+          try {
+            dashRef.current.reset();
+          } catch {
+            // Ignore cleanup errors
+          }
+          dashRef.current = null;
+        }
+      };
     } else {
       video.src = selectedSourceUrl;
       video.load();
@@ -1494,8 +1990,24 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
         hlsRef.current.destroy();
         hlsRef.current = null;
       }
+      if (dashRef.current) {
+        try {
+          dashRef.current.reset();
+        } catch {
+          // Ignore cleanup errors
+        }
+        dashRef.current = null;
+      }
     };
-  }, [selectedSourceUrl, activeEngineType, isUniversalEmbedMode, isYouTubeSource, retryToken, persistProgress]);
+  }, [
+    selectedSourceUrl,
+    activeEngineType,
+    isWaitingForExtraction,
+    isUniversalEmbedMode,
+    isYouTubeSource,
+    retryToken,
+    persistProgress,
+  ]);
 
   const handleTimeUpdate = useCallback(() => {
     const video = videoRef.current;
@@ -1977,9 +2489,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
     const video = videoRef.current;
     if (video) {
       try {
-        if (video.readyState >= 1) {
-          video.currentTime = 0;
+        if (!video.currentSrc || video.readyState < 1 || isWaitingForExtraction) {
+          resumeAutoplayRef.current = true;
+          setIsLoading(true);
+          revealControls();
+          return;
         }
+        video.currentTime = 0;
         setCurrentTime(0);
         video.playbackRate = playbackSpeed;
         video.muted = isMuted;
@@ -2010,10 +2526,18 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
         revealControls();
       }
     }
-  }, [isMuted, isUniversalEmbedMode, isYouTubeSource, playbackSpeed, revealControls, volume]);
+  }, [isMuted, isUniversalEmbedMode, isWaitingForExtraction, isYouTubeSource, playbackSpeed, revealControls, volume]);
 
   const handleRetry = useCallback(() => {
     failedServerIdsRef.current.clear();
+    proxyTriedUrlsRef.current.clear();
+    if (activeNormalizedSource) {
+      setExtractedByUrl((prev) => {
+        const next = { ...prev };
+        delete next[activeNormalizedSource];
+        return next;
+      });
+    }
     hasFatalErrorRef.current = false;
     setErrorMessage(null);
     setFailoverNotice(null);
@@ -2021,7 +2545,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
     setIsOffline(!navigator.onLine);
     setIsLoading(true);
     setRetryToken((prev) => prev + 1);
-  }, []);
+  }, [activeNormalizedSource]);
 
   const handleClosePlayer = useCallback(() => {
     if (isYouTubeSource && ytPlayerRef.current) {
@@ -3092,7 +3616,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
               }
             }}
             onError={() => {
-              if (hasFatalErrorRef.current) return;
+              if (hasFatalErrorRef.current || isWaitingForExtraction) return;
+              if (trySwitchCurrentStreamToProxyRef.current('تجاوز حماية السيرفر')) {
+                return;
+              }
               if (attemptAutomaticFailoverRef.current('تعذر تشغيل السيرفر الحالي')) {
                 return;
               }

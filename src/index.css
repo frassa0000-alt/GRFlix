@@ -1,15 +1,29 @@
 @import "tailwindcss";
 @custom-variant dark (&:where(.dark, .dark *));
 
+@theme {
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "SF Arabic", "Helvetica Neue", system-ui, sans-serif;
+  --font-weight-thin: 600;
+  --font-weight-extralight: 600;
+  --font-weight-light: 600;
+  --font-weight-normal: 700;
+  --font-weight-medium: 700;
+  --font-weight-semibold: 800;
+  --font-weight-bold: 800;
+  --font-weight-extrabold: 900;
+  --font-weight-black: 900;
+}
+
 @layer base {
   :root {
-    --font-arabic: 'Cairo', system-ui, -apple-system, sans-serif;
-    --font-latin: 'Plus Jakarta Sans', system-ui, sans-serif;
+    --font-arabic: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "SF Arabic", "Helvetica Neue", system-ui, sans-serif;
+    --font-latin: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", system-ui, sans-serif;
   }
 
   html,
   body {
     font-family: var(--font-arabic);
+    font-weight: 700;
     background-color: #0c0c0e;
     color: #f4f4f5;
     width: 100%;
@@ -17,6 +31,16 @@
     overflow-x: hidden;
     position: relative;
     -webkit-tap-highlight-color: transparent;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font-family: inherit;
+    font-weight: 700;
   }
 
   #root {
@@ -28,7 +52,7 @@
 
 .font-latin-slim {
   font-family: var(--font-latin);
-  font-weight: 400;
+  font-weight: 700;
   letter-spacing: 0.01em;
 }
 

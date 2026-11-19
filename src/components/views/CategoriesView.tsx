@@ -20,7 +20,6 @@ import {
   Clock,
   RotateCcw,
   SlidersHorizontal,
-  Sparkles,
   Calendar,
   Tags,
 } from 'lucide-react';
@@ -229,7 +228,7 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({
               </button>
             )}
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-400 text-xs font-extrabold shadow-sm">
-              <Sparkles className="w-3.5 h-3.5" />
+              <Clapperboard className="w-3.5 h-3.5" />
               <span>
                 {filteredItems.length} {t('عمل متاح', 'titles')}
               </span>
@@ -302,7 +301,7 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({
       <div className="space-y-3">
         <div className="flex items-center justify-between px-1">
           <span className="text-xs font-bold text-zinc-300 flex items-center gap-1.5">
-            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+            <Tags className="w-3.5 h-3.5 text-amber-400" />
             <span>{t('اختر التصنيف الفني:', 'Select a Genre:')}</span>
           </span>
           <span className="text-[11px] text-amber-400/90 font-medium">
