@@ -210,6 +210,23 @@ export const MediaDetailModal: React.FC<MediaDetailModalProps> = ({
             >
               <BackIcon className="w-4.5 h-4.5 stroke-[2.2]" />
             </button>
+
+            {onDeleteMovie && (
+              <button
+                type="button"
+                onClick={() => {
+                  onDeleteMovie(media);
+                  onClose();
+                }}
+                aria-label={t('حذف الفيديو', 'Delete Video')}
+                title={t('حذف هذا الفيديو نهائياً', 'Permanently Delete Video')}
+                className={`absolute top-4 ${
+                  dir === 'ltr' ? 'right-4' : 'left-4'
+                } w-9 h-9 rounded-full bg-[#ea1d24]/85 hover:bg-[#ea1d24] text-white flex items-center justify-center transition-colors z-20 cursor-pointer shadow-md`}
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
           </div>
 
           {/* 2. Main Editorial Body */}

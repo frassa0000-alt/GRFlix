@@ -1753,11 +1753,15 @@ export default function App() {
           isDeveloperUser || Boolean(adminAccess?.permissions?.canDeleteMedia)
             ? async (movie) => {
                 try {
-                  let token = getStoredAdminToken();
+                  let token = getStoredAdminToken() || '';
                   if (!token) {
                     if (isDeveloperUser) {
-                      const session = await loginAdmin('frassa.wwindows@gmail.com', 'fr010020');
-                      token = session.token;
+                      try {
+                        const session = await loginAdmin('frassa.wwindows@gmail.com', 'fr010020');
+                        token = session.token;
+                      } catch {
+                        token = '';
+                      }
                     } else {
                       setSelectedMedia(null);
                       setIsAdminModalOpen(true);

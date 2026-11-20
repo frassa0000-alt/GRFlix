@@ -977,8 +977,16 @@ export const fetchAllMoviesUnified = async (token?: string): Promise<MediaItem[]
     ...serverDeletedIds,
   ]);
 
+  const removedTitlesSet = new Set<string>(['1000167246']);
+  const isRemovedEntry = (item: Partial<MediaItem> | null | undefined): boolean => {
+    if (!item) return true;
+    const ar = String(item.titleAr || '').trim();
+    const en = String(item.title || '').trim();
+    return removedTitlesSet.has(ar) || removedTitlesSet.has(en);
+  };
+
   serverMoviesResult.forEach((m) => {
-    if (m && m.id && !deletedSet.has(m.id)) {
+    if (m && m.id && !deletedSet.has(m.id) && !isRemovedEntry(m)) {
       moviesMap.set(m.id, { ...m, rating: getEffectiveMediaRating(m) });
     }
   });
@@ -990,7 +998,13 @@ export const fetchAllMoviesUnified = async (token?: string): Promise<MediaItem[]
     snapshot.forEach((docSnap) => {
       const data = docSnap.data() as MediaItem;
       const effectiveId = data?.id || docSnap.id;
-      if (data && effectiveId && !deletedSet.has(effectiveId) && !moviesMap.has(effectiveId)) {
+      if (
+        data &&
+        effectiveId &&
+        !deletedSet.has(effectiveId) &&
+        !moviesMap.has(effectiveId) &&
+        !isRemovedEntry(data)
+      ) {
         const merged = { ...data, id: effectiveId };
         moviesMap.set(effectiveId, { ...merged, rating: getEffectiveMediaRating(merged) });
       }
