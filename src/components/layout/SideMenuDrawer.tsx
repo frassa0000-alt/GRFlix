@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { ActiveTab, BottomNavTab, GoogleUserProfile } from '../../types';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { MashhadLogo } from '../common/MashhadLogo';
 
 interface SideMenuDrawerProps {
   isOpen: boolean;
@@ -48,27 +49,8 @@ interface MenuRowConfig {
   avatarUrl?: string;
 }
 
-const MashhadEmblem: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' }) => (
-  <svg
-    viewBox="0 0 28 28"
-    fill="none"
-    xmlns="http://www.w3.org/2000/svg"
-    className={className}
-    aria-hidden="true"
-  >
-    <path
-      d="M5.5 6.2L14 14.2L22.5 6.2L24.5 9.6L14 23.5L3.5 9.6L5.5 6.2Z"
-      fill="currentColor"
-      fillOpacity="0.94"
-    />
-    <path
-      d="M9.5 4.5L14 9.5L18.5 4.5"
-      stroke="currentColor"
-      strokeWidth="2.1"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
+const MashhadEmblem: React.FC<{ className?: string }> = ({ className = 'w-7 h-7' }) => (
+  <MashhadLogo className={className} roundedClassName="rounded-lg" />
 );
 
 export const SideMenuDrawer: React.FC<SideMenuDrawerProps> = ({
@@ -420,9 +402,7 @@ export const SideMenuDrawer: React.FC<SideMenuDrawerProps> = ({
             >
               {!isCollapsed && (
                 <div className="flex items-center gap-2 min-w-0">
-                  <span className="w-7 h-7 rounded-lg bg-[#ea1d24] text-white flex items-center justify-center shrink-0 shadow-sm">
-                    <MashhadEmblem className="w-4 h-4" />
-                  </span>
+                  <MashhadEmblem className="w-7 h-7 shadow-sm" />
                   <span className="text-[14.5px] font-bold tracking-tight text-white truncate">
                     {brandTitle}
                   </span>

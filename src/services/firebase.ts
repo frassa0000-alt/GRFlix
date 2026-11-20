@@ -226,11 +226,17 @@ export function formatUserProfile(
     picture: defaultPhoto,
     photoURL: defaultPhoto,
     joinedAt: firestoreData?.joinedAt || Date.now(),
+    updatedAt: firestoreData?.updatedAt || Date.now(),
     role: isDefaultAdmin ? 'مشرف المنصة' : 'عضو مسجل',
     favoriteGenre: firestoreData?.favoriteGenre || 'أفلام سينمائية',
     bio:
       firestoreData?.bio ||
       'مستمتع بمشاهدة أحدث الأعمال بجودة فائقة على منصة MASHHAD.',
+    whatsapp: firestoreData?.whatsapp || '',
+    birthday: firestoreData?.birthday || '',
+    location: firestoreData?.location || '',
+    headline: firestoreData?.headline || '',
+    isVerified: Boolean(user.emailVerified || isDefaultAdmin),
     watchTimeMinutes: firestoreData?.watchTimeMinutes || 0,
   };
 }
@@ -537,6 +543,10 @@ export async function updateUserProfile(
     bio?: string;
     favoriteGenre?: string;
     photoURL?: string;
+    whatsapp?: string;
+    birthday?: string;
+    location?: string;
+    headline?: string;
   }
 ): Promise<AppUserProfile> {
   const currentUser = auth.currentUser;
@@ -568,12 +578,18 @@ export async function updateUserProfile(
 
       if (existingSnap.exists()) {
         const updatePayload: Record<string, any> = {
-          displayName: nextDisplayName,
-          name: nextDisplayName,
+          displayName: nextDisplayName.slice(0, 120),
+          name: nextDisplayName.slice(0, 120),
           updatedAt: Date.now(),
         };
-        if (updates.bio !== undefined) updatePayload.bio = updates.bio;
-        if (updates.favoriteGenre !== undefined) updatePayload.favoriteGenre = updates.favoriteGenre;
+        if (updates.bio !== undefined) updatePayload.bio = updates.bio.slice(0, 500);
+        if (updates.favoriteGenre !== undefined) {
+          updatePayload.favoriteGenre = updates.favoriteGenre.slice(0, 80);
+        }
+        if (updates.whatsapp !== undefined) updatePayload.whatsapp = updates.whatsapp.slice(0, 32);
+        if (updates.birthday !== undefined) updatePayload.birthday = updates.birthday.slice(0, 60);
+        if (updates.location !== undefined) updatePayload.location = updates.location.slice(0, 120);
+        if (updates.headline !== undefined) updatePayload.headline = updates.headline.slice(0, 120);
         if (safePhotoForCloud) {
           updatePayload.photoURL = safePhotoForCloud;
           updatePayload.picture = safePhotoForCloud;
@@ -584,10 +600,14 @@ export async function updateUserProfile(
           uid,
           id: uid,
           email: currentUser.email || '',
-          displayName: nextDisplayName,
-          name: nextDisplayName,
-          bio: updates.bio || '',
-          favoriteGenre: updates.favoriteGenre || 'أفلام سينمائية',
+          displayName: nextDisplayName.slice(0, 120),
+          name: nextDisplayName.slice(0, 120),
+          bio: (updates.bio || '').slice(0, 500),
+          favoriteGenre: (updates.favoriteGenre || 'أفلام سينمائية').slice(0, 80),
+          whatsapp: (updates.whatsapp || '').slice(0, 32),
+          birthday: (updates.birthday || '').slice(0, 60),
+          location: (updates.location || '').slice(0, 120),
+          headline: (updates.headline || '').slice(0, 120),
           photoURL: safePhotoForCloud || currentUser.photoURL || '',
           picture: safePhotoForCloud || currentUser.photoURL || '',
           emailVerified: Boolean(currentUser.emailVerified),
@@ -620,9 +640,15 @@ export async function updateUserProfile(
     picture: updates.photoURL || '',
     photoURL: updates.photoURL || '',
     joinedAt: Date.now(),
+    updatedAt: Date.now(),
     role: 'عضو مسجل',
     favoriteGenre: updates.favoriteGenre || 'أفلام سينمائية',
     bio: updates.bio || '',
+    whatsapp: updates.whatsapp || '',
+    birthday: updates.birthday || '',
+    location: updates.location || '',
+    headline: updates.headline || '',
+    isVerified: true,
     watchTimeMinutes: 0,
   };
 }

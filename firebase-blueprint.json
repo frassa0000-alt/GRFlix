@@ -2,7 +2,7 @@
   "entities": {
     "UserProfile": {
       "title": "UserProfile",
-      "description": "User account profile document stored in Firestore",
+      "description": "Private user account profile document stored in Firestore",
       "type": "object",
       "properties": {
         "displayName": {
@@ -34,6 +34,26 @@
           "type": "string",
           "description": "Favorite film genre"
         },
+        "whatsapp": {
+          "type": "string",
+          "maxLength": 32,
+          "description": "Optional WhatsApp contact number configured in settings"
+        },
+        "birthday": {
+          "type": "string",
+          "maxLength": 60,
+          "description": "User birthday display string"
+        },
+        "location": {
+          "type": "string",
+          "maxLength": 120,
+          "description": "User city or country"
+        },
+        "headline": {
+          "type": "string",
+          "maxLength": 120,
+          "description": "User subtitle or role headline"
+        },
         "createdAt": {
           "type": "string",
           "description": "Account creation timestamp"
@@ -44,6 +64,298 @@
         }
       },
       "required": ["email", "displayName"]
+    },
+    "PublicProfile": {
+      "title": "PublicProfile",
+      "description": "Publicly visible non-PII member profile card for MASHHAD social features",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Owner Firebase UID"
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120,
+          "description": "Public display name"
+        },
+        "photoURL": {
+          "type": "string",
+          "maxLength": 1000,
+          "description": "Public avatar image URL"
+        },
+        "role": {
+          "type": "string",
+          "maxLength": 40,
+          "description": "Public member badge label"
+        },
+        "headline": {
+          "type": "string",
+          "maxLength": 120,
+          "description": "Public short headline or status"
+        },
+        "birthday": {
+          "type": "string",
+          "maxLength": 60,
+          "description": "Optional birthday label"
+        },
+        "location": {
+          "type": "string",
+          "maxLength": 120,
+          "description": "Optional location label"
+        },
+        "favoriteGenre": {
+          "type": "string",
+          "maxLength": 80,
+          "description": "Favorite cinema genre"
+        },
+        "bio": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Public multi-line bio highlights"
+        },
+        "whatsapp": {
+          "type": "string",
+          "maxLength": 32,
+          "description": "Optional public WhatsApp number opted-in via Settings"
+        },
+        "isVerified": {
+          "type": "boolean",
+          "description": "Verified badge indicator"
+        },
+        "isDiscoverable": {
+          "type": "boolean",
+          "description": "Whether profile appears in member discovery"
+        },
+        "savedCount": {
+          "type": "number",
+          "description": "Number of saved movies"
+        },
+        "joinedAt": {
+          "type": "number",
+          "description": "Joined timestamp"
+        },
+        "updatedAt": {
+          "type": "number",
+          "description": "Last update timestamp"
+        }
+      },
+      "required": ["uid", "displayName", "isDiscoverable", "updatedAt"]
+    },
+    "UserFollow": {
+      "title": "UserFollow",
+      "description": "Follow relationship document between two users",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 260,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Composite ID followerUid_targetUid"
+        },
+        "followerUid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Follower user UID"
+        },
+        "targetUid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Followed user UID"
+        },
+        "followerName": {
+          "type": "string",
+          "maxLength": 120,
+          "description": "Follower display name"
+        },
+        "followerAvatar": {
+          "type": "string",
+          "maxLength": 1000,
+          "description": "Follower avatar URL"
+        },
+        "targetName": {
+          "type": "string",
+          "maxLength": 120,
+          "description": "Target display name"
+        },
+        "targetAvatar": {
+          "type": "string",
+          "maxLength": 1000,
+          "description": "Target avatar URL"
+        },
+        "isActive": {
+          "type": "boolean",
+          "description": "Whether follow link is active"
+        },
+        "createdAt": {
+          "type": "number",
+          "description": "Follow creation timestamp"
+        }
+      },
+      "required": ["id", "followerUid", "targetUid", "isActive", "createdAt"]
+    },
+    "UserStory": {
+      "title": "UserStory",
+      "description": "User story post (photo, text status, or movie recommendation card)",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Story document ID"
+        },
+        "authorUid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Story author UID"
+        },
+        "authorName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120,
+          "description": "Story author name"
+        },
+        "authorAvatar": {
+          "type": "string",
+          "maxLength": 1000,
+          "description": "Story author avatar URL"
+        },
+        "authorVerified": {
+          "type": "boolean",
+          "description": "Whether author has verified badge"
+        },
+        "mediaType": {
+          "type": "string",
+          "enum": ["text", "image", "movie"],
+          "description": "Story card type"
+        },
+        "caption": {
+          "type": "string",
+          "maxLength": 400,
+          "description": "Story text or caption"
+        },
+        "imageUrl": {
+          "type": "string",
+          "maxLength": 2000,
+          "description": "Uploaded or external image URL"
+        },
+        "bgGradient": {
+          "type": "string",
+          "maxLength": 120,
+          "description": "Gradient theme identifier"
+        },
+        "linkedMediaId": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "Optional attached movie or series ID"
+        },
+        "linkedMediaTitle": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Optional attached movie or series title"
+        },
+        "linkedMediaPoster": {
+          "type": "string",
+          "maxLength": 2000,
+          "description": "Optional attached movie poster URL"
+        },
+        "isActive": {
+          "type": "boolean",
+          "description": "Story active visibility flag"
+        },
+        "createdAt": {
+          "type": "number",
+          "description": "Story creation timestamp"
+        },
+        "expiresAt": {
+          "type": "number",
+          "description": "Story expiration timestamp"
+        }
+      },
+      "required": ["id", "authorUid", "authorName", "mediaType", "isActive", "createdAt", "expiresAt"]
+    },
+    "DirectConversation": {
+      "title": "DirectConversation",
+      "description": "Direct messaging conversation between two members",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Sorted composite conversation ID"
+        },
+        "participants": {
+          "type": "string",
+          "description": "Bounded 2-element array of participant UIDs"
+        },
+        "lastMessage": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Latest message preview"
+        },
+        "lastSenderUid": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "UID of latest sender"
+        },
+        "createdAt": {
+          "type": "number",
+          "description": "Conversation creation timestamp"
+        },
+        "updatedAt": {
+          "type": "number",
+          "description": "Conversation last message timestamp"
+        }
+      },
+      "required": ["id", "participants", "createdAt", "updatedAt"]
+    },
+    "DirectMessage": {
+      "title": "DirectMessage",
+      "description": "Single message inside a direct conversation",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Message ID"
+        },
+        "senderUid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Sender UID"
+        },
+        "senderName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120,
+          "description": "Sender display name"
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1500,
+          "description": "Message content"
+        },
+        "participants": {
+          "type": "string",
+          "description": "Bounded 2-element array matching parent conversation participants"
+        },
+        "createdAt": {
+          "type": "number",
+          "description": "Message creation timestamp"
+        }
+      },
+      "required": ["id", "senderUid", "senderName", "text", "participants", "createdAt"]
     },
     "UserFavorite": {
       "title": "UserFavorite",
@@ -95,7 +407,7 @@
     },
     "MovieItem": {
       "title": "MovieItem",
-      "description": "Cinema movie record in GoldenFlix catalog",
+      "description": "Cinema movie record in MASHHAD catalog",
       "type": "object",
       "properties": {
         "title": { "type": "string", "description": "English or original title" },
@@ -177,6 +489,26 @@
     "/users/{userId}": {
       "schema": "UserProfile",
       "description": "Private user account profile document"
+    },
+    "/publicProfiles/{userId}": {
+      "schema": "PublicProfile",
+      "description": "Public non-PII member profile cards for social discovery, stories, and contact links"
+    },
+    "/follows/{followId}": {
+      "schema": "UserFollow",
+      "description": "Follow relationships between users"
+    },
+    "/stories/{storyId}": {
+      "schema": "UserStory",
+      "description": "User stories (text, photo, or movie recommendation)"
+    },
+    "/conversations/{conversationId}": {
+      "schema": "DirectConversation",
+      "description": "Direct messaging threads between two users"
+    },
+    "/conversations/{conversationId}/messages/{messageId}": {
+      "schema": "DirectMessage",
+      "description": "Messages within a direct conversation"
     },
     "/users/{userId}/favorites/{favoriteId}": {
       "schema": "UserFavorite",

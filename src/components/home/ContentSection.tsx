@@ -1,5 +1,4 @@
-import React, { useRef } from 'react';
-import { motion } from 'motion/react';
+import React, { memo, useMemo, useRef } from 'react';
 import { ChevronRight, ChevronLeft } from 'lucide-react';
 import { MediaItem, WatchProgress } from '../../types';
 import { MediaCard } from '../cards/MediaCard';
@@ -19,7 +18,7 @@ interface ContentSectionProps {
   variant?: 'poster' | 'landscape' | 'series_avatar';
 }
 
-export const ContentSection: React.FC<ContentSectionProps> = ({
+const ContentSectionInner: React.FC<ContentSectionProps> = ({
   title,
   items,
   onSelectMedia,
@@ -34,29 +33,42 @@ export const ContentSection: React.FC<ContentSectionProps> = ({
   const { dir, t } = useLanguage();
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  const favoriteSet = useMemo(() => new Set(favorites), [favorites]);
+  const alertSet = useMemo(() => new Set(alertSubscribedIds), [alertSubscribedIds]);
+  const historyMap = useMemo(() => {
+    const map = new Map<string, WatchProgress>();
+    for (const h of history) {
+      if (!map.has(h.mediaId)) map.set(h.mediaId, h);
+    }
+    return map;
+  }, [history]);
+
+  const rowItems = useMemo(() => items.slice(0, 24), [items]);
+
   const scroll = (direction: 'left' | 'right') => {
     if (!scrollRef.current) return;
     const scrollAmount = direction === 'left' ? -380 : 380;
     scrollRef.current.scrollBy({ left: scrollAmount, behavior: 'smooth' });
   };
 
-  if (!items || items.length === 0) {
+  if (!rowItems || rowItems.length === 0) {
     return null;
   }
 
   return (
-    <motion.section
-      initial={{ opacity: 0, y: 12 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: '-40px' }}
-      transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+    <section
+      style={{ contentVisibility: 'auto', containIntrinsicSize: '260px' }}
       className="mb-6 relative"
     >
-      {/* Clean Section Header + View All Link Matching Reference Screen 1 */}
+      {/* Clean Section Header + View All Link */}
       <div className="flex items-center justify-between gap-2 mb-3">
-        <h2 className="text-base sm:text-lg font-black text-white tracking-tight truncate">
-          {title}
-        </h2>
+        {title ? (
+          <h2 className="text-base sm:text-lg font-black text-white tracking-tight truncate">
+            {title}
+          </h2>
+        ) : (
+          <div aria-hidden="true" />
+        )}
 
         <div className="flex items-center gap-2 shrink-0">
           {onViewAll && (
@@ -124,21 +136,23 @@ export const ContentSection: React.FC<ContentSectionProps> = ({
         ref={scrollRef}
         className="flex items-stretch gap-3 sm:gap-3.5 overflow-x-auto no-scrollbar py-1"
       >
-        {items.map((item, idx) => (
+        {rowItems.map((item, idx) => (
           <MediaCard
             key={item.id}
             item={item}
             index={idx}
             onSelect={onSelectMedia}
-            isFavorite={favorites.includes(item.id)}
+            isFavorite={favoriteSet.has(item.id)}
             onToggleFavorite={onToggleFavorite}
-            isAlertSubscribed={alertSubscribedIds.includes(item.id)}
-            onToggleAlert={onToggleAlert ? () => onToggleAlert(item.id) : undefined}
-            watchProgress={history.find((h) => h.mediaId === item.id)}
+            isAlertSubscribed={alertSet.has(item.id)}
+            onToggleAlert={onToggleAlert}
+            watchProgress={historyMap.get(item.id)}
             variant={variant}
           />
         ))}
       </div>
-    </motion.section>
+    </section>
   );
 };
+
+export const ContentSection = memo(ContentSectionInner);

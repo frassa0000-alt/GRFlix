@@ -1,7 +1,7 @@
 import React from 'react';
-import { Play } from 'lucide-react';
 import { InfoPageId } from '../../types';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { MashhadLogo } from '../common/MashhadLogo';
 
 interface SiteFooterProps {
   activePage: InfoPageId | null;
@@ -70,7 +70,7 @@ export const SiteFooter: React.FC<SiteFooterProps> = ({
               className="inline-flex items-center gap-2 py-1 text-white transition-transform duration-150 active:scale-[0.97] cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#ea1d24]/60 rounded-lg"
               aria-label={cleanBrand}
             >
-              <Play className="w-4 h-4 fill-[#ea1d24] text-[#ea1d24] shrink-0" />
+              <MashhadLogo className="w-6 h-6" roundedClassName="rounded-lg" />
               {isDefaultBrand ? (
                 <span className="text-lg font-black tracking-wider leading-none">
                   <span className="text-[#ea1d24]">MASH</span>

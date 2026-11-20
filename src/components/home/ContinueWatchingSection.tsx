@@ -1,5 +1,4 @@
 import React, { useRef, useState } from 'react';
-import { motion } from 'motion/react';
 import { ChevronLeft, ChevronRight, History, Info, Play } from 'lucide-react';
 import { MediaItem, WatchProgress } from '../../types';
 import { useLanguage } from '../../contexts/LanguageContext';
@@ -30,7 +29,7 @@ const ContinueWatchingCard: React.FC<{
   index: number;
   onPlayMedia: (item: MediaItem) => void;
   onSelectMedia: (item: MediaItem) => void;
-}> = ({ media, progress, index, onPlayMedia, onSelectMedia }) => {
+}> = ({ media, progress, onPlayMedia, onSelectMedia }) => {
   const { lang, dir, t, getMediaTitle } = useLanguage();
   const [imgError, setImgError] = useState(false);
   const thumbUrl = media.bannerUrl || media.posterUrl;
@@ -52,11 +51,8 @@ const ContinueWatchingCard: React.FC<{
   const pct = Math.max(2, Math.min(100, Math.round(progress.percentage || 0)));
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25, delay: Math.min(index * 0.04, 0.24) }}
-      className="group relative flex-shrink-0 w-[250px] sm:w-[290px] md:w-[310px] rounded-2xl overflow-hidden bg-[#121216] border border-white/[0.08] hover:border-amber-400/55 transition-all duration-300 shadow-lg"
+    <div
+      className="group relative flex-shrink-0 w-[250px] sm:w-[290px] md:w-[310px] rounded-2xl overflow-hidden bg-[#121216] border border-white/[0.08] hover:border-amber-400/55 transition-colors duration-200 shadow-lg"
     >
       {/* Thumbnail Preview (16:9) */}
       <button
@@ -72,9 +68,10 @@ const ContinueWatchingCard: React.FC<{
             src={thumbUrl}
             alt={displayTitle}
             loading="lazy"
+            decoding="async"
             referrerPolicy="no-referrer"
             onError={() => setImgError(true)}
-            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
           />
         ) : (
           <div className="w-full h-full bg-gradient-to-br from-zinc-900 via-zinc-950 to-amber-950/30 flex flex-col items-center justify-center p-4 text-center">
@@ -95,7 +92,7 @@ const ContinueWatchingCard: React.FC<{
 
         <div className="absolute bottom-0 inset-x-0 h-1.5 bg-white/15">
           <div
-            className="h-full bg-gradient-to-r from-amber-500 to-amber-300 transition-all"
+            className="h-full bg-gradient-to-r from-amber-500 to-amber-300"
             style={{ width: `${pct}%` }}
           />
         </div>
@@ -146,7 +143,7 @@ const ContinueWatchingCard: React.FC<{
           <Info className="w-4 h-4" />
         </button>
       </div>
-    </motion.div>
+    </div>
   );
 };
 

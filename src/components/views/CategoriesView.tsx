@@ -190,8 +190,13 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({
     <div className="w-full max-w-7xl mx-auto px-3.5 sm:px-6 py-4 space-y-6 animate-fade-in select-none">
       {/* Header Banner */}
       <div className="relative overflow-hidden rounded-2xl bg-[#17121f] border border-white/[0.08] p-4 sm:p-5 shadow-lg shadow-black/40">
-        <div className="absolute -top-12 -right-12 w-48 h-48 bg-[#ea1d24]/12 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-[#ea1d24]/6 rounded-full blur-2xl pointer-events-none" />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -top-12 -right-12 w-48 h-48 rounded-full"
+          style={{
+            background: 'radial-gradient(circle, rgba(234,29,36,0.14) 0%, transparent 70%)',
+          }}
+        />
 
         <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
@@ -255,7 +260,7 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({
           </span>
         </div>
 
-        <div className="grid grid-cols-3 gap-1.5 sm:gap-2 p-1.5 bg-[#17121f] rounded-2xl border border-white/[0.08] backdrop-blur-md">
+        <div className="grid grid-cols-3 gap-1.5 sm:gap-2 p-1.5 bg-[#17121f] rounded-2xl border border-white/[0.08]">
           <button
             type="button"
             onClick={() => setSelectedType('all')}

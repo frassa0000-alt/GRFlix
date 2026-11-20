@@ -20,6 +20,7 @@ import {
   UserReleaseNotification,
 } from '../../types';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { MashhadLogo } from '../common/MashhadLogo';
 
 interface TopHeaderProps {
   searchQuery: string;
@@ -41,26 +42,8 @@ interface TopHeaderProps {
   siteName?: string;
 }
 
-export const GoldenOrbitalG: React.FC<{ className?: string }> = ({ className }) => (
-  <svg
-    viewBox="0 0 64 56"
-    fill="none"
-    xmlns="http://www.w3.org/2000/svg"
-    className={className}
-    aria-hidden="true"
-  >
-    <defs>
-      <linearGradient id="mashhadCrimson" x1="10%" y1="5%" x2="90%" y2="95%">
-        <stop offset="0%" stopColor="#ff4148" />
-        <stop offset="55%" stopColor="#ea1d24" />
-        <stop offset="100%" stopColor="#b91218" />
-      </linearGradient>
-    </defs>
-    <path
-      d="M11 45V12.5C11 10.6 12.6 9 14.5 9H18.2C19.8 9 21.2 9.8 22 11.2L32 28.2L42 11.2C42.8 9.8 44.2 9 45.8 9H49.5C51.4 9 53 10.6 53 12.5V45C53 46.7 51.6 48 49.9 48H46.5C44.8 48 43.4 46.7 43.4 45V25.8L35 39.6C33.6 41.9 30.4 41.9 29 39.6L20.6 25.8V45C20.6 46.7 19.2 48 17.5 48H14.1C12.4 48 11 46.7 11 45Z"
-      fill="url(#mashhadCrimson)"
-    />
-  </svg>
+export const GoldenOrbitalG: React.FC<{ className?: string }> = ({ className = 'w-6 h-6' }) => (
+  <MashhadLogo className={className} roundedClassName="rounded-lg" />
 );
 
 const TOP_UNDERLINE_TABS: {
@@ -164,7 +147,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
     <>
       <header
         dir={dir}
-        className="sticky top-0 z-30 w-full select-none font-sans bg-[#0f0c14]/92 backdrop-blur-2xl"
+        className="sticky top-0 z-30 w-full select-none font-sans bg-[#0f0c14]/97 backdrop-blur-sm"
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-3 pb-1.5 space-y-2.5">
           {/* Top Greeting + Circular Notification & Profile Row Matching Reference Screen 1 */}
@@ -178,7 +161,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                 {t('أهلاً بك', 'Hello')}
               </span>
               <div className="flex items-center gap-1.5 mt-1 min-w-0">
-                <GoldenOrbitalG className="w-5 h-4 shrink-0" />
+                <GoldenOrbitalG className="w-5 h-5 shrink-0" />
                 <span className="text-[17px] sm:text-xl font-black text-white tracking-tight truncate leading-none">
                   {userFirstName || displaySiteName}
                 </span>
@@ -186,28 +169,24 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             </button>
 
             <div className="flex items-center gap-2 shrink-0">
-              <motion.button
-                whileHover={{ scale: 1.06 }}
-                whileTap={{ scale: 0.92 }}
+              <button
                 type="button"
                 onClick={() => setSearchOpen((v) => !v)}
                 aria-label={t('البحث', 'Search')}
-                className={`w-9 h-9 rounded-full flex items-center justify-center border transition-colors cursor-pointer ${
+                className={`w-9 h-9 rounded-full flex items-center justify-center border transition-transform duration-150 hover:scale-105 active:scale-92 cursor-pointer ${
                   searchOpen || searchQuery
                     ? 'bg-[#ea1d24] text-white border-[#ea1d24]'
                     : 'bg-white/[0.08] hover:bg-white/[0.14] text-zinc-200 border-white/[0.08]'
                 }`}
               >
                 <Search className="w-4 h-4 stroke-[2.2]" />
-              </motion.button>
+              </button>
 
-              <motion.button
-                whileHover={{ scale: 1.06 }}
-                whileTap={{ scale: 0.92 }}
+              <button
                 onClick={() => setShowNotifications((v) => !v)}
                 type="button"
                 aria-label={t('الإشعارات', 'Notifications')}
-                className={`relative w-9 h-9 rounded-full flex items-center justify-center border transition-colors cursor-pointer ${
+                className={`relative w-9 h-9 rounded-full flex items-center justify-center border transition-transform duration-150 hover:scale-105 active:scale-92 cursor-pointer ${
                   showNotifications
                     ? 'bg-[#ea1d24] text-white border-[#ea1d24]'
                     : 'bg-white/[0.08] hover:bg-white/[0.14] text-zinc-200 border-white/[0.08]'
@@ -219,20 +198,19 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                     {totalBadgeCount > 9 ? '9+' : totalBadgeCount}
                   </span>
                 )}
-              </motion.button>
+              </button>
 
-              <motion.button
-                whileHover={{ scale: 1.06 }}
-                whileTap={{ scale: 0.92 }}
+              <button
                 onClick={onOpenGoogleLogin}
                 type="button"
                 aria-label={googleUser ? t('الملف الشخصي', 'My Profile') : t('تسجيل الدخول', 'Sign In')}
-                className="w-9 h-9 rounded-full bg-white/[0.08] hover:bg-white/[0.14] border border-white/[0.1] flex items-center justify-center overflow-hidden cursor-pointer shrink-0"
+                className="w-9 h-9 rounded-full bg-white/[0.08] hover:bg-white/[0.14] border border-white/[0.1] flex items-center justify-center overflow-hidden transition-transform duration-150 hover:scale-105 active:scale-92 cursor-pointer shrink-0"
               >
                 {googleUser?.picture || googleUser?.photoURL ? (
                   <img
                     src={googleUser.picture || googleUser.photoURL}
                     alt={googleUser.displayName || googleUser.name}
+                    decoding="async"
                     referrerPolicy="no-referrer"
                     className="w-full h-full object-cover"
                   />
@@ -243,18 +221,16 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                 ) : (
                   <User className="w-4 h-4 text-zinc-200" />
                 )}
-              </motion.button>
+              </button>
 
-              <motion.button
-                whileHover={{ scale: 1.06 }}
-                whileTap={{ scale: 0.92 }}
+              <button
                 onClick={onOpenSideMenu}
                 type="button"
                 aria-label={t('القائمة والإعدادات', 'Menu & Settings')}
-                className="w-9 h-9 rounded-full bg-white/[0.08] hover:bg-white/[0.14] border border-white/[0.08] flex items-center justify-center text-zinc-200 cursor-pointer shrink-0"
+                className="w-9 h-9 rounded-full bg-white/[0.08] hover:bg-white/[0.14] border border-white/[0.08] flex items-center justify-center text-zinc-200 transition-transform duration-150 hover:scale-105 active:scale-92 cursor-pointer shrink-0"
               >
                 <Menu className="w-4 h-4 stroke-[2.2]" />
-              </motion.button>
+              </button>
             </div>
           </div>
 
@@ -356,7 +332,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -8, scale: 0.97 }}
               transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-              className={`fixed top-[62px] left-3 right-3 sm:left-6 sm:right-auto sm:w-96 max-w-full bg-[#15111b]/96 backdrop-blur-2xl border border-white/[0.12] rounded-2xl p-4 shadow-[0_24px_60px_rgba(0,0,0,0.95)] z-50 ${
+              className={`fixed top-[62px] left-3 right-3 sm:left-6 sm:right-auto sm:w-96 max-w-full bg-[#15111b]/98 backdrop-blur-md border border-white/[0.12] rounded-2xl p-4 shadow-[0_24px_60px_rgba(0,0,0,0.95)] z-50 ${
                 dir === 'ltr' ? 'text-left' : 'text-right'
               }`}
             >

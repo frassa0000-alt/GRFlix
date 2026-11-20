@@ -103,14 +103,89 @@ export interface AppUserProfile {
   picture: string;
   photoURL?: string;
   joinedAt: number;
+  updatedAt?: number;
   role: 'member' | 'admin' | string;
   disabled?: boolean;
   favoriteGenre?: string;
   bio?: string;
+  whatsapp?: string;
+  birthday?: string;
+  location?: string;
+  headline?: string;
+  isVerified?: boolean;
+  followersCount?: number;
+  followingCount?: number;
+  storiesCount?: number;
   watchTimeMinutes?: number;
 }
 
 export type GoogleUserProfile = AppUserProfile;
+
+export interface PublicUserProfile {
+  uid: string;
+  displayName: string;
+  photoURL?: string;
+  role?: string;
+  headline?: string;
+  birthday?: string;
+  location?: string;
+  favoriteGenre?: string;
+  bio?: string;
+  whatsapp?: string;
+  isVerified?: boolean;
+  isDiscoverable: boolean;
+  savedCount?: number;
+  joinedAt?: number;
+  updatedAt: number;
+}
+
+export interface UserFollow {
+  id: string;
+  followerUid: string;
+  targetUid: string;
+  followerName?: string;
+  followerAvatar?: string;
+  targetName?: string;
+  targetAvatar?: string;
+  isActive: boolean;
+  createdAt: number;
+}
+
+export interface UserStory {
+  id: string;
+  authorUid: string;
+  authorName: string;
+  authorAvatar?: string;
+  authorVerified?: boolean;
+  mediaType: 'text' | 'image' | 'movie';
+  caption?: string;
+  imageUrl?: string;
+  bgGradient?: string;
+  linkedMediaId?: string;
+  linkedMediaTitle?: string;
+  linkedMediaPoster?: string;
+  isActive: boolean;
+  createdAt: number;
+  expiresAt: number;
+}
+
+export interface DirectConversation {
+  id: string;
+  participants: string[];
+  lastMessage?: string;
+  lastSenderUid?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface DirectMessage {
+  id: string;
+  senderUid: string;
+  senderName: string;
+  text: string;
+  participants: string[];
+  createdAt: number;
+}
 
 export interface AdminAuth {
   isAuthenticated: boolean;

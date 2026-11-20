@@ -49,6 +49,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
   useEffect(() => {
     if (slides.length <= 1 || isPaused) return;
     const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
       setCurrentIndex((prev) => (prev + 1) % slides.length);
     }, 6000);
     return () => clearInterval(interval);
@@ -88,7 +89,10 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
       >
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute -top-20 left-1/2 -translate-x-1/2 w-[360px] h-[220px] rounded-full bg-[#ea1d24]/15 blur-3xl"
+          className="pointer-events-none absolute -top-20 left-1/2 -translate-x-1/2 w-[360px] h-[220px] rounded-full"
+          style={{
+            background: 'radial-gradient(circle, rgba(234,29,36,0.16) 0%, transparent 70%)',
+          }}
         />
 
         <div className="relative z-10 h-full px-5 sm:px-10 md:px-12 flex items-center justify-between gap-4">
@@ -117,7 +121,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
 
           <div className="shrink-0 flex items-center justify-center">
             <div className="w-18 h-18 sm:w-24 sm:h-24 rounded-2xl bg-white/[0.05] border border-white/[0.1] flex items-center justify-center shadow-xl">
-              <GoldenOrbitalG className="w-11 h-9 sm:w-14 sm:h-12" />
+              <GoldenOrbitalG className="w-12 h-12 sm:w-16 sm:h-16" />
             </div>
           </div>
         </div>
@@ -177,7 +181,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
               type="button"
               onClick={goPrev}
               aria-label={t('العرض السابق', 'Previous slide')}
-              className="hidden sm:flex absolute left-2 md:left-4 top-1/2 -translate-y-1/2 z-40 w-9 h-9 rounded-full bg-black/60 hover:bg-[#ea1d24] text-white border border-white/15 items-center justify-center transition-all cursor-pointer backdrop-blur-md active:scale-90"
+              className="hidden sm:flex absolute left-2 md:left-4 top-1/2 -translate-y-1/2 z-40 w-9 h-9 rounded-full bg-black/75 hover:bg-[#ea1d24] text-white border border-white/15 items-center justify-center transition-colors cursor-pointer active:scale-90"
             >
               <ChevronLeft className="w-5 h-5" />
             </button>
@@ -185,7 +189,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
               type="button"
               onClick={goNext}
               aria-label={t('العرض التالي', 'Next slide')}
-              className="hidden sm:flex absolute right-2 md:right-4 top-1/2 -translate-y-1/2 z-40 w-9 h-9 rounded-full bg-black/60 hover:bg-[#ea1d24] text-white border border-white/15 items-center justify-center transition-all cursor-pointer backdrop-blur-md active:scale-90"
+              className="hidden sm:flex absolute right-2 md:right-4 top-1/2 -translate-y-1/2 z-40 w-9 h-9 rounded-full bg-black/75 hover:bg-[#ea1d24] text-white border border-white/15 items-center justify-center transition-colors cursor-pointer active:scale-90"
             >
               <ChevronRight className="w-5 h-5" />
             </button>
@@ -235,21 +239,23 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
                     setCurrentIndex(idx);
                   }
                 }}
-                className={`absolute w-[78%] sm:w-[68%] md:w-[58%] h-full rounded-2xl overflow-hidden bg-[#16121e] cursor-pointer group ${
+                className={`absolute will-change-transform w-[78%] sm:w-[68%] md:w-[58%] h-full rounded-2xl overflow-hidden bg-[#16121e] cursor-pointer group ${
                   isCenter
-                    ? 'shadow-[0_18px_45px_rgba(0,0,0,0.85)] ring-1 ring-white/15'
-                    : 'shadow-[0_10px_28px_rgba(0,0,0,0.7)] ring-1 ring-white/10'
+                    ? 'shadow-[0_14px_34px_rgba(0,0,0,0.8)] ring-1 ring-white/15'
+                    : 'shadow-[0_8px_22px_rgba(0,0,0,0.65)] ring-1 ring-white/10'
                 }`}
               >
                 {!hasImageError ? (
                   <img
                     src={bannerSrc}
                     alt={slideTitle}
+                    loading={isCenter ? 'eager' : 'lazy'}
+                    decoding="async"
                     referrerPolicy="no-referrer"
                     onError={() =>
                       setFailedImages((prev) => ({ ...prev, [slide.id]: true }))
                     }
-                    className="w-full h-full object-cover object-center transition-transform duration-500 group-hover:scale-[1.03]"
+                    className="w-full h-full object-cover object-center transition-transform duration-300 group-hover:scale-[1.03]"
                   />
                 ) : (
                   <div className="w-full h-full bg-gradient-to-br from-zinc-900 via-[#191422] to-black flex flex-col items-center justify-center p-4 text-center">

@@ -1,10 +1,8 @@
-import React, { useState } from 'react';
-import { motion } from 'motion/react';
+import React, { memo, useState } from 'react';
 import { Play, Heart, EyeOff, Bell, BellRing, Clock } from 'lucide-react';
 import { MediaItem, WatchProgress } from '../../types';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { hasPlayableMediaVideo } from '../../services/releaseAlertService';
-import { getMediaProgress } from '../../services/storage';
 import { formatQualityLabel } from '../../utils/quality';
 
 export interface MediaCardProps {
@@ -22,7 +20,7 @@ export interface MediaCardProps {
   index?: number;
 }
 
-export const MediaCard: React.FC<MediaCardProps> = ({
+const MediaCardInner: React.FC<MediaCardProps> = ({
   media,
   item,
   onClick,
@@ -34,7 +32,6 @@ export const MediaCard: React.FC<MediaCardProps> = ({
   watchProgress,
   variant = 'poster',
   inGrid = false,
-  index = 0,
 }) => {
   const { dir, t, getMediaTitle } = useLanguage();
   const currentItem = media || item;
@@ -70,9 +67,7 @@ export const MediaCard: React.FC<MediaCardProps> = ({
   const isComingSoonItem = !hasPlayableMediaVideo(currentItem);
 
   const resolvedProgress =
-    typeof watchProgress === 'number'
-      ? undefined
-      : watchProgress || getMediaProgress(currentItem.id);
+    typeof watchProgress === 'number' ? undefined : watchProgress;
 
   const watchedPercent =
     typeof watchProgress === 'number'
@@ -89,14 +84,9 @@ export const MediaCard: React.FC<MediaCardProps> = ({
       : 0;
 
   return (
-    <motion.article
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.22, delay: Math.min(index * 0.025, 0.16), ease: [0.16, 1, 0.3, 1] }}
-      whileHover={{ y: -3 }}
-      whileTap={{ scale: 0.98 }}
+    <article
       onClick={handleClick}
-      className={`group relative flex flex-col flex-shrink-0 cursor-pointer select-none ${
+      className={`group relative flex flex-col flex-shrink-0 cursor-pointer select-none transition-transform duration-150 ease-out hover:-translate-y-0.5 active:scale-[0.98] ${
         inGrid
           ? 'w-full'
           : isLandscape
@@ -106,7 +96,7 @@ export const MediaCard: React.FC<MediaCardProps> = ({
     >
       {/* Thumbnail Frame */}
       <div
-        className={`relative w-full overflow-hidden bg-[#17121f] rounded-[14px] transition-all duration-300 shadow-[0_10px_24px_rgba(0,0,0,0.55)] group-hover:shadow-[0_16px_32px_rgba(0,0,0,0.85)] ${
+        className={`relative w-full overflow-hidden bg-[#17121f] rounded-[14px] transition-shadow duration-200 shadow-[0_8px_20px_rgba(0,0,0,0.5)] group-hover:shadow-[0_14px_28px_rgba(0,0,0,0.8)] ${
           isLandscape ? 'aspect-video' : 'aspect-[2/3]'
         } ${
           isHiddenItem
@@ -132,31 +122,32 @@ export const MediaCard: React.FC<MediaCardProps> = ({
             src={displayImage}
             alt={displayTitle}
             loading="lazy"
+            decoding="async"
             referrerPolicy="no-referrer"
             onLoad={() => setImageLoaded(true)}
             onError={() => setImageError(true)}
-            className={`w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105 ${
+            className={`w-full h-full object-cover transition-transform duration-300 ease-out group-hover:scale-105 ${
               imageLoaded ? 'opacity-100' : 'opacity-0'
             }`}
           />
         )}
 
-        {/* Subtle Top Corner Status & Hover Actions */}
+        {/* Subtle Top Corner Status & Hover Actions (No costly backdrop-blur per card) */}
         <div className="absolute top-2 inset-x-2 flex items-center justify-between gap-1 z-10 pointer-events-none">
           <div className="flex items-center gap-1">
             {currentItem.videoQuality && (
-              <span className="bg-black/60 backdrop-blur-md text-white font-black text-[9px] px-1.5 py-0.5 rounded border border-white/10">
+              <span className="bg-black/75 text-white font-black text-[9px] px-1.5 py-0.5 rounded border border-white/10">
                 {formatQualityLabel(currentItem.videoQuality).toUpperCase()}
               </span>
             )}
             {isComingSoonItem && (
-              <span className="inline-flex items-center gap-0.5 bg-black/70 backdrop-blur-md text-zinc-200 font-bold text-[9px] px-1.5 py-0.5 rounded border border-white/15">
+              <span className="inline-flex items-center gap-0.5 bg-black/80 text-zinc-200 font-bold text-[9px] px-1.5 py-0.5 rounded border border-white/15">
                 <Clock className="w-2.5 h-2.5 text-[#ea1d24]" />
                 <span>{t('قريباً', 'Soon')}</span>
               </span>
             )}
             {isHiddenItem && (
-              <span className="inline-flex items-center bg-black/75 backdrop-blur-md border border-amber-400/50 text-amber-300 font-bold text-[9px] px-1.5 py-0.5 rounded">
+              <span className="inline-flex items-center bg-black/80 border border-amber-400/50 text-amber-300 font-bold text-[9px] px-1.5 py-0.5 rounded">
                 <EyeOff className="w-2.5 h-2.5" />
               </span>
             )}
@@ -173,10 +164,10 @@ export const MediaCard: React.FC<MediaCardProps> = ({
                     : t('تنبيهي عند الإضافة', 'Notify me')
                 }
                 aria-label={t('تنبيه', 'Alert')}
-                className={`pointer-events-auto w-6 h-6 rounded-full flex items-center justify-center transition-all backdrop-blur-md cursor-pointer ${
+                className={`pointer-events-auto w-6 h-6 rounded-full flex items-center justify-center transition-opacity duration-150 cursor-pointer ${
                   isAlertSubscribed
                     ? 'bg-[#ea1d24] text-white opacity-100'
-                    : 'bg-black/55 text-white/85 hover:text-white border border-white/15 opacity-0 group-hover:opacity-100'
+                    : 'bg-black/75 text-white/85 hover:text-white border border-white/15 opacity-0 group-hover:opacity-100'
                 }`}
               >
                 {isAlertSubscribed ? (
@@ -195,10 +186,10 @@ export const MediaCard: React.FC<MediaCardProps> = ({
                   ? t('إزالة من المفضلة', 'Remove from favorites')
                   : t('إضافة إلى المفضلة', 'Add to favorites')
               }
-              className={`pointer-events-auto w-6 h-6 rounded-full flex items-center justify-center transition-all backdrop-blur-md cursor-pointer ${
+              className={`pointer-events-auto w-6 h-6 rounded-full flex items-center justify-center transition-opacity duration-150 cursor-pointer ${
                 isFavorite
                   ? 'bg-[#ea1d24] text-white opacity-100 shadow-sm'
-                  : 'bg-black/55 text-white/85 hover:text-white border border-white/15 opacity-0 group-hover:opacity-100'
+                  : 'bg-black/75 text-white/85 hover:text-white border border-white/15 opacity-0 group-hover:opacity-100'
               }`}
             >
               <Heart className={`w-3 h-3 ${isFavorite ? 'fill-current' : ''}`} />
@@ -207,8 +198,8 @@ export const MediaCard: React.FC<MediaCardProps> = ({
         </div>
 
         {/* Play Orb Hover Overlay */}
-        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none bg-black/25">
-          <div className="w-9 h-9 rounded-full bg-[#ea1d24] text-white flex items-center justify-center shadow-[0_8px_22px_rgba(234,29,36,0.55)] transform scale-85 group-hover:scale-100 transition-transform duration-200">
+        <div className="hidden sm:flex absolute inset-0 items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none bg-black/25">
+          <div className="w-9 h-9 rounded-full bg-[#ea1d24] text-white flex items-center justify-center shadow-[0_6px_18px_rgba(234,29,36,0.5)] transform scale-90 group-hover:scale-100 transition-transform duration-150">
             <Play className="w-4 h-4 fill-current ml-0.5" />
           </div>
         </div>
@@ -226,7 +217,7 @@ export const MediaCard: React.FC<MediaCardProps> = ({
           </div>
         )}
 
-        {/* Watch Progress Bar Inside Thumbnail Matching Reference Screen 1 */}
+        {/* Watch Progress Bar Inside Thumbnail */}
         {watchedPercent > 0 && (
           <div className="absolute bottom-2 inset-x-2.5 h-1 rounded-full bg-white/25 overflow-hidden z-10 pointer-events-none">
             <div
@@ -237,7 +228,7 @@ export const MediaCard: React.FC<MediaCardProps> = ({
         )}
       </div>
 
-      {/* Landscape Card Footer: Clean Single-Line Title Directly Below Thumbnail Matching Screen 1 */}
+      {/* Landscape Card Footer */}
       {isLandscape && (
         <div className={`pt-2 px-0.5 ${dir === 'ltr' ? 'text-left' : 'text-right'}`}>
           <h3 className="font-black text-zinc-100 group-hover:text-white text-xs sm:text-[13px] truncate transition-colors">
@@ -245,6 +236,8 @@ export const MediaCard: React.FC<MediaCardProps> = ({
           </h3>
         </div>
       )}
-    </motion.article>
+    </article>
   );
 };
+
+export const MediaCard = memo(MediaCardInner);

@@ -99,6 +99,16 @@ export const RecommendationSection: React.FC<RecommendationSectionProps> = ({
     };
   }, [history, mediaItems, favorites]);
 
+  const favoriteSet = useMemo(() => new Set(favorites), [favorites]);
+  const alertSet = useMemo(() => new Set(alertSubscribedIds), [alertSubscribedIds]);
+  const historyMap = useMemo(() => {
+    const map = new Map<string, WatchProgress>();
+    for (const h of history) {
+      if (!map.has(h.mediaId)) map.set(h.mediaId, h);
+    }
+    return map;
+  }, [history]);
+
   if (recommendedItems.length === 0) return null;
 
   return (
@@ -125,20 +135,20 @@ export const RecommendationSection: React.FC<RecommendationSectionProps> = ({
         )}
       </div>
 
-      {/* Landscape Horizontal Row Matching Screen 1 Top Row */}
-      <div className="flex items-stretch gap-3 sm:gap-3.5 overflow-x-auto no-scrollbar scroll-smooth snap-x snap-mandatory overscroll-x-contain py-1">
+      {/* Landscape Horizontal Row */}
+      <div className="flex items-stretch gap-3 sm:gap-3.5 overflow-x-auto no-scrollbar py-1">
         {recommendedItems.map((item, idx) => (
           <MediaCard
             key={`rec-${item.id}`}
             media={item}
             index={idx}
             variant="landscape"
-            onClick={() => onSelectMedia(item)}
-            isFavorite={favorites.includes(item.id)}
-            onToggleFavorite={() => onToggleFavorite(item.id)}
-            isAlertSubscribed={alertSubscribedIds.includes(item.id)}
-            onToggleAlert={onToggleAlert ? () => onToggleAlert(item.id) : undefined}
-            watchProgress={history.find((h) => h.mediaId === item.id)}
+            onSelect={onSelectMedia}
+            isFavorite={favoriteSet.has(item.id)}
+            onToggleFavorite={onToggleFavorite}
+            isAlertSubscribed={alertSet.has(item.id)}
+            onToggleAlert={onToggleAlert}
+            watchProgress={historyMap.get(item.id)}
           />
         ))}
       </div>

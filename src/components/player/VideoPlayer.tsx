@@ -3,27 +3,32 @@ import Hls from 'hls.js';
 import * as dashjs from 'dashjs';
 import { AnimatePresence, motion } from 'motion/react';
 import {
+  Airplay,
   AlertCircle,
-  ArrowRight,
-  Captions,
+  AudioLines,
   Check,
-  Clock,
+  ChevronLeft,
+  ChevronRight,
   ExternalLink,
   FastForward,
   Film,
-  Gauge,
+  Info,
   ListVideo,
   Loader2,
   Maximize,
   Minimize,
+  MoreVertical,
   Pause,
+  PictureInPicture2,
   Play,
+  RefreshCw,
   RotateCcw,
   RotateCw,
-  RefreshCw,
   Server,
-  Settings,
+  Share2,
+  SkipForward,
   SlidersHorizontal,
+  Star,
   Trash2,
   Upload,
   Volume2,
@@ -124,8 +129,15 @@ interface OrderedServerItem {
     | 'custom-source';
 }
 
-type ActivePanel = 'quality' | 'settings' | 'episodes' | 'servers' | null;
-type SettingsTab = 'speed' | 'subtitles' | 'servers';
+type ActivePanel =
+  | 'settings'
+  | 'settings_quality'
+  | 'settings_speed'
+  | 'settings_servers'
+  | 'settings_info'
+  | 'audio_subtitles'
+  | 'episodes'
+  | null;
 
 const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
@@ -345,12 +357,18 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
   // HUD & Popover state
   const [showControls, setShowControls] = useState<boolean>(true);
   const [activePanel, setActivePanel] = useState<ActivePanel>(null);
-  const [settingsTab, setSettingsTab] = useState<SettingsTab>('speed');
+  const [selectedSeasonTab, setSelectedSeasonTab] = useState<number>(() => {
+    const initialSeason = episodesList[activeEpisodeIndex]?.seasonNumber;
+    return initialSeason || media.seasons?.[0]?.seasonNumber || 1;
+  });
   const [resumePrompt, setResumePrompt] = useState<number | null>(null);
   const [seekFeedback, setSeekFeedback] = useState<'forward' | 'backward' | null>(null);
   const [hoverSeek, setHoverSeek] = useState<{ time: number; percent: number } | null>(null);
   const [isProgressHovered, setIsProgressHovered] = useState<boolean>(false);
   const [isScrubbing, setIsScrubbing] = useState<boolean>(false);
+  const [isPipActive, setIsPipActive] = useState<boolean>(false);
+  const [hudToast, setHudToast] = useState<string | null>(null);
+  const hudToastTimerRef = useRef<number | null>(null);
 
   // Subtitles state
   const [subtitlesEnabled, setSubtitlesEnabled] = useState<boolean>(true);
@@ -2318,6 +2336,83 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
     revealControls();
   }, [isYouTubeSource, revealControls]);
 
+  const showHudToast = useCallback((msg: string) => {
+    setHudToast(msg);
+    if (hudToastTimerRef.current) {
+      window.clearTimeout(hudToastTimerRef.current);
+    }
+    hudToastTimerRef.current = window.setTimeout(() => {
+      setHudToast(null);
+    }, 2400);
+  }, []);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const onEnterPip = () => setIsPipActive(true);
+    const onLeavePip = () => setIsPipActive(false);
+    video.addEventListener('enterpictureinpicture', onEnterPip);
+    video.addEventListener('leavepictureinpicture', onLeavePip);
+    return () => {
+      video.removeEventListener('enterpictureinpicture', onEnterPip);
+      video.removeEventListener('leavepictureinpicture', onLeavePip);
+    };
+  }, [selectedSourceUrl]);
+
+  const togglePictureInPicture = useCallback(async () => {
+    revealControls();
+    if (isUniversalEmbedMode || isYouTubeSource) {
+      toggleFullscreen();
+      showHudToast('وضع ملء الشاشة نشط لهذا المصدر');
+      return;
+    }
+    const video = videoRef.current as (HTMLVideoElement & {
+      webkitSetPresentationMode?: (mode: string) => void;
+      webkitPresentationMode?: string;
+    }) | null;
+    if (!video) return;
+
+    try {
+      if (document.pictureInPictureElement) {
+        await document.exitPictureInPicture();
+        setIsPipActive(false);
+      } else if (document.pictureInPictureEnabled && typeof video.requestPictureInPicture === 'function') {
+        await video.requestPictureInPicture();
+        setIsPipActive(true);
+      } else if (typeof video.webkitSetPresentationMode === 'function') {
+        const nextMode = video.webkitPresentationMode === 'picture-in-picture' ? 'inline' : 'picture-in-picture';
+        video.webkitSetPresentationMode(nextMode);
+        setIsPipActive(nextMode === 'picture-in-picture');
+      } else {
+        toggleFullscreen();
+      }
+    } catch {
+      showHudToast('وضع نافذة ضمن نافذة غير متاح في هذا المتصفح');
+    }
+  }, [isUniversalEmbedMode, isYouTubeSource, revealControls, showHudToast, toggleFullscreen]);
+
+  const handleShareMedia = useCallback(async () => {
+    revealControls();
+    const shareTitle = `${media.titleAr || media.title} — MASHHAD`;
+    const shareUrl = typeof window !== 'undefined' ? window.location.href : '';
+    try {
+      if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+        await navigator.share({
+          title: shareTitle,
+          text: media.description || shareTitle,
+          url: shareUrl,
+        });
+        return;
+      }
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareUrl);
+        showHudToast('تم نسخ رابط المشاهدة');
+      }
+    } catch {
+      // User dismissed share sheet
+    }
+  }, [media.description, media.title, media.titleAr, revealControls, showHudToast]);
+
   const changeSpeed = useCallback(
     (speed: number) => {
       if (isYouTubeSource) {
@@ -2971,6 +3066,36 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
     ytFittedWidth = activeStageHeight * ytTargetAspect;
   }
 
+  const activeFormatBadge = useMemo(() => {
+    if (isYouTubeSource) return 'YouTube';
+    if (isUniversalEmbedMode) return 'Embed';
+    if (isHlsSource(selectedSourceUrl)) return 'HLS';
+    if (isDashStreamUrl(selectedSourceUrl)) return 'DASH';
+    if (resolvedActiveServer?.format === 'webm') return 'WebM';
+    return 'MP4';
+  }, [isUniversalEmbedMode, isYouTubeSource, resolvedActiveServer?.format, selectedSourceUrl]);
+
+  const playerHeaderSubtitle = useMemo(() => {
+    if (activeEpisode) {
+      return `الموسم ${activeEpisode.seasonNumber}، الحلقة ${activeEpisode.episodeNumber}`;
+    }
+    if (media.title && media.title !== (media.titleAr || media.title)) {
+      return media.title;
+    }
+    return `${media.year}${media.duration ? ` · ${media.duration}` : ''}`;
+  }, [activeEpisode, media.duration, media.title, media.titleAr, media.year]);
+
+  const seasonTabs = useMemo(() => {
+    const unique = new Set<number>();
+    episodesList.forEach((ep) => unique.add(ep.seasonNumber));
+    const arr = Array.from(unique).sort((a, b) => a - b);
+    return arr.length > 0 ? arr : [1];
+  }, [episodesList]);
+
+  const filteredSeasonEpisodes = useMemo(() => {
+    return episodesList.filter((ep) => ep.seasonNumber === selectedSeasonTab);
+  }, [episodesList, selectedSeasonTab]);
+
   return (
     <div
       ref={containerRef}
@@ -3014,489 +3139,85 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
         className="hidden"
       />
 
-      {/* 1. Minimal Top Bar */}
+      {/* 1. Minimal Sleek Top Bar: [<] Centered Title + Season/Episode [Cast/FS] [⋮] */}
       <AnimatePresence>
-        {!isPreRollIntroActive && (showControls || isUniversalEmbedMode || errorMessage || isEnded) && (
-          <motion.header
-            initial={{ opacity: 0, y: -12 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -12 }}
-            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-            onPointerDown={(e) => {
-              e.stopPropagation();
-              revealControls();
-            }}
-            onPointerUp={(e) => e.stopPropagation()}
-            className="absolute top-0 inset-x-0 z-30 flex items-center justify-between gap-3 px-3 sm:px-6 pt-3 pb-8 bg-gradient-to-b from-black/85 via-black/45 to-transparent pointer-events-none"
-          >
-            {/* Right slot (RTL start): Back + Clean Unboxed Title */}
-            <div className="flex items-center gap-3 min-w-0 flex-1 pointer-events-auto">
-              <button
-                type="button"
-                onClick={handleClosePlayer}
-                aria-label="العودة"
-                className="w-10 h-10 min-w-[40px] min-h-[40px] rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-white flex items-center justify-center backdrop-blur-md transition-all cursor-pointer shrink-0"
-              >
-                <ArrowRight className="w-5 h-5" />
-              </button>
+        {!isPreRollIntroActive &&
+          activePanel !== 'episodes' &&
+          (showControls || isUniversalEmbedMode || errorMessage || isEnded) && (
+            <motion.header
+              dir="ltr"
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                revealControls();
+              }}
+              onPointerUp={(e) => e.stopPropagation()}
+              className="absolute top-0 inset-x-0 z-30 flex items-center justify-between gap-3 px-3.5 sm:px-7 pt-3.5 sm:pt-5 pb-8 bg-gradient-to-b from-black/80 via-black/35 to-transparent pointer-events-none"
+            >
+              {/* Top-Left: Clean Minimal Back Chevron */}
+              <div className="flex items-center gap-1 pointer-events-auto shrink-0 min-w-[68px]">
+                <button
+                  type="button"
+                  onClick={handleClosePlayer}
+                  aria-label="إغلاق المشغل"
+                  className="w-10 h-10 rounded-full text-white/95 hover:text-white hover:bg-white/10 flex items-center justify-center active:scale-90 transition-all cursor-pointer"
+                >
+                  <ChevronLeft className="w-6 h-6 stroke-[2]" />
+                </button>
+              </div>
 
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span
-                    dir="ltr"
-                    className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full bg-black/55 border border-[#F7C600]/35 text-[10px] font-black tracking-wide shrink-0"
-                  >
-                    <span className="text-[#F7C600]">Golden</span>
-                    <span className="text-white">Flix</span>
-                  </span>
-                  <h2 className="text-white font-bold text-sm sm:text-base truncate leading-snug">
-                    {media.titleAr || media.title}
-                  </h2>
-                </div>
-                <p className="text-[11px] sm:text-xs text-zinc-300/80 truncate leading-tight">
-                  {activeEpisode
-                    ? `الموسم ${activeEpisode.seasonNumber} · الحلقة ${activeEpisode.episodeNumber}${
-                        activeEpisode.title ? ` — ${activeEpisode.title}` : ''
-                      }`
-                    : `${media.year}${media.duration ? ` · ${media.duration}` : ''}`}
+              {/* Top-Center: 2-Line Centered Title Stack */}
+              <div className="min-w-0 flex-1 text-center px-2">
+                <h2 className="text-sm sm:text-base font-bold text-white leading-tight truncate drop-shadow-[0_1px_4px_rgba(0,0,0,0.85)]">
+                  {media.titleAr || media.title}
+                </h2>
+                <p className="text-[11px] sm:text-xs font-medium text-white/65 leading-tight mt-0.5 truncate drop-shadow-[0_1px_4px_rgba(0,0,0,0.85)]">
+                  {playerHeaderSubtitle}
                 </p>
               </div>
-            </div>
 
-            {/* Left slot (RTL end): Minimal Utility Buttons + Clean Popovers */}
-            <div className="flex items-center gap-2 shrink-0 relative pointer-events-auto">
-              {episodesList.length > 1 && (
+              {/* Top-Right: Cast/Screen Icon + Settings (⋮) */}
+              <div className="flex items-center justify-end gap-0.5 pointer-events-auto shrink-0 min-w-[68px]">
+                <button
+                  type="button"
+                  onClick={toggleFullscreen}
+                  aria-label={isFullscreen ? 'إنهاء ملء الشاشة' : 'ملء الشاشة'}
+                  title={isFullscreen ? 'إنهاء ملء الشاشة' : 'ملء الشاشة'}
+                  className={`w-10 h-10 rounded-full flex items-center justify-center transition-all active:scale-90 cursor-pointer ${
+                    isFullscreen
+                      ? 'text-white bg-white/15'
+                      : 'text-white/90 hover:text-white hover:bg-white/10'
+                  }`}
+                >
+                  <Airplay className="w-[19px] h-[19px] stroke-[1.9]" />
+                </button>
+
                 <button
                   type="button"
                   onClick={() =>
-                    setActivePanel((prev) => (prev === 'episodes' ? null : 'episodes'))
+                    setActivePanel((prev) =>
+                      prev && prev.startsWith('settings') ? null : 'settings'
+                    )
                   }
-                  aria-label="الحلقات"
-                  className={`h-10 px-3 rounded-full text-xs font-semibold flex items-center gap-1.5 backdrop-blur-md transition-all active:scale-95 cursor-pointer ${
-                    activePanel === 'episodes'
-                      ? 'bg-[#F7C600] text-black'
-                      : 'bg-white/10 hover:bg-white/20 text-white'
+                  aria-label="الإعدادات"
+                  title="الإعدادات"
+                  className={`w-10 h-10 rounded-full flex items-center justify-center transition-all active:scale-90 cursor-pointer ${
+                    activePanel?.startsWith('settings')
+                      ? 'text-white bg-white/15'
+                      : 'text-white/90 hover:text-white hover:bg-white/10'
                   }`}
                 >
-                  <ListVideo className="w-4 h-4" />
-                  <span className="hidden sm:inline">الحلقات</span>
+                  <MoreVertical className="w-[19px] h-[19px] stroke-[2]" />
                 </button>
-              )}
-
-              {orderedServers.length > 1 && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    setActivePanel((prev) => (prev === 'servers' ? null : 'servers'))
-                  }
-                  aria-label="تبديل المشغل"
-                  className={`h-10 px-3 rounded-full text-xs font-bold flex items-center gap-1.5 backdrop-blur-md transition-all active:scale-95 cursor-pointer ${
-                    activePanel === 'servers'
-                      ? 'bg-[#F7C600] text-black'
-                      : 'bg-white/10 hover:bg-white/20 text-[#F7C600]'
-                  }`}
-                >
-                  <Server className="w-3.5 h-3.5 shrink-0" />
-                  <span className="whitespace-nowrap">
-                    {resolvedActiveServer?.shortLabel || 'مشغل GR'}
-                  </span>
-                </button>
-              )}
-
-              {!isUniversalEmbedMode && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    setActivePanel((prev) => (prev === 'quality' ? null : 'quality'))
-                  }
-                  aria-label="الجودة"
-                  className={`h-10 px-3 rounded-full text-xs font-semibold flex items-center gap-1.5 backdrop-blur-md transition-all active:scale-95 cursor-pointer ${
-                    activePanel === 'quality'
-                      ? 'bg-[#F7C600] text-black'
-                      : 'bg-white/10 hover:bg-white/20 text-white'
-                  }`}
-                >
-                  <SlidersHorizontal className="w-4 h-4" />
-                  <span className="tabular-nums">{activeQualityLabel}</span>
-                </button>
-              )}
-
-              <button
-                type="button"
-                onClick={() =>
-                  setActivePanel((prev) => (prev === 'settings' ? null : 'settings'))
-                }
-                aria-label="إعدادات المشغل"
-                className={`w-10 h-10 min-w-[40px] min-h-[40px] rounded-full flex items-center justify-center backdrop-blur-md transition-all active:scale-95 cursor-pointer ${
-                  activePanel === 'settings'
-                    ? 'bg-[#F7C600] text-black'
-                    : 'bg-white/10 hover:bg-white/20 text-white'
-                }`}
-              >
-                <Settings className="w-4.5 h-4.5" />
-              </button>
-
-              {/* Popover Panels */}
-              <AnimatePresence>
-                {activePanel === 'servers' && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -6, scale: 0.96 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: -6, scale: 0.96 }}
-                    transition={{ duration: 0.16 }}
-                    className="absolute top-full left-0 mt-2.5 w-72 max-w-[calc(100vw-2rem)] bg-zinc-950/95 backdrop-blur-xl border border-white/10 rounded-2xl p-2.5 shadow-2xl z-50"
-                  >
-                    <p className="text-[11px] font-bold text-zinc-400 px-3 py-1.5">
-                      سيرفرات ومشغلات العرض
-                    </p>
-                    <div
-                      className={`space-y-1 overflow-y-auto ${
-                        isLandscapeMode ? 'max-h-[calc(100vw-8.5rem)]' : 'max-h-64'
-                      }`}
-                    >
-                      {orderedServers.map((srv) => {
-                        const isActiveSrv = resolvedActiveServer?.id === srv.id;
-                        return (
-                          <button
-                            key={srv.id}
-                            type="button"
-                            onClick={() => switchServer(srv)}
-                            className={`w-full min-h-[44px] px-3 py-2 rounded-xl text-right text-xs font-semibold flex items-center justify-between gap-2 transition-colors cursor-pointer ${
-                              isActiveSrv
-                                ? 'bg-[#F7C600] text-black'
-                                : 'text-zinc-200 hover:bg-white/10'
-                            }`}
-                          >
-                            <div className="min-w-0">
-                              <p className="font-bold truncate">{srv.shortLabel}</p>
-                              <p
-                                className={`text-[10px] truncate ${
-                                  isActiveSrv ? 'text-black/75' : 'text-zinc-400'
-                                }`}
-                              >
-                                {srv.label}
-                              </p>
-                            </div>
-                            {isActiveSrv && <Check className="w-4 h-4 shrink-0" />}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </motion.div>
-                )}
-
-                {activePanel === 'quality' && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -6, scale: 0.96 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: -6, scale: 0.96 }}
-                    transition={{ duration: 0.16 }}
-                    className="absolute top-full left-0 mt-2.5 w-56 max-w-[calc(100vw-2rem)] bg-zinc-950/95 backdrop-blur-xl border border-white/10 rounded-2xl p-2 shadow-2xl z-50"
-                  >
-                    <p className="text-[11px] font-bold text-zinc-400 px-3 py-1.5">
-                      جودة الفيديو
-                    </p>
-                    <div
-                      className={`space-y-1 overflow-y-auto ${
-                        isLandscapeMode ? 'max-h-[calc(100vw-8.5rem)]' : 'max-h-60'
-                      }`}
-                    >
-                      {effectiveQualityOptions.map((opt) => {
-                        const isProcessingOpt = opt.status === 'processing';
-                        const isActiveOpt = activeQualityId === opt.id && !isProcessingOpt;
-                        return (
-                          <button
-                            key={opt.id}
-                            type="button"
-                            disabled={isProcessingOpt}
-                            onClick={() => changeQuality(opt)}
-                            className={`w-full min-h-[40px] px-3 rounded-xl text-xs font-semibold flex items-center justify-between transition-colors ${
-                              isProcessingOpt
-                                ? 'text-zinc-500 cursor-wait'
-                                : isActiveOpt
-                                ? 'bg-[#F7C600] text-black cursor-pointer'
-                                : 'text-zinc-200 hover:bg-white/10 cursor-pointer'
-                            }`}
-                          >
-                            <span className="flex items-center gap-2">
-                              {isProcessingOpt && (
-                                <Loader2 className="w-3.5 h-3.5 animate-spin text-[#F7C600]" />
-                              )}
-                              <span>
-                                {opt.id === 'auto' && detectedResolution
-                                  ? `تلقائي (${detectedResolution})`
-                                  : isProcessingOpt
-                                  ? `${opt.label} (جارٍ التجهيز)`
-                                  : opt.label}
-                              </span>
-                            </span>
-                            {isActiveOpt && <Check className="w-4 h-4" />}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </motion.div>
-                )}
-
-                {activePanel === 'settings' && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -6, scale: 0.96 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: -6, scale: 0.96 }}
-                    transition={{ duration: 0.16 }}
-                    className={`absolute top-full left-0 mt-2.5 w-72 sm:w-80 max-w-[calc(100vw-2rem)] overflow-y-auto bg-zinc-950/95 backdrop-blur-xl border border-white/10 rounded-2xl p-3 shadow-2xl z-50 space-y-3 ${
-                      isLandscapeMode ? 'max-h-[calc(100vw-5.5rem)]' : 'max-h-[65dvh]'
-                    }`}
-                  >
-                    {/* Segmented Settings Tabs */}
-                    <div className="grid grid-cols-3 gap-1 p-1 bg-white/5 rounded-xl">
-                      <button
-                        type="button"
-                        onClick={() => setSettingsTab('speed')}
-                        className={`py-2 px-2 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer ${
-                          settingsTab === 'speed'
-                            ? 'bg-[#F7C600] text-black'
-                            : 'text-zinc-300 hover:text-white'
-                        }`}
-                      >
-                        <Gauge className="w-3.5 h-3.5" />
-                        <span>السرعة</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setSettingsTab('subtitles')}
-                        className={`py-2 px-2 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer ${
-                          settingsTab === 'subtitles'
-                            ? 'bg-[#F7C600] text-black'
-                            : 'text-zinc-300 hover:text-white'
-                        }`}
-                      >
-                        <Captions className="w-3.5 h-3.5" />
-                        <span>الترجمة</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setSettingsTab('servers')}
-                        className={`py-2 px-2 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer ${
-                          settingsTab === 'servers'
-                            ? 'bg-[#F7C600] text-black'
-                            : 'text-zinc-300 hover:text-white'
-                        }`}
-                      >
-                        <Server className="w-3.5 h-3.5" />
-                        <span>السيرفرات</span>
-                      </button>
-                    </div>
-
-                    {settingsTab === 'speed' && (
-                      <div className="space-y-1">
-                        {SPEED_OPTIONS.map((speed) => (
-                          <button
-                            key={speed}
-                            type="button"
-                            onClick={() => changeSpeed(speed)}
-                            className={`w-full min-h-[40px] px-3 rounded-xl text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${
-                              playbackSpeed === speed
-                                ? 'bg-[#F7C600] text-black'
-                                : 'text-zinc-200 hover:bg-white/10'
-                            }`}
-                          >
-                            <span className="tabular-nums">
-                              {speed === 1 ? 'عادية (1x)' : `${speed}x`}
-                            </span>
-                            {playbackSpeed === speed && <Check className="w-4 h-4" />}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-
-                    {settingsTab === 'subtitles' && (
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-semibold text-white">عرض الترجمة</span>
-                          <button
-                            type="button"
-                            onClick={() => setSubtitlesEnabled((prev) => !prev)}
-                            className={`px-3 min-h-[34px] rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                              subtitlesEnabled
-                                ? 'bg-[#F7C600] text-black'
-                                : 'bg-zinc-800 text-zinc-300'
-                            }`}
-                          >
-                            {subtitlesEnabled ? 'مفعلة' : 'متوقفة'}
-                          </button>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => fileInputRef.current?.click()}
-                          className="w-full min-h-[42px] px-3 rounded-xl bg-white/5 hover:bg-white/10 border border-dashed border-white/20 text-[#F7C600] text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
-                        >
-                          <Upload className="w-4 h-4" />
-                          <span>اختيار ملف ترجمة (SRT / VTT)</span>
-                        </button>
-
-                        {subtitleFileName && (
-                          <div className="flex items-center justify-between gap-2 bg-white/5 rounded-xl px-3 py-2">
-                            <div className="min-w-0">
-                              <p className="text-[11px] font-semibold text-white truncate">
-                                {subtitleFileName}
-                              </p>
-                              <p className="text-[10px] text-zinc-400 tabular-nums">
-                                {subtitleCues.length} سطر
-                              </p>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSubtitleCues([]);
-                                setSubtitleFileName(null);
-                                setSubtitleError(null);
-                              }}
-                              aria-label="إزالة ملف الترجمة"
-                              className="min-w-[34px] min-h-[34px] rounded-lg bg-red-500/15 hover:bg-red-500/25 text-red-400 flex items-center justify-center cursor-pointer"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        )}
-
-                        {subtitleError && (
-                          <p className="text-[11px] text-red-400">{subtitleError}</p>
-                        )}
-
-                        <div className="space-y-1.5">
-                          <span className="text-[11px] text-zinc-400 font-semibold block">
-                            حجم الخط
-                          </span>
-                          <div className="grid grid-cols-4 gap-1.5">
-                            {SUBTITLE_SIZES.map((sz) => (
-                              <button
-                                key={sz.id}
-                                type="button"
-                                onClick={() => setSubtitleSize(sz.id)}
-                                className={`min-h-[36px] rounded-lg text-xs font-semibold cursor-pointer ${
-                                  subtitleSize === sz.id
-                                    ? 'bg-[#F7C600] text-black'
-                                    : 'bg-white/5 text-zinc-300 hover:bg-white/10'
-                                }`}
-                              >
-                                {sz.label}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        <div className="space-y-1.5">
-                          <span className="text-[11px] text-zinc-400 font-semibold block">
-                            لون الخط
-                          </span>
-                          <div className="grid grid-cols-2 gap-1.5">
-                            {SUBTITLE_COLORS.map((col) => (
-                              <button
-                                key={col.id}
-                                type="button"
-                                onClick={() => setSubtitleColor(col.value)}
-                                className={`min-h-[36px] px-2.5 rounded-lg text-xs font-semibold flex items-center gap-2 cursor-pointer ${
-                                  subtitleColor === col.value
-                                    ? 'bg-white/15 border border-[#F7C600] text-white'
-                                    : 'bg-white/5 text-zinc-300 hover:bg-white/10'
-                                }`}
-                              >
-                                <span
-                                  className="w-3 h-3 rounded-full shrink-0"
-                                  style={{ backgroundColor: col.value }}
-                                />
-                                <span>{col.label}</span>
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {settingsTab === 'servers' && (
-                      <div className="space-y-1 max-h-56 overflow-y-auto">
-                        {orderedServers.map((srv) => {
-                          const isActiveSrv = resolvedActiveServer?.id === srv.id;
-                          return (
-                            <button
-                              key={srv.id}
-                              type="button"
-                              onClick={() => switchServer(srv)}
-                              className={`w-full min-h-[40px] px-3 rounded-xl text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${
-                                isActiveSrv
-                                  ? 'bg-[#F7C600] text-black'
-                                  : 'text-zinc-200 hover:bg-white/10'
-                              }`}
-                            >
-                              <span className="truncate">
-                                سيرفر {srv.orderNumber}: {srv.shortLabel}
-                              </span>
-                              {isActiveSrv && <Check className="w-4 h-4 shrink-0" />}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </motion.div>
-                )}
-
-                {activePanel === 'episodes' && episodesList.length > 0 && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -6, scale: 0.96 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: -6, scale: 0.96 }}
-                    transition={{ duration: 0.16 }}
-                    className={`absolute top-full left-0 mt-2.5 w-72 sm:w-80 max-w-[calc(100vw-2rem)] overflow-y-auto bg-zinc-950/95 backdrop-blur-xl border border-white/10 rounded-2xl p-2 shadow-2xl z-50 ${
-                      isLandscapeMode ? 'max-h-[calc(100vw-5.5rem)]' : 'max-h-[60dvh]'
-                    }`}
-                  >
-                    <p className="text-[11px] font-bold text-zinc-400 px-3 py-1.5">
-                      الحلقات ({episodesList.length})
-                    </p>
-                    <div className="space-y-1">
-                      {episodesList.map((ep, idx) => {
-                        const isActive = idx === activeEpisodeIndex;
-                        return (
-                          <button
-                            key={ep.id}
-                            type="button"
-                            onClick={() => handleSelectEpisode(idx)}
-                            className={`w-full min-h-[46px] px-3 py-2 rounded-xl text-right flex items-center justify-between gap-2 transition-colors cursor-pointer ${
-                              isActive
-                                ? 'bg-[#F7C600] text-black'
-                                : 'bg-white/5 hover:bg-white/10 text-zinc-200'
-                            }`}
-                          >
-                            <div className="min-w-0">
-                              <p className="text-xs font-bold truncate">
-                                م{ep.seasonNumber} · ح{ep.episodeNumber}: {ep.title}
-                              </p>
-                              <p
-                                className={`text-[11px] ${
-                                  isActive ? 'text-black/75' : 'text-zinc-400'
-                                }`}
-                              >
-                                {ep.duration}
-                              </p>
-                            </div>
-                            {isActive && <Play className="w-4 h-4 fill-current shrink-0" />}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          </motion.header>
-        )}
+              </div>
+            </motion.header>
+          )}
       </AnimatePresence>
 
-      {/* 2. Centered Video Stage (Zero Stretching, Cropping, or Corner Collapse) */}
+      {/* 2. Centered Video Stage */}
       <div
         ref={stageRef}
         className="absolute inset-0 w-full h-full flex items-center justify-center bg-black overflow-hidden"
@@ -3537,7 +3258,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
               }}
             />
 
-            {/* Cover YouTube pre-play third-party center icon cleanly until actual playback begins */}
             {!ytHasStartedPlaying && !errorMessage && (
               <div className="absolute inset-0 z-10 bg-black pointer-events-none flex items-center justify-center">
                 {(activeEpisode?.thumbnailUrl || media.bannerUrl || media.posterUrl) && (
@@ -3647,11 +3367,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
         {activeSubtitleText && !errorMessage && !isEnded && (
           <div
             className={`absolute inset-x-4 z-20 pointer-events-none flex justify-center transition-all duration-200 ${
-              showControls ? 'bottom-28 sm:bottom-32' : 'bottom-6 sm:bottom-10'
+              showControls ? 'bottom-32 sm:bottom-36' : 'bottom-6 sm:bottom-10'
             }`}
           >
             <div
-              className={`max-w-3xl px-3.5 py-1.5 sm:px-5 sm:py-2 rounded-lg bg-black/75 backdrop-blur-sm text-center font-bold whitespace-pre-line leading-relaxed ${subtitleSizeClass}`}
+              className={`max-w-3xl px-3.5 py-1.5 sm:px-5 sm:py-2 rounded-xl bg-black/70 backdrop-blur-md text-center font-bold whitespace-pre-line leading-relaxed ${subtitleSizeClass}`}
               style={{ color: subtitleColor, textShadow: '0 2px 6px rgba(0,0,0,0.95)' }}
             >
               {activeSubtitleText}
@@ -3667,7 +3387,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.92 }}
               transition={{ duration: 0.16 }}
-              className={`absolute top-1/2 -translate-y-1/2 z-20 pointer-events-none flex flex-col items-center justify-center bg-black/70 backdrop-blur-md rounded-full w-20 h-20 text-[#F7C600] ${
+              className={`absolute top-1/2 -translate-y-1/2 z-20 pointer-events-none flex flex-col items-center justify-center rounded-full w-20 h-20 bg-black/55 backdrop-blur-md text-white ${
                 seekFeedback === 'forward' ? 'right-8 sm:right-16' : 'left-8 sm:left-16'
               }`}
             >
@@ -3677,7 +3397,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
                 <RotateCcw className="w-7 h-7" />
               )}
               <span className="text-xs font-bold tabular-nums mt-1">
-                {seekFeedback === 'forward' ? '+10 ث' : '-10 ث'}
+                {seekFeedback === 'forward' ? '+10s' : '-10s'}
               </span>
             </motion.div>
           )}
@@ -3685,48 +3405,42 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
 
         {/* Minimal Loading Indicator */}
         {!isPreRollIntroActive && isLoading && !errorMessage && !isEnded && (
-          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/45 pointer-events-none">
-            <div className="w-11 h-11 sm:w-12 sm:h-12 border-[3px] border-white/20 border-t-[#F7C600] rounded-full animate-spin" />
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/35 pointer-events-none">
+            <div className="w-11 h-11 sm:w-12 sm:h-12 border-[3px] border-white/25 border-t-white rounded-full animate-spin" />
           </div>
         )}
 
-        {/* Resume Watch Prompt */}
+        {/* Subtle HUD Toast */}
         <AnimatePresence>
-          {!isPreRollIntroActive && resumePrompt !== null && !errorMessage && !isEnded && (
-            <div className="absolute top-16 sm:top-20 inset-x-0 z-40 flex justify-center px-4 pointer-events-none">
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                onPointerUp={(e) => e.stopPropagation()}
-                className="pointer-events-auto bg-zinc-950/90 border border-white/15 rounded-2xl p-2.5 px-3.5 shadow-2xl backdrop-blur-xl flex items-center gap-3 text-xs w-full sm:w-auto max-w-md"
-              >
-                <Clock className="w-4 h-4 text-[#F7C600] shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-white font-semibold truncate">
-                    متابعة من{' '}
-                    <span className="text-[#F7C600] tabular-nums">
-                      {formatClockTime(resumePrompt)}
-                    </span>
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={resumeSavedProgress}
-                  className="min-h-[34px] px-3 bg-[#F7C600] hover:bg-amber-300 text-black font-bold rounded-xl transition-colors cursor-pointer shrink-0"
-                >
-                  استكمال
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setResumePrompt(null)}
-                  aria-label="إغلاق"
-                  className="min-w-[34px] min-h-[34px] rounded-xl text-zinc-400 hover:text-white flex items-center justify-center cursor-pointer shrink-0"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </motion.div>
-            </div>
+          {hudToast && (
+            <motion.div
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              className="absolute top-16 inset-x-0 z-40 flex justify-center px-4 pointer-events-none"
+            >
+              <div className="px-4 py-1.5 rounded-full bg-[#18181b]/95 border border-white/15 text-xs font-semibold text-white shadow-xl">
+                {hudToast}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Resume Prompt Banner when returning mid-way */}
+        <AnimatePresence>
+          {resumePrompt !== null && !errorMessage && !isEnded && !isPreRollIntroActive && (
+            <motion.button
+              type="button"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 8 }}
+              onPointerUp={(e) => e.stopPropagation()}
+              onClick={resumeSavedProgress}
+              className="absolute bottom-28 sm:bottom-32 left-4 sm:left-7 z-30 min-h-[36px] px-3.5 rounded-full bg-white text-black hover:bg-zinc-200 text-xs font-bold flex items-center gap-2 shadow-xl transition-all active:scale-95 cursor-pointer"
+            >
+              <Play className="w-3.5 h-3.5 fill-current" />
+              <span>متابعة من {formatClockTime(resumePrompt)}</span>
+            </motion.button>
           )}
         </AnimatePresence>
 
@@ -3740,28 +3454,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
               exit={{ opacity: 0, x: -12 }}
               onPointerUp={(e) => e.stopPropagation()}
               onClick={() => handleSeek(introEnd as number)}
-              className="absolute bottom-24 sm:bottom-28 left-4 sm:left-6 z-30 min-h-[40px] px-4 rounded-full bg-white/15 hover:bg-[#F7C600] text-white hover:text-black backdrop-blur-md text-xs font-bold flex items-center gap-2 transition-all active:scale-95 cursor-pointer"
+              className="absolute bottom-28 sm:bottom-32 right-4 sm:right-7 z-30 min-h-[36px] px-4 rounded-full bg-[#18181b]/90 hover:bg-white text-white hover:text-black border border-white/20 text-xs font-bold flex items-center gap-2 transition-all active:scale-95 cursor-pointer"
             >
-              <FastForward className="w-4 h-4" />
+              <FastForward className="w-3.5 h-3.5" />
               <span>تخطي المقدمة</span>
-            </motion.button>
-          )}
-        </AnimatePresence>
-
-        {/* Next Episode Prompt */}
-        <AnimatePresence>
-          {showNextEpisodePrompt && nextEpisode && (
-            <motion.button
-              type="button"
-              initial={{ opacity: 0, x: 12 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 12 }}
-              onPointerUp={(e) => e.stopPropagation()}
-              onClick={() => handleSelectEpisode(activeEpisodeIndex + 1)}
-              className="absolute bottom-24 sm:bottom-28 right-4 sm:right-6 z-30 min-h-[40px] px-4 rounded-full bg-[#F7C600] hover:bg-amber-300 text-black text-xs font-black flex items-center gap-2 shadow-xl transition-all active:scale-95 cursor-pointer"
-            >
-              <FastForward className="w-4 h-4" />
-              <span>الحلقة التالية</span>
             </motion.button>
           )}
         </AnimatePresence>
@@ -3773,9 +3469,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
               initial={{ opacity: 0, y: -8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
-              className="absolute top-16 sm:top-20 inset-x-0 z-30 flex justify-center px-4 pointer-events-none"
+              className="absolute top-16 inset-x-0 z-30 flex justify-center px-4 pointer-events-none"
             >
-              <div className="px-3.5 py-2 rounded-full bg-zinc-950/92 border border-[#F7C600]/45 text-[#F7C600] text-xs font-bold backdrop-blur-md shadow-xl flex items-center gap-2">
+              <div className="px-3.5 py-1.5 rounded-full bg-[#18181b]/90 border border-white/15 text-white text-xs font-semibold flex items-center gap-2">
                 <Server className="w-3.5 h-3.5 shrink-0" />
                 <span>{failoverNotice}</span>
               </div>
@@ -3783,10 +3479,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
           )}
         </AnimatePresence>
 
-        {/* GoldenFlix Center Transport Controls (Restored GoldenFlix center mark; opaque center button covers YouTube's white || pause bezel) */}
+        {/* Minimal Center Transport Controls: (↺10)  ▶ / ||  (↻10) */}
         <AnimatePresence>
           {!isUniversalEmbedMode &&
             !isPreRollIntroActive &&
+            !activePanel &&
             (showControls || !isPlaying) &&
             !errorMessage &&
             !isEnded && (
@@ -3794,35 +3491,41 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
                 initial={{ opacity: 0, scale: 0.94 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.94 }}
-                transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+                transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
                 dir="ltr"
                 onPointerDown={(e) => {
                   e.stopPropagation();
                   revealControls();
                 }}
                 onPointerUp={(e) => e.stopPropagation()}
-                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 flex items-center gap-5 sm:gap-8"
+                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 flex items-center gap-8 sm:gap-14"
               >
                 <button
                   type="button"
                   onClick={skipBackward}
                   aria-label="تأخير 10 ثوانٍ"
-                  className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-zinc-950/85 hover:bg-zinc-900 border border-white/20 hover:border-[#F7C600]/60 text-white backdrop-blur-md flex items-center justify-center relative active:scale-90 transition-all cursor-pointer shadow-lg"
+                  className="w-12 h-12 sm:w-14 sm:h-14 rounded-full text-white/90 hover:text-white hover:bg-white/10 flex items-center justify-center relative active:scale-90 transition-all cursor-pointer drop-shadow-[0_2px_10px_rgba(0,0,0,0.85)]"
                 >
-                  <RotateCcw className="w-5 h-5 sm:w-6 sm:h-6" />
-                  <span className="absolute text-[9px] font-mono font-extrabold mt-0.5">10</span>
+                  <RotateCcw className="w-7 h-7 sm:w-8 sm:h-8 stroke-[1.75]" />
+                  <span className="absolute text-[9.5px] sm:text-[10.5px] font-bold tabular-nums mt-0.5">
+                    10
+                  </span>
                 </button>
 
                 <button
                   type="button"
                   onClick={togglePlay}
                   aria-label={isPlaying ? 'إيقاف مؤقت' : 'تشغيل'}
-                  className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-[#09090D] hover:bg-[#14141D] border-2 border-[#F7C600] text-[#F7C600] flex items-center justify-center active:scale-90 transition-all cursor-pointer shadow-[0_0_32px_rgba(0,0,0,0.95),0_0_18px_rgba(247,198,0,0.2)]"
+                  className={`w-16 h-16 sm:w-20 sm:h-20 rounded-full text-white flex items-center justify-center active:scale-90 transition-all cursor-pointer ${
+                    isYouTubeSource && !isPlaying
+                      ? 'bg-black/65 backdrop-blur-md shadow-2xl'
+                      : 'hover:bg-white/10 drop-shadow-[0_4px_18px_rgba(0,0,0,0.9)]'
+                  }`}
                 >
                   {isPlaying ? (
-                    <Pause className="w-7 h-7 sm:w-8 sm:h-8 fill-current" />
+                    <Pause className="w-10 h-10 sm:w-12 sm:h-12 fill-white text-white" />
                   ) : (
-                    <Play className="w-7 h-7 sm:w-8 sm:h-8 fill-current ml-1" />
+                    <Play className="w-10 h-10 sm:w-12 sm:h-12 fill-white text-white ml-1" />
                   )}
                 </button>
 
@@ -3830,10 +3533,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
                   type="button"
                   onClick={skipForward}
                   aria-label="تقديم 10 ثوانٍ"
-                  className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-zinc-950/85 hover:bg-zinc-900 border border-white/20 hover:border-[#F7C600]/60 text-white backdrop-blur-md flex items-center justify-center relative active:scale-90 transition-all cursor-pointer shadow-lg"
+                  className="w-12 h-12 sm:w-14 sm:h-14 rounded-full text-white/90 hover:text-white hover:bg-white/10 flex items-center justify-center relative active:scale-90 transition-all cursor-pointer drop-shadow-[0_2px_10px_rgba(0,0,0,0.85)]"
                 >
-                  <RotateCw className="w-5 h-5 sm:w-6 sm:h-6" />
-                  <span className="absolute text-[9px] font-mono font-extrabold mt-0.5">10</span>
+                  <RotateCw className="w-7 h-7 sm:w-8 sm:h-8 stroke-[1.75]" />
+                  <span className="absolute text-[9.5px] sm:text-[10.5px] font-bold tabular-nums mt-0.5">
+                    10
+                  </span>
                 </button>
               </motion.div>
             )}
@@ -3853,7 +3558,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
             onPointerUp={(e) => e.stopPropagation()}
             className="absolute inset-0 z-40 bg-black/92 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center"
           >
-            <div className="max-w-md w-full bg-zinc-950/90 border border-white/10 rounded-3xl p-6 shadow-2xl">
+            <div className="max-w-md w-full bg-[#161618]/95 border border-white/10 rounded-3xl p-6 shadow-2xl">
               <div className="w-12 h-12 rounded-2xl bg-red-500/15 text-red-400 flex items-center justify-center mx-auto mb-4">
                 {isOffline ? <WifiOff className="w-6 h-6" /> : <AlertCircle className="w-6 h-6" />}
               </div>
@@ -3873,7 +3578,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
                         key={altSrv.id}
                         type="button"
                         onClick={() => switchServer(altSrv)}
-                        className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-[#F7C600] text-white hover:text-black font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                        className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white text-white hover:text-black font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
                       >
                         <Server className="w-3.5 h-3.5" />
                         <span>تشغيل عبر {altSrv.shortLabel}</span>
@@ -3897,7 +3602,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
                 <button
                   type="button"
                   onClick={handleRetry}
-                  className="flex-1 min-h-[44px] px-4 bg-[#F7C600] hover:bg-amber-300 text-black font-bold text-xs sm:text-sm rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer"
+                  className="flex-1 min-h-[44px] px-4 bg-white hover:bg-zinc-200 text-black font-bold text-xs sm:text-sm rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer"
                 >
                   <RefreshCw className="w-4 h-4" />
                   <span>إعادة المحاولة</span>
@@ -3922,13 +3627,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
             onPointerUp={(e) => e.stopPropagation()}
             className="absolute inset-0 z-40 bg-black/90 backdrop-blur-md flex items-center justify-center p-5"
           >
-            <div className="max-w-md w-full bg-zinc-950/95 border border-white/10 rounded-3xl p-6 text-center shadow-2xl space-y-5">
-              <div className="w-12 h-12 rounded-2xl bg-[#F7C600]/15 text-[#F7C600] flex items-center justify-center mx-auto">
+            <div className="max-w-md w-full bg-[#161618]/95 border border-white/10 rounded-3xl p-6 text-center shadow-2xl space-y-5">
+              <div className="w-12 h-12 rounded-2xl bg-white/10 text-white flex items-center justify-center mx-auto">
                 <Film className="w-6 h-6" />
               </div>
 
               <div>
-                <p className="text-xs font-bold text-[#F7C600] mb-1">
+                <p className="text-xs font-bold text-zinc-300 mb-1">
                   {nextEpisode ? 'انتهت الحلقة' : 'انتهى العرض'}
                 </p>
                 <h3 className="text-lg sm:text-xl font-black text-white">
@@ -3947,7 +3652,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
                   <button
                     type="button"
                     onClick={() => handleSelectEpisode(activeEpisodeIndex + 1)}
-                    className="flex-1 min-h-[44px] px-4 bg-[#F7C600] hover:bg-amber-300 text-black font-bold text-xs sm:text-sm rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer"
+                    className="flex-1 min-h-[44px] px-4 bg-white hover:bg-zinc-200 text-black font-bold text-xs sm:text-sm rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer"
                   >
                     <FastForward className="w-4 h-4" />
                     <span>الحلقة التالية</span>
@@ -3979,7 +3684,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
                   className={`flex-1 min-h-[44px] px-4 font-bold text-xs sm:text-sm rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer ${
                     nextEpisode
                       ? 'bg-white/10 hover:bg-white/15 text-white'
-                      : 'bg-[#F7C600] hover:bg-amber-300 text-black'
+                      : 'bg-white hover:bg-zinc-200 text-black'
                   }`}
                 >
                   <RotateCcw className="w-4 h-4" />
@@ -3999,237 +3704,834 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
         )}
       </div>
 
-      {/* 3. Clean Minimal Bottom Dock (Strictly Non-Overlapping Controls Row) */}
+      {/* 3. Centered Settings & Audio/Subtitles Floating Card Modal (Matches Phone 3 in Reference) */}
       <AnimatePresence>
-        {!isUniversalEmbedMode && !isPreRollIntroActive && (showControls || errorMessage) && !isEnded && (
-          <motion.footer
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 12 }}
-            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-            onPointerDown={(e) => {
-              e.stopPropagation();
-              revealControls();
-            }}
-            onPointerUp={(e) => e.stopPropagation()}
-            dir="ltr"
-            className="absolute bottom-0 inset-x-0 z-30 px-3 sm:px-6 pt-8 pb-3 sm:pb-5 bg-gradient-to-t from-black/90 via-black/55 to-transparent"
-          >
-            {/* Playback Timeline Scrubber */}
-            <div
-              className="relative group w-full h-7 flex items-center touch-none cursor-pointer"
-              onMouseEnter={() => {
-                setIsProgressHovered(true);
-                revealControls();
-              }}
-              onMouseMove={(e) => {
-                setIsProgressHovered(true);
-                if (!duration) return;
-                const ratio = getTimelineRatio(
-                  e.clientX,
-                  e.clientY,
-                  e.currentTarget.getBoundingClientRect()
-                );
-                setHoverSeek({ time: ratio * duration, percent: ratio * 100 });
-              }}
-              onMouseLeave={() => {
-                setIsProgressHovered(false);
-                setHoverSeek(null);
-                scheduleControlsHide();
-              }}
+        {!isPreRollIntroActive &&
+          activePanel &&
+          activePanel !== 'episodes' && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.16 }}
               onPointerDown={(e) => {
                 e.stopPropagation();
-                if (!duration) return;
-                setIsScrubbing(true);
                 revealControls();
-                e.currentTarget.setPointerCapture?.(e.pointerId);
-                const ratio = getTimelineRatio(
-                  e.clientX,
-                  e.clientY,
-                  e.currentTarget.getBoundingClientRect()
-                );
-                setHoverSeek({ time: ratio * duration, percent: ratio * 100 });
-                handleSeek(ratio * duration);
-              }}
-              onPointerMove={(e) => {
-                if (!isScrubbing || !duration) return;
-                const ratio = getTimelineRatio(
-                  e.clientX,
-                  e.clientY,
-                  e.currentTarget.getBoundingClientRect()
-                );
-                setHoverSeek({ time: ratio * duration, percent: ratio * 100 });
-                handleSeek(ratio * duration);
               }}
               onPointerUp={(e) => {
                 e.stopPropagation();
-                setIsScrubbing(false);
-                setHoverSeek(null);
-                revealControls();
+                if (e.target === e.currentTarget) {
+                  setActivePanel(null);
+                }
               }}
+              className="absolute inset-0 z-40 bg-black/55 backdrop-blur-[2px] flex items-center justify-center p-4"
             >
-              {hoverSeek && (
-                <div
-                  className="absolute -top-7 -translate-x-1/2 px-2 py-0.5 rounded-md bg-zinc-900/95 text-white text-[11px] font-mono font-semibold tabular-nums pointer-events-none shadow-lg"
-                  style={{ left: `${hoverSeek.percent}%` }}
-                >
-                  {formatClockTime(hoverSeek.time)}
-                </div>
-              )}
-
-              {/* Visual Track */}
-              <div
-                className={`relative w-full bg-white/25 rounded-full overflow-hidden pointer-events-none transition-all duration-150 ${
-                  isProgressHovered || isScrubbing ? 'h-1.5' : 'h-1'
-                }`}
+              <motion.div
+                dir="rtl"
+                initial={{ opacity: 0, scale: 0.95, y: 8 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 8 }}
+                transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                onClick={(e) => e.stopPropagation()}
+                className="w-full max-w-[340px] bg-[#161618]/96 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-[0_24px_64px_rgba(0,0,0,0.9)] overflow-hidden text-white"
               >
-                <div
-                  className="absolute inset-y-0 left-0 bg-white/35 rounded-full"
-                  style={{ width: `${bufferedPercent}%` }}
-                />
-                <div
-                  className="absolute inset-y-0 left-0 bg-[#F7C600] rounded-full"
-                  style={{ width: `${progressPercent}%` }}
-                />
-              </div>
-
-              <input
-                type="range"
-                aria-label="شريط التقديم"
-                min={0}
-                max={duration || 100}
-                step={0.1}
-                value={currentTime}
-                onChange={(e) => handleSeek(parseFloat(e.target.value))}
-                className="sr-only"
-              />
-
-              {/* Circular Gold Scrubber Thumb */}
-              <div
-                className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 rounded-full bg-[#F7C600] pointer-events-none transition-all duration-150 ${
-                  isProgressHovered || isScrubbing
-                    ? 'w-4 h-4 shadow-[0_0_12px_rgba(247,198,0,0.85)]'
-                    : 'w-3 h-3 shadow-[0_0_8px_rgba(247,198,0,0.5)]'
-                }`}
-                style={{ left: `${progressPercent}%` }}
-              />
-            </div>
-
-            {/* Control Row: Clean Left Playback + Center-Left Time + Right Screen Actions */}
-            <div className="flex items-center justify-between gap-2 sm:gap-4 mt-1 text-white">
-              {/* Playback & Volume & Timestamp Cluster */}
-              <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0">
-                <button
-                  type="button"
-                  onClick={togglePlay}
-                  aria-label={isPlaying ? 'إيقاف مؤقت' : 'تشغيل'}
-                  className="w-10 h-10 min-w-[40px] min-h-[40px] rounded-full flex items-center justify-center text-white hover:bg-[#F7C600] hover:text-black active:scale-90 transition-all cursor-pointer shrink-0"
-                >
-                  {isPlaying ? (
-                    <Pause className="w-5 h-5 fill-current" />
+                {/* Card Header */}
+                <div className="flex items-center justify-between px-4 py-3.5 border-b border-white/[0.08]">
+                  {activePanel.startsWith('settings_') ? (
+                    <button
+                      type="button"
+                      onClick={() => setActivePanel('settings')}
+                      aria-label="رجوع"
+                      className="w-7 h-7 rounded-full hover:bg-white/10 text-zinc-300 hover:text-white flex items-center justify-center cursor-pointer"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
                   ) : (
-                    <Play className="w-5 h-5 fill-current ml-0.5" />
+                    <span className="w-7" />
                   )}
-                </button>
 
-                <button
-                  type="button"
-                  onClick={skipBackward}
-                  aria-label="تأخير 10 ثوانٍ"
-                  className="hidden sm:flex w-10 h-10 min-w-[40px] min-h-[40px] rounded-full items-center justify-center text-zinc-200 hover:text-white hover:bg-white/10 active:scale-90 transition-all relative cursor-pointer shrink-0"
-                >
-                  <RotateCcw className="w-4.5 h-4.5" />
-                  <span className="absolute text-[8px] font-mono font-bold mt-0.5">10</span>
-                </button>
+                  <span className="text-sm font-bold text-white">
+                    {activePanel === 'settings'
+                      ? 'الإعدادات'
+                      : activePanel === 'settings_quality'
+                      ? 'الجودة'
+                      : activePanel === 'settings_speed'
+                      ? 'سرعة التشغيل'
+                      : activePanel === 'settings_servers'
+                      ? `السيرفرات (${activeFormatBadge})`
+                      : activePanel === 'settings_info'
+                      ? 'تفاصيل العمل'
+                      : 'الصوت والترجمة'}
+                  </span>
 
-                <button
-                  type="button"
-                  onClick={skipForward}
-                  aria-label="تقديم 10 ثوانٍ"
-                  className="hidden sm:flex w-10 h-10 min-w-[40px] min-h-[40px] rounded-full items-center justify-center text-zinc-200 hover:text-white hover:bg-white/10 active:scale-90 transition-all relative cursor-pointer shrink-0"
-                >
-                  <RotateCw className="w-4.5 h-4.5" />
-                  <span className="absolute text-[8px] font-mono font-bold mt-0.5">10</span>
-                </button>
-
-                {/* Volume Control */}
-                <div className="flex items-center gap-1.5 shrink-0">
                   <button
                     type="button"
-                    onClick={toggleMute}
-                    aria-label={isMuted ? 'إلغاء كتم الصوت' : 'كتم الصوت'}
-                    className="w-10 h-10 min-w-[40px] min-h-[40px] rounded-full flex items-center justify-center text-zinc-200 hover:text-white hover:bg-white/10 active:scale-90 transition-all cursor-pointer"
+                    onClick={() => setActivePanel(null)}
+                    aria-label="إغلاق"
+                    className="w-7 h-7 rounded-full hover:bg-white/10 text-zinc-400 hover:text-white flex items-center justify-center cursor-pointer"
                   >
-                    {isMuted || volume === 0 ? (
-                      <VolumeX className="w-5 h-5 text-red-400" />
-                    ) : (
-                      <Volume2 className="w-5 h-5" />
-                    )}
+                    <X className="w-4 h-4" />
                   </button>
-                  <input
-                    type="range"
-                    aria-label="مستوى الصوت"
-                    min={0}
-                    max={1}
-                    step={0.05}
-                    value={isMuted ? 0 : volume}
-                    onPointerDown={revealControls}
-                    onInput={(e) =>
-                      handleVolumeChange(parseFloat((e.target as HTMLInputElement).value))
-                    }
-                    onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
-                    className="hidden md:block w-20 h-1 bg-white/25 rounded-lg appearance-none cursor-pointer accent-[#F7C600]"
-                  />
                 </div>
 
-                {/* Separated Clean Timestamp */}
-                <div className="flex items-center gap-1 font-mono text-xs tabular-nums whitespace-nowrap pl-1 sm:pl-2 shrink-0">
-                  <span className="text-white font-semibold">{formatClockTime(currentTime)}</span>
-                  <span className="text-zinc-500">/</span>
-                  <span className="text-zinc-400">{formatClockTime(duration)}</span>
-                </div>
-              </div>
+                {/* Main Settings Menu (Matches Reference Card Rows) */}
+                {activePanel === 'settings' && (
+                  <div className="divide-y divide-white/[0.06] py-1">
+                    <button
+                      type="button"
+                      onClick={() => setActivePanel('settings_quality')}
+                      className="w-full px-4 py-3.5 flex items-center justify-between gap-3 hover:bg-white/[0.05] transition-colors cursor-pointer text-right"
+                    >
+                      <div className="flex items-center gap-3">
+                        <SlidersHorizontal className="w-[18px] h-[18px] text-zinc-300 shrink-0" />
+                        <span className="text-[13px] font-medium text-white">الجودة</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-xs text-zinc-400">
+                        <span>{activeQualityLabel}</span>
+                        <ChevronLeft className="w-4 h-4 text-zinc-500" />
+                      </div>
+                    </button>
 
-              {/* Right Cluster: Dedicated Landscape Rotation & Dedicated Fullscreen */}
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={toggleLandscapeOrientation}
-                  aria-label={isLandscapeMode ? 'الوضع العمودي' : 'تدوير للوضع الأفقي'}
-                  title={isLandscapeMode ? 'العودة للوضع العمودي' : 'تدوير الشاشة أفقياً'}
-                  className={`w-10 h-10 min-w-[40px] min-h-[40px] rounded-full flex items-center justify-center transition-all active:scale-90 cursor-pointer ${
-                    isLandscapeMode
-                      ? 'bg-[#F7C600] text-black shadow-lg'
-                      : 'bg-white/10 hover:bg-white/20 text-white'
-                  }`}
-                >
-                  <RotateCw className="w-4.5 h-4.5" />
-                </button>
+                    <button
+                      type="button"
+                      onClick={() => setActivePanel('settings_speed')}
+                      className="w-full px-4 py-3.5 flex items-center justify-between gap-3 hover:bg-white/[0.05] transition-colors cursor-pointer text-right"
+                    >
+                      <div className="flex items-center gap-3">
+                        <FastForward className="w-[18px] h-[18px] text-zinc-300 shrink-0" />
+                        <span className="text-[13px] font-medium text-white">السرعة</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-xs text-zinc-400">
+                        <span>{playbackSpeed === 1 ? 'عادي' : `${playbackSpeed}x`}</span>
+                        <ChevronLeft className="w-4 h-4 text-zinc-500" />
+                      </div>
+                    </button>
 
-                <button
-                  type="button"
-                  onClick={toggleFullscreen}
-                  aria-label={isFullscreen ? 'إنهاء ملء الشاشة' : 'ملء الشاشة'}
-                  title={isFullscreen ? 'إنهاء ملء الشاشة' : 'ملء الشاشة'}
-                  className={`w-10 h-10 min-w-[40px] min-h-[40px] rounded-full flex items-center justify-center transition-all active:scale-90 cursor-pointer ${
-                    isFullscreen
-                      ? 'bg-[#F7C600] text-black shadow-lg'
-                      : 'bg-white/10 hover:bg-white/20 text-white'
-                  }`}
-                >
-                  {isFullscreen ? (
-                    <Minimize className="w-4.5 h-4.5" />
-                  ) : (
-                    <Maximize className="w-4.5 h-4.5" />
-                  )}
-                </button>
-              </div>
+                    <button
+                      type="button"
+                      onClick={() => setActivePanel('settings_servers')}
+                      className="w-full px-4 py-3.5 flex items-center justify-between gap-3 hover:bg-white/[0.05] transition-colors cursor-pointer text-right"
+                    >
+                      <div className="flex items-center gap-3">
+                        <Server className="w-[18px] h-[18px] text-zinc-300 shrink-0" />
+                        <span className="text-[13px] font-medium text-white">السيرفرات</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-xs text-zinc-400 max-w-[140px]">
+                        <span className="truncate">
+                          {resolvedActiveServer?.shortLabel || activeFormatBadge}
+                        </span>
+                        <ChevronLeft className="w-4 h-4 text-zinc-500 shrink-0" />
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={toggleLandscapeOrientation}
+                      className="w-full px-4 py-3.5 flex items-center justify-between gap-3 hover:bg-white/[0.05] transition-colors cursor-pointer text-right"
+                    >
+                      <div className="flex items-center gap-3">
+                        <RotateCw className="w-[18px] h-[18px] text-zinc-300 shrink-0" />
+                        <span className="text-[13px] font-medium text-white">تدوير الشاشة</span>
+                      </div>
+                      <span className="text-xs text-zinc-400">
+                        {isLandscapeMode ? 'أفقي' : 'تلقائي'}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={togglePictureInPicture}
+                      className="w-full px-4 py-3.5 flex items-center justify-between gap-3 hover:bg-white/[0.05] transition-colors cursor-pointer text-right"
+                    >
+                      <div className="flex items-center gap-3">
+                        <PictureInPicture2 className="w-[18px] h-[18px] text-zinc-300 shrink-0" />
+                        <span className="text-[13px] font-medium text-white">نافذة عائمة (PiP)</span>
+                      </div>
+                      <span className="text-xs text-zinc-400">{isPipActive ? 'مفعلة' : 'إيقاف'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setActivePanel('settings_info')}
+                      className="w-full px-4 py-3.5 flex items-center justify-between gap-3 hover:bg-white/[0.05] transition-colors cursor-pointer text-right"
+                    >
+                      <div className="flex items-center gap-3">
+                        <Info className="w-[18px] h-[18px] text-zinc-300 shrink-0" />
+                        <span className="text-[13px] font-medium text-white">معلومات العرض</span>
+                      </div>
+                      <ChevronLeft className="w-4 h-4 text-zinc-500" />
+                    </button>
+                  </div>
+                )}
+
+                {/* Quality Sub-View */}
+                {activePanel === 'settings_quality' && (
+                  <div className="p-3 space-y-1.5 max-h-[50vh] overflow-y-auto no-scrollbar">
+                    {effectiveQualityOptions.map((opt) => {
+                      const isProcessingOpt = opt.status === 'processing';
+                      const isActiveOpt = activeQualityId === opt.id && !isProcessingOpt;
+                      return (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          disabled={isProcessingOpt}
+                          onClick={() => {
+                            changeQuality(opt);
+                            setActivePanel(null);
+                          }}
+                          className={`w-full min-h-[42px] px-3.5 rounded-xl text-xs font-semibold flex items-center justify-between transition-colors ${
+                            isProcessingOpt
+                              ? 'text-zinc-500 bg-white/5 cursor-wait'
+                              : isActiveOpt
+                              ? 'bg-white text-black cursor-pointer'
+                              : 'bg-white/[0.05] text-zinc-200 hover:bg-white/10 cursor-pointer'
+                          }`}
+                        >
+                          <span className="flex items-center gap-2">
+                            {isProcessingOpt && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                            <span>{opt.id === 'auto' ? 'تلقائي' : opt.label}</span>
+                          </span>
+                          {isActiveOpt && <Check className="w-4 h-4" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Speed Sub-View */}
+                {activePanel === 'settings_speed' && (
+                  <div className="p-3 space-y-1.5 max-h-[50vh] overflow-y-auto no-scrollbar">
+                    {SPEED_OPTIONS.map((speed) => {
+                      const isActiveSpeed = playbackSpeed === speed;
+                      return (
+                        <button
+                          key={speed}
+                          type="button"
+                          onClick={() => {
+                            changeSpeed(speed);
+                            setActivePanel(null);
+                          }}
+                          className={`w-full min-h-[42px] px-3.5 rounded-xl text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${
+                            isActiveSpeed
+                              ? 'bg-white text-black'
+                              : 'bg-white/[0.05] text-zinc-200 hover:bg-white/10'
+                          }`}
+                        >
+                          <span className="tabular-nums">
+                            {speed === 1 ? 'عادي (1x)' : `${speed}x`}
+                          </span>
+                          {isActiveSpeed && <Check className="w-4 h-4" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Servers Sub-View */}
+                {activePanel === 'settings_servers' && (
+                  <div className="p-3 space-y-1.5 max-h-[50vh] overflow-y-auto no-scrollbar">
+                    <div className="flex items-center justify-between text-[11px] text-zinc-400 bg-white/[0.04] rounded-xl px-3 py-2 mb-1">
+                      <span>
+                        الصيغة: <strong className="text-white">{activeFormatBadge}</strong>
+                      </span>
+                      <span>
+                        الدقة: <strong className="text-white">{activeQualityLabel}</strong>
+                      </span>
+                    </div>
+                    {orderedServers.map((srv) => {
+                      const isActiveSrv = resolvedActiveServer?.id === srv.id;
+                      return (
+                        <button
+                          key={srv.id}
+                          type="button"
+                          onClick={() => {
+                            switchServer(srv);
+                            setActivePanel(null);
+                          }}
+                          className={`w-full min-h-[44px] px-3.5 py-2 rounded-xl text-right text-xs font-semibold flex items-center justify-between gap-2 transition-colors cursor-pointer ${
+                            isActiveSrv
+                              ? 'bg-white text-black'
+                              : 'bg-white/[0.05] text-zinc-200 hover:bg-white/10'
+                          }`}
+                        >
+                          <div className="min-w-0">
+                            <p className="font-bold truncate">{srv.shortLabel}</p>
+                            <p
+                              className={`text-[10px] truncate ${
+                                isActiveSrv ? 'text-black/70' : 'text-zinc-400'
+                              }`}
+                            >
+                              {srv.label}
+                            </p>
+                          </div>
+                          {isActiveSrv && <Check className="w-4 h-4 shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Info Sub-View */}
+                {activePanel === 'settings_info' && (
+                  <div className="p-4 space-y-3 text-xs max-h-[55vh] overflow-y-auto no-scrollbar">
+                    <div className="flex items-start gap-3">
+                      {(media.posterUrl || media.bannerUrl) && (
+                        <img
+                          src={media.posterUrl || media.bannerUrl}
+                          alt={media.titleAr || media.title}
+                          referrerPolicy="no-referrer"
+                          className="w-14 h-20 rounded-xl object-cover shrink-0 border border-white/10"
+                        />
+                      )}
+                      <div className="min-w-0 space-y-1">
+                        <h4 className="font-bold text-sm text-white truncate">
+                          {media.titleAr || media.title}
+                        </h4>
+                        <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-zinc-400">
+                          <span>{media.year}</span>
+                          {media.duration && (
+                            <>
+                              <span>·</span>
+                              <span>{media.duration}</span>
+                            </>
+                          )}
+                          {media.rating > 0 && (
+                            <>
+                              <span>·</span>
+                              <span className="inline-flex items-center gap-0.5 text-amber-300">
+                                <Star className="w-3 h-3 fill-current" />
+                                {media.rating.toFixed(1)}
+                              </span>
+                            </>
+                          )}
+                        </div>
+                        {media.genres?.length > 0 && (
+                          <p className="text-[11px] text-zinc-400 truncate">
+                            {media.genres.join(' · ')}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {media.description && (
+                      <p className="text-zinc-300 leading-relaxed">{media.description}</p>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleShareMedia();
+                        setActivePanel(null);
+                      }}
+                      className="w-full min-h-[40px] rounded-xl bg-white/[0.08] hover:bg-white/15 text-white font-semibold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                    >
+                      <Share2 className="w-3.5 h-3.5" />
+                      <span>مشاركة رابط المشاهدة</span>
+                    </button>
+                  </div>
+                )}
+
+                {/* Audio, Volume & Subtitles Modal */}
+                {activePanel === 'audio_subtitles' && (
+                  <div className="p-4 space-y-3.5 max-h-[58vh] overflow-y-auto no-scrollbar">
+                    {/* Volume Slider */}
+                    {!isUniversalEmbedMode && (
+                      <div className="space-y-1.5 pb-3 border-b border-white/[0.07]">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-zinc-300 font-medium">مستوى الصوت</span>
+                          <button
+                            type="button"
+                            onClick={toggleMute}
+                            className="inline-flex items-center gap-1 text-zinc-300 hover:text-white cursor-pointer"
+                          >
+                            {isMuted || volume === 0 ? (
+                              <VolumeX className="w-3.5 h-3.5" />
+                            ) : (
+                              <Volume2 className="w-3.5 h-3.5" />
+                            )}
+                            <span className="tabular-nums font-mono">
+                              {Math.round((isMuted ? 0 : volume) * 100)}%
+                            </span>
+                          </button>
+                        </div>
+                        <input
+                          type="range"
+                          dir="ltr"
+                          aria-label="مستوى الصوت"
+                          min={0}
+                          max={1}
+                          step={0.02}
+                          value={isMuted ? 0 : volume}
+                          onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
+                          className="w-full accent-white cursor-pointer"
+                        />
+                      </div>
+                    )}
+
+                    {/* Quick Server / Audio Switcher */}
+                    {orderedServers.length > 1 && (
+                      <div className="space-y-1.5 pb-3 border-b border-white/[0.07]">
+                        <span className="text-[11px] text-zinc-400 block">المسار / السيرفر</span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {orderedServers.map((srv) => {
+                            const active = resolvedActiveServer?.id === srv.id;
+                            return (
+                              <button
+                                key={srv.id}
+                                type="button"
+                                onClick={() => switchServer(srv)}
+                                className={`px-3 py-1.5 rounded-full text-xs font-semibold cursor-pointer transition-colors ${
+                                  active
+                                    ? 'bg-white text-black'
+                                    : 'bg-white/[0.08] text-zinc-200 hover:bg-white/15'
+                                }`}
+                              >
+                                {srv.shortLabel}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Subtitles Toggle & Upload */}
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-zinc-200">عرض الترجمة</span>
+                      <button
+                        type="button"
+                        onClick={() => setSubtitlesEnabled((prev) => !prev)}
+                        className={`px-3.5 min-h-[30px] rounded-full text-xs font-bold transition-colors cursor-pointer ${
+                          subtitlesEnabled
+                            ? 'bg-white text-black'
+                            : 'bg-white/10 text-zinc-300'
+                        }`}
+                      >
+                        {subtitlesEnabled ? 'مفعلة' : 'متوقفة'}
+                      </button>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="w-full min-h-[38px] px-3 rounded-xl bg-white/[0.08] hover:bg-white/15 border border-dashed border-white/20 text-white text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                    >
+                      <Upload className="w-4 h-4" />
+                      <span>اختيار ملف ترجمة (SRT / VTT)</span>
+                    </button>
+
+                    {subtitleFileName && (
+                      <div className="flex items-center justify-between gap-2 bg-white/5 rounded-xl px-3 py-2">
+                        <div className="min-w-0">
+                          <p className="text-[11px] font-semibold text-white truncate">
+                            {subtitleFileName}
+                          </p>
+                          <p className="text-[10px] text-zinc-400 tabular-nums">
+                            {subtitleCues.length} سطر
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSubtitleCues([]);
+                            setSubtitleFileName(null);
+                            setSubtitleError(null);
+                          }}
+                          aria-label="إزالة ملف الترجمة"
+                          className="w-8 h-8 rounded-lg bg-red-500/15 hover:bg-red-500/25 text-red-400 flex items-center justify-center cursor-pointer"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
+
+                    {subtitleError && <p className="text-[11px] text-red-400">{subtitleError}</p>}
+
+                    <div className="space-y-1.5">
+                      <span className="text-[11px] text-zinc-400 block">حجم الخط</span>
+                      <div className="grid grid-cols-4 gap-1.5">
+                        {SUBTITLE_SIZES.map((sz) => (
+                          <button
+                            key={sz.id}
+                            type="button"
+                            onClick={() => setSubtitleSize(sz.id)}
+                            className={`min-h-[32px] rounded-lg text-xs font-semibold cursor-pointer ${
+                              subtitleSize === sz.id
+                                ? 'bg-white text-black'
+                                : 'bg-white/[0.08] text-zinc-200 hover:bg-white/15'
+                            }`}
+                          >
+                            {sz.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <span className="text-[11px] text-zinc-400 block">لون الخط</span>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {SUBTITLE_COLORS.map((col) => (
+                          <button
+                            key={col.id}
+                            type="button"
+                            onClick={() => setSubtitleColor(col.value)}
+                            className={`min-h-[32px] px-2.5 rounded-lg text-xs font-semibold flex items-center gap-2 cursor-pointer ${
+                              subtitleColor === col.value
+                                ? 'bg-white/20 border border-white text-white'
+                                : 'bg-white/[0.08] text-zinc-300 hover:bg-white/15'
+                            }`}
+                          >
+                            <span
+                              className="w-3 h-3 rounded-full shrink-0"
+                              style={{ backgroundColor: col.value }}
+                            />
+                            <span>{col.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </motion.div>
+            </motion.div>
+          )}
+      </AnimatePresence>
+
+      {/* 4. Full-Screen Dark "المواسم والحلقات" View (Matches Phone 2 in Reference) */}
+      <AnimatePresence>
+        {!isPreRollIntroActive && activePanel === 'episodes' && episodesList.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            onPointerDown={(e) => e.stopPropagation()}
+            onPointerUp={(e) => e.stopPropagation()}
+            className="absolute inset-0 z-40 bg-[#0d0d0f]/96 backdrop-blur-2xl flex flex-col text-white"
+          >
+            {/* Header */}
+            <div
+              dir="ltr"
+              className="flex items-center justify-between px-4 sm:px-8 pt-4 sm:pt-6 pb-3"
+            >
+              <button
+                type="button"
+                onClick={() => setActivePanel(null)}
+                aria-label="رجوع"
+                className="w-10 h-10 rounded-full hover:bg-white/10 text-white flex items-center justify-center cursor-pointer"
+              >
+                <ChevronLeft className="w-6 h-6" />
+              </button>
+
+              <h3 className="text-sm sm:text-base font-bold text-white">المواسم والحلقات</h3>
+
+              <span className="w-10" />
             </div>
-          </motion.footer>
+
+            {/* Season Pills */}
+            <div
+              dir="rtl"
+              className="flex items-center gap-2 px-5 sm:px-10 py-2 overflow-x-auto no-scrollbar"
+            >
+              {seasonTabs.map((seasonNum) => {
+                const isSelected = selectedSeasonTab === seasonNum;
+                return (
+                  <button
+                    key={seasonNum}
+                    type="button"
+                    onClick={() => setSelectedSeasonTab(seasonNum)}
+                    className={`px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-colors cursor-pointer ${
+                      isSelected
+                        ? 'bg-white text-black'
+                        : 'bg-white/[0.08] text-zinc-300 hover:bg-white/15 hover:text-white'
+                    }`}
+                  >
+                    الموسم {seasonNum}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Scrollable Episodes Rows */}
+            <div
+              dir="rtl"
+              className="flex-1 overflow-y-auto no-scrollbar px-5 sm:px-10 py-3 space-y-3"
+            >
+              {filteredSeasonEpisodes.map((ep) => {
+                const globalIndex = episodesList.findIndex((item) => item.id === ep.id);
+                const isActive = globalIndex === activeEpisodeIndex;
+                const thumb =
+                  ep.thumbnailUrl || media.bannerUrl || media.posterUrl || '';
+
+                return (
+                  <button
+                    key={ep.id}
+                    type="button"
+                    onClick={() => {
+                      if (globalIndex >= 0) {
+                        handleSelectEpisode(globalIndex);
+                      }
+                      setActivePanel(null);
+                    }}
+                    className={`w-full rounded-2xl p-2 sm:p-2.5 flex items-center justify-between gap-3.5 text-right transition-colors cursor-pointer ${
+                      isActive
+                        ? 'bg-white/[0.12] border border-white/20'
+                        : 'hover:bg-white/[0.06] border border-transparent'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3.5 min-w-0">
+                      <div className="relative w-32 sm:w-44 aspect-video rounded-xl overflow-hidden bg-zinc-900 shrink-0 border border-white/10">
+                        {thumb && (
+                          <img
+                            src={thumb}
+                            alt={ep.title}
+                            referrerPolicy="no-referrer"
+                            className="w-full h-full object-cover"
+                          />
+                        )}
+                        {isActive && (
+                          <div className="absolute inset-0 bg-black/45 flex items-center justify-center">
+                            <Play className="w-6 h-6 fill-white text-white" />
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="min-w-0 space-y-1">
+                        <p className="text-xs sm:text-sm font-bold text-white truncate">
+                          {ep.title}
+                        </p>
+                        <p className="text-[11px] text-zinc-400 truncate">
+                          • الحلقة {ep.episodeNumber}
+                          {ep.duration ? ` · ${ep.duration}` : ''}
+                        </p>
+                        {ep.description && (
+                          <p className="hidden sm:block text-[11px] text-zinc-500 line-clamp-1">
+                            {ep.description}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="shrink-0 pl-2 text-zinc-400">
+                      {isActive ? (
+                        <Check className="w-5 h-5 text-white" />
+                      ) : (
+                        <Play className="w-4 h-4" />
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </motion.div>
         )}
       </AnimatePresence>
 
-      {/* 4. GoldenFlix Pre-Roll Cinematic Intro (Plays before every movie/series/episode) */}
+      {/* 5. Minimal Bottom Dock: Timestamps + Thin White Line & Dot + Action Links */}
+      <AnimatePresence>
+        {!isUniversalEmbedMode &&
+          !isPreRollIntroActive &&
+          activePanel !== 'episodes' &&
+          (showControls || errorMessage) &&
+          !isEnded && (
+            <motion.footer
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+              transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                revealControls();
+              }}
+              onPointerUp={(e) => e.stopPropagation()}
+              dir="ltr"
+              className="absolute bottom-0 inset-x-0 z-30 px-4 sm:px-7 pt-12 pb-3.5 sm:pb-5 bg-gradient-to-t from-black/85 via-black/45 to-transparent"
+            >
+              {/* Time Readouts Above Scrubber Ends */}
+              <div className="flex items-center justify-between text-[11px] font-medium text-white/85 tabular-nums mb-1">
+                <span>{formatClockTime(currentTime)}</span>
+                <span>{formatClockTime(duration)}</span>
+              </div>
+
+              {/* Scrubber Bar with Floating Thumbnail Preview Card (Matches Phone 4 in Reference) */}
+              <div
+                className="relative group w-full h-6 flex items-center touch-none cursor-pointer"
+                onMouseEnter={() => {
+                  setIsProgressHovered(true);
+                  revealControls();
+                }}
+                onMouseMove={(e) => {
+                  setIsProgressHovered(true);
+                  if (!duration) return;
+                  const ratio = getTimelineRatio(
+                    e.clientX,
+                    e.clientY,
+                    e.currentTarget.getBoundingClientRect()
+                  );
+                  setHoverSeek({ time: ratio * duration, percent: ratio * 100 });
+                }}
+                onMouseLeave={() => {
+                  setIsProgressHovered(false);
+                  setHoverSeek(null);
+                  scheduleControlsHide();
+                }}
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                  if (!duration) return;
+                  setIsScrubbing(true);
+                  revealControls();
+                  e.currentTarget.setPointerCapture?.(e.pointerId);
+                  const ratio = getTimelineRatio(
+                    e.clientX,
+                    e.clientY,
+                    e.currentTarget.getBoundingClientRect()
+                  );
+                  setHoverSeek({ time: ratio * duration, percent: ratio * 100 });
+                  handleSeek(ratio * duration);
+                }}
+                onPointerMove={(e) => {
+                  if (!isScrubbing || !duration) return;
+                  const ratio = getTimelineRatio(
+                    e.clientX,
+                    e.clientY,
+                    e.currentTarget.getBoundingClientRect()
+                  );
+                  setHoverSeek({ time: ratio * duration, percent: ratio * 100 });
+                  handleSeek(ratio * duration);
+                }}
+                onPointerUp={(e) => {
+                  e.stopPropagation();
+                  setIsScrubbing(false);
+                  setHoverSeek(null);
+                  revealControls();
+                }}
+              >
+                {/* Floating Scrub Thumbnail Preview Card */}
+                {hoverSeek && (
+                  <div
+                    className="absolute bottom-8 -translate-x-1/2 pointer-events-none z-40 flex flex-col items-center"
+                    style={{
+                      left: `${Math.min(88, Math.max(12, hoverSeek.percent))}%`,
+                    }}
+                  >
+                    <div className="relative w-32 sm:w-40 aspect-video rounded-xl overflow-hidden bg-zinc-900 border border-white/25 shadow-[0_12px_32px_rgba(0,0,0,0.85)]">
+                      {(activeEpisode?.thumbnailUrl || media.bannerUrl || media.posterUrl) && (
+                        <img
+                          src={activeEpisode?.thumbnailUrl || media.bannerUrl || media.posterUrl}
+                          alt=""
+                          referrerPolicy="no-referrer"
+                          className="w-full h-full object-cover"
+                        />
+                      )}
+                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 to-transparent px-2 py-1 text-center">
+                        <span className="text-[11px] font-bold text-white tabular-nums font-mono">
+                          {formatClockTime(hoverSeek.time)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Ultra-thin Track + Crisp White Progress + Glowing White Thumb Dot */}
+                <div
+                  className={`relative w-full bg-white/25 rounded-full pointer-events-none transition-all duration-150 ${
+                    isProgressHovered || isScrubbing ? 'h-[4px]' : 'h-[2.5px]'
+                  }`}
+                >
+                  <div
+                    className="absolute inset-y-0 left-0 bg-white/30 rounded-full"
+                    style={{ width: `${bufferedPercent}%` }}
+                  />
+                  <div
+                    className="absolute inset-y-0 left-0 bg-white rounded-full"
+                    style={{ width: `${progressPercent}%` }}
+                  />
+                  <div
+                    className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 rounded-full bg-white shadow-[0_0_8px_rgba(255,255,255,0.95)] transition-transform ${
+                      isProgressHovered || isScrubbing ? 'w-3.5 h-3.5 scale-110' : 'w-2.5 h-2.5'
+                    }`}
+                    style={{ left: `${progressPercent}%` }}
+                  />
+                </div>
+
+                <input
+                  type="range"
+                  aria-label="شريط التقديم"
+                  min={0}
+                  max={duration || 100}
+                  step={0.1}
+                  value={currentTime}
+                  onChange={(e) => handleSeek(parseFloat(e.target.value))}
+                  className="sr-only"
+                />
+              </div>
+
+              {/* Bottom Action Row Matching Reference Screenshot */}
+              <div className="flex items-center justify-between gap-3 mt-1.5">
+                <div className="flex items-center gap-4 sm:gap-6 overflow-x-auto no-scrollbar">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setActivePanel((prev) =>
+                        prev === 'audio_subtitles' ? null : 'audio_subtitles'
+                      )
+                    }
+                    className="inline-flex items-center gap-1.5 text-xs font-medium text-white/90 hover:text-white whitespace-nowrap py-1 cursor-pointer transition-colors"
+                  >
+                    <AudioLines className="w-4 h-4 shrink-0" />
+                    <span>الصوت والترجمة</span>
+                  </button>
+
+                  {episodesList.length > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (activeEpisode?.seasonNumber) {
+                          setSelectedSeasonTab(activeEpisode.seasonNumber);
+                        }
+                        setActivePanel((prev) => (prev === 'episodes' ? null : 'episodes'));
+                      }}
+                      className="inline-flex items-center gap-1.5 text-xs font-medium text-white/90 hover:text-white whitespace-nowrap py-1 cursor-pointer transition-colors"
+                    >
+                      <ListVideo className="w-4 h-4 shrink-0" />
+                      <span>المواسم والحلقات</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setActivePanel('settings_servers')}
+                      className="inline-flex items-center gap-1.5 text-xs font-medium text-white/90 hover:text-white whitespace-nowrap py-1 cursor-pointer transition-colors"
+                    >
+                      <Server className="w-4 h-4 shrink-0" />
+                      <span>السيرفرات ({activeFormatBadge})</span>
+                    </button>
+                  )}
+                </div>
+
+                {nextEpisode ? (
+                  <button
+                    type="button"
+                    onClick={() => handleSelectEpisode(activeEpisodeIndex + 1)}
+                    className="inline-flex items-center gap-1.5 text-xs font-medium text-white/90 hover:text-white whitespace-nowrap py-1 cursor-pointer transition-colors shrink-0"
+                  >
+                    <SkipForward className="w-4 h-4 shrink-0" />
+                    <span>الحلقة التالية</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setActivePanel('settings_info')}
+                    className="inline-flex items-center gap-1.5 text-xs font-medium text-white/90 hover:text-white whitespace-nowrap py-1 cursor-pointer transition-colors shrink-0"
+                  >
+                    <Info className="w-4 h-4 shrink-0" />
+                    <span>تفاصيل العمل</span>
+                  </button>
+                )}
+              </div>
+            </motion.footer>
+          )}
+      </AnimatePresence>
+
+      {/* 6. MASHHAD Pre-Roll Cinematic Intro */}
       {isPreRollIntroActive && !errorMessage && (
         <PlayerCinemaIntro
           key={playbackSessionKey}

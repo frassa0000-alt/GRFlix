@@ -18,7 +18,6 @@ import {
   MonitorPlay,
   PlusCircle,
   Settings,
-  SlidersHorizontal,
   Tags,
   Tv,
   Users,
@@ -26,6 +25,7 @@ import {
   X,
 } from 'lucide-react';
 import { AdminPermissions, AdminSectionId } from '../../types';
+import { MashhadLogo } from '../common/MashhadLogo';
 
 export const canViewAdminSection = (
   id: AdminSectionId,
@@ -147,17 +147,15 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
         <div className="h-14 px-3.5 border-b border-white/10 flex items-center justify-between shrink-0">
           {showLabels ? (
             <div className="flex items-center gap-2.5 truncate">
-              <div className="w-8 h-8 rounded-xl bg-amber-400 text-black flex items-center justify-center shrink-0">
-                <SlidersHorizontal className="w-4 h-4" />
-              </div>
+              <MashhadLogo className="w-8 h-8" roundedClassName="rounded-xl" />
               <div className="truncate">
                 <p className="text-xs font-black text-white tracking-wide truncate">MASHHAD</p>
-                <p className="text-[10px] text-amber-400 font-semibold truncate">لوحة التحكم الشاملة</p>
+                <p className="text-[10px] text-[#ea1d24] font-bold truncate">لوحة التحكم الشاملة</p>
               </div>
             </div>
           ) : (
-            <div className="w-8 h-8 rounded-xl bg-amber-400 text-black flex items-center justify-center mx-auto">
-              <SlidersHorizontal className="w-4 h-4" />
+            <div className="mx-auto">
+              <MashhadLogo className="w-8 h-8" roundedClassName="rounded-xl" />
             </div>
           )}
 

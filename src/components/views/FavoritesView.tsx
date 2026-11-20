@@ -30,8 +30,18 @@ export const FavoritesView: React.FC<FavoritesViewProps> = ({
   const [selectedType, setSelectedType] = useState<MediaType | 'all'>('all');
 
   const favoriteMedia = useMemo(() => {
-    return mediaItems.filter((item) => favorites.includes(item.id));
+    const favSet = new Set(favorites);
+    return mediaItems.filter((item) => favSet.has(item.id));
   }, [mediaItems, favorites]);
+
+  const alertSet = useMemo(() => new Set(alertSubscribedIds), [alertSubscribedIds]);
+  const historyMap = useMemo(() => {
+    const map = new Map<string, WatchProgress>();
+    for (const h of history) {
+      if (!map.has(h.mediaId)) map.set(h.mediaId, h);
+    }
+    return map;
+  }, [history]);
 
   const filteredFavorites = useMemo(() => {
     if (selectedType === 'all') return favoriteMedia;
@@ -58,7 +68,7 @@ export const FavoritesView: React.FC<FavoritesViewProps> = ({
           <button
             type="button"
             onClick={() => setSelectedType('all')}
-            className={`py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+            className={`py-2 px-3 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
               selectedType === 'all'
                 ? 'bg-[#ea1d24] text-white shadow font-black'
                 : 'text-zinc-400 hover:text-white'
@@ -72,7 +82,7 @@ export const FavoritesView: React.FC<FavoritesViewProps> = ({
           <button
             type="button"
             onClick={() => setSelectedType('movie')}
-            className={`py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+            className={`py-2 px-3 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
               selectedType === 'movie'
                 ? 'bg-[#ea1d24] text-white shadow font-black'
                 : 'text-zinc-400 hover:text-white'
@@ -84,7 +94,7 @@ export const FavoritesView: React.FC<FavoritesViewProps> = ({
           <button
             type="button"
             onClick={() => setSelectedType('series')}
-            className={`py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+            className={`py-2 px-3 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
               selectedType === 'series'
                 ? 'bg-[#ea1d24] text-white shadow font-black'
                 : 'text-zinc-400 hover:text-white'
@@ -127,12 +137,12 @@ export const FavoritesView: React.FC<FavoritesViewProps> = ({
               item={item}
               inGrid={true}
               variant="poster"
-              onSelect={() => onSelectMedia(item)}
+              onSelect={onSelectMedia}
               isFavorite={true}
-              onToggleFavorite={() => onToggleFavorite(item.id)}
-              isAlertSubscribed={alertSubscribedIds.includes(item.id)}
-              onToggleAlert={onToggleAlert ? () => onToggleAlert(item.id) : undefined}
-              watchProgress={history.find((h) => h.mediaId === item.id)}
+              onToggleFavorite={onToggleFavorite}
+              isAlertSubscribed={alertSet.has(item.id)}
+              onToggleAlert={onToggleAlert}
+              watchProgress={historyMap.get(item.id)}
             />
           ))}
         </div>

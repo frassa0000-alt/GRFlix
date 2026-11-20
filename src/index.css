@@ -41,6 +41,7 @@
   textarea {
     font-family: inherit;
     font-weight: 700;
+    touch-action: manipulation;
   }
 
   #root {

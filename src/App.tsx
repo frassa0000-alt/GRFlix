@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   MediaItem,
   ActiveTab,
@@ -66,7 +66,6 @@ import { SideMenuDrawer } from './components/layout/SideMenuDrawer';
 import { HeroBanner, HeroSlideItem } from './components/home/HeroBanner';
 import { ContentSection } from './components/home/ContentSection';
 import { RecommendationSection } from './components/home/RecommendationSection';
-import { SurprisePickBar } from './components/home/SurprisePickBar';
 import { BottomNavigation } from './components/layout/BottomNavigation';
 import { VideoPlayer } from './components/player/VideoPlayer';
 import { MediaDetailModal } from './components/modals/MediaDetailModal';
@@ -497,15 +496,20 @@ export default function App() {
     loadCategories();
   }, [refreshData, loadSiteSettings, loadNotifications, loadCategories]);
 
-  // Refresh catalog and alerts softly when user returns to browser tab
+  // Refresh catalog and alerts softly when user returns to browser tab (throttled to prevent lag on focus changes)
+  const lastFocusRefreshRef = useRef<number>(0);
   useEffect(() => {
     const handleTabFocus = () => {
+      if (playingMedia || isAdminModalOpen) return;
+      const now = Date.now();
+      if (now - lastFocusRefreshRef.current < 60_000) return;
+      lastFocusRefreshRef.current = now;
       refreshData();
       loadNotifications();
     };
     window.addEventListener('focus', handleTabFocus);
     return () => window.removeEventListener('focus', handleTabFocus);
-  }, [refreshData, loadNotifications]);
+  }, [refreshData, loadNotifications, playingMedia, isAdminModalOpen]);
 
   // Sync personal release alerts and notifications from Firestore when user signs in
   useEffect(() => {
@@ -551,6 +555,16 @@ export default function App() {
     () => mediaAlerts.map((a) => a.mediaId),
     [mediaAlerts]
   );
+
+  const favoritesSet = useMemo(() => new Set(favorites), [favorites]);
+  const alertSubscribedSet = useMemo(() => new Set(alertSubscribedIds), [alertSubscribedIds]);
+  const historyByMediaMap = useMemo(() => {
+    const map = new Map<string, WatchProgress>();
+    for (const h of history) {
+      if (!map.has(h.mediaId)) map.set(h.mediaId, h);
+    }
+    return map;
+  }, [history]);
 
   // Synchronized navigation between Top Header, Category Capsules, Side Drawer, and Mobile Bottom Nav
   const handleTopTabSelect = useCallback(
@@ -609,11 +623,11 @@ export default function App() {
     [authUser, handleOpenLogin, handleCloseInfoPage]
   );
 
-  const handleToggleFav = (id?: string) => {
+  const handleToggleFav = useCallback((id?: string) => {
     if (!id) return;
     const updated = toggleFavorite(id);
     setFavorites(updated);
-  };
+  }, []);
 
   const handleToggleMediaAlert = useCallback(
     async (target: MediaItem | string) => {
@@ -1116,12 +1130,12 @@ export default function App() {
                         key={item.id}
                         item={item}
                         inGrid={true}
-                        onSelect={(m) => setSelectedMedia(m)}
-                        isFavorite={favorites.includes(item.id)}
+                        onSelect={setSelectedMedia}
+                        isFavorite={favoritesSet.has(item.id)}
                         onToggleFavorite={handleToggleFav}
-                        isAlertSubscribed={alertSubscribedIds.includes(item.id)}
+                        isAlertSubscribed={alertSubscribedSet.has(item.id)}
                         onToggleAlert={handleToggleMediaAlert}
-                        watchProgress={history.find((h) => h.mediaId === item.id)}
+                        watchProgress={historyByMediaMap.get(item.id)}
                       />
                     ))}
                   </div>
@@ -1141,12 +1155,12 @@ export default function App() {
                       key={item.id}
                       item={item}
                       inGrid={true}
-                      onSelect={(m) => setSelectedMedia(m)}
-                      isFavorite={favorites.includes(item.id)}
+                      onSelect={setSelectedMedia}
+                      isFavorite={favoritesSet.has(item.id)}
                       onToggleFavorite={handleToggleFav}
-                      isAlertSubscribed={alertSubscribedIds.includes(item.id)}
+                      isAlertSubscribed={alertSubscribedSet.has(item.id)}
                       onToggleAlert={handleToggleMediaAlert}
-                      watchProgress={history.find((h) => h.mediaId === item.id)}
+                      watchProgress={historyByMediaMap.get(item.id)}
                     />
                   ))}
                 </div>
@@ -1218,10 +1232,11 @@ export default function App() {
             }}
             onNavigatePage={handleOpenInfoPage}
           />
-        ) : activeTab === 'movies' ? (
-          /* Movies Showcase View Matching Reference Screen */
+        ) : activeTab === 'movies' || activeTab === 'series' ? (
+          /* Movies & Series Showcase View Matching Reference Screen */
           <div className="py-2">
             <MoviesShowcaseView
+              mode={activeTab}
               items={displayedTabItems}
               allMoviesCount={tabFilteredItems.length}
               availableYears={availableTabYears}
@@ -1234,20 +1249,13 @@ export default function App() {
               onSelectMedia={(m) => setSelectedMedia(m)}
               onPlayMedia={(m) => handleStartPlay(m)}
               onBrowseHome={() => handleTopTabSelect('home')}
+              onOpenCategories={() => handleBottomTabSelect('categories')}
             />
           </div>
         ) : activeTab !== 'home' ? (
           /* E. Top/Mobile Category Tab Filtered View */
           <div className="py-2 space-y-5">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={activeTab}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -6 }}
-                transition={{ duration: 0.22 }}
-                className="space-y-4"
-              >
+            <div key={activeTab} className="space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-3 text-xs sm:text-sm text-zinc-400">
                   <div className="flex items-center gap-2">
                     <h2 className="font-black text-white text-base sm:text-lg">
@@ -1257,8 +1265,6 @@ export default function App() {
                         ? t('الأكثر مشاهدة', 'Most Watched')
                         : activeTab === 'top_rated'
                         ? t('الأعلى تقييماً', 'Top Rated')
-                        : activeTab === 'series'
-                        ? t('المسلسلات', 'TV Series')
                         : activeTab === 'action'
                         ? t('أكشن وحركة', 'Action')
                         : activeTab === 'drama'
@@ -1439,30 +1445,23 @@ export default function App() {
                           key={item.id}
                           item={item}
                           inGrid={true}
-                          variant={activeTab === 'series' ? 'series_avatar' : 'poster'}
-                          onSelect={(m) => setSelectedMedia(m)}
-                          isFavorite={favorites.includes(item.id)}
+                          variant="poster"
+                          onSelect={setSelectedMedia}
+                          isFavorite={favoritesSet.has(item.id)}
                           onToggleFavorite={handleToggleFav}
-                          isAlertSubscribed={alertSubscribedIds.includes(item.id)}
+                          isAlertSubscribed={alertSubscribedSet.has(item.id)}
                           onToggleAlert={handleToggleMediaAlert}
-                          watchProgress={history.find((h) => h.mediaId === item.id)}
+                          watchProgress={historyByMediaMap.get(item.id)}
                         />
                       ))}
                     </div>
                   </div>
                 )}
-              </motion.div>
-            </AnimatePresence>
+            </div>
           </div>
         ) : (
           /* F. LUXURY GOLDENFLIX HOMEPAGE */
-          <motion.div
-            key="home-screen"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.25 }}
-            className="space-y-6"
-          >
+          <div key="home-screen" className="space-y-6">
             {/* Loading Skeleton on initial boot */}
             {isLoading && mediaItems.length === 0 ? (
               <div className="space-y-6">
@@ -1523,7 +1522,7 @@ export default function App() {
                 {/* 4. Latest Series Section */}
                 {seriesItems.length > 0 && siteSettings?.homeSections?.showSeries !== false && (
                   <ContentSection
-                    title={t('أحدث المسلسلات', 'New Series')}
+                    title=""
                     iconType="series"
                     items={seriesItems}
                     onSelectMedia={(item) => setSelectedMedia(item)}
@@ -1633,36 +1632,26 @@ export default function App() {
                       ].map((cat) => {
                         const CatIcon = cat.icon;
                         return (
-                          <motion.button
+                          <button
                             key={cat.id}
-                            whileHover={{ y: -2 }}
-                            whileTap={{ scale: 0.96 }}
                             type="button"
                             onClick={cat.onClick}
-                            className="group relative flex flex-col items-center justify-center gap-2 py-4 sm:py-6 px-1.5 sm:px-3 rounded-2xl bg-[#17121f] border border-white/[0.08] border-b-[#ea1d24]/60 shadow-[0_10px_24px_-12px_rgba(234,29,36,0.35),inset_0_-12px_20px_-14px_rgba(234,29,36,0.22)] hover:border-[#ea1d24]/75 transition-all cursor-pointer"
+                            className="group relative flex flex-col items-center justify-center gap-2 py-4 sm:py-6 px-1.5 sm:px-3 rounded-2xl bg-[#17121f] border border-white/[0.08] border-b-[#ea1d24]/60 shadow-[0_10px_24px_-12px_rgba(234,29,36,0.35),inset_0_-12px_20px_-14px_rgba(234,29,36,0.22)] hover:border-[#ea1d24]/75 hover:-translate-y-0.5 active:scale-[0.97] transition-transform duration-150 cursor-pointer"
                           >
                             <CatIcon className="w-5 h-5 sm:w-7 sm:h-7 text-zinc-200 group-hover:text-[#ea1d24] transition-colors shrink-0" />
                             <span className="text-[11px] sm:text-sm font-bold text-zinc-100 group-hover:text-white whitespace-nowrap truncate max-w-full">
                               {cat.label}
                             </span>
-                          </motion.button>
+                          </button>
                         );
                       })}
                     </div>
                   </section>
                 )}
 
-                {/* 8. Compact Surprise Pick Bar */}
-                {mediaItems.length > 0 && siteSettings?.homeSections?.showQuickExplore !== false && (
-                  <SurprisePickBar
-                    mediaItems={mediaItems}
-                    onPlayMedia={(item) => handleStartPlay(item)}
-                    onSelectMedia={(item) => setSelectedMedia(item)}
-                  />
-                )}
               </>
             )}
-          </motion.div>
+          </div>
         )}
       </main>
 
@@ -1720,7 +1709,7 @@ export default function App() {
         onOpenInfoPage={handleOpenInfoPage}
       />
 
-      {/* User Profile Modal */}
+      {/* Clean Dark Profile Modal */}
       <UserProfileModal
         isOpen={isUserProfileOpen}
         onClose={() => setIsUserProfileOpen(false)}
@@ -1731,6 +1720,7 @@ export default function App() {
         historyCount={history.length}
         onOpenFavorites={() => handleBottomTabSelect('favorites')}
         onOpenHistory={() => handleBottomTabSelect('history')}
+        onOpenInfoPage={handleOpenInfoPage}
       />
 
       {/* Video Player Modal / Fullscreen */}
@@ -1819,7 +1809,12 @@ export default function App() {
       )}
 
       {/* Opening 3D Intro Animation */}
-      {showIntro && <CinemaIntro onComplete={handleIntroComplete} />}
+      {showIntro && (
+        <CinemaIntro
+          onComplete={handleIntroComplete}
+          siteName={siteSettings?.siteName}
+        />
+      )}
     </div>
   );
 }
