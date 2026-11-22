@@ -40,7 +40,10 @@ import {
 } from '../../../utils/youtube';
 import { analyzeMediaFromLinkAndMeta } from '../../../utils/mediaLinkAnalyzer';
 import {
+  convertToUniversalEmbedUrl,
+  extractEmbedInputUrl,
   isExternalHttpUrl,
+  isPlainExternalWebUrl,
   normalizeExternalHttpUrl,
   resolveMediaFormat,
 } from '../../../utils/videoEngines';
@@ -161,9 +164,49 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
           { slug: 'anime', nameAr: 'أنمي' },
         ];
 
+  const handleResetFormForNew = () => {
+    queue.forEach((task) => {
+      try {
+        URL.revokeObjectURL(task.previewObjectUrl);
+      } catch {
+        // ignore
+      }
+    });
+    setQueue([]);
+    setPosterFile(null);
+    setPosterUrl('');
+    setPosterPreview('');
+    setBannerFile(null);
+    setBannerUrl('');
+    setBannerPreview('');
+    setTitleAr('');
+    setTitleEn('');
+    setDescription('');
+    setYear(new Date().getFullYear());
+    setDuration('120 دقيقة');
+    setDirector('');
+    setCastInput('');
+    setIntroStart('');
+    setIntroEnd('');
+    setDisplayOrder(0);
+    setYoutubeUrlInput('');
+    setExternalVideoUrl('');
+    setExtraSources([]);
+    setYoutubeMetaNote(null);
+    setLinkAnalysisNote(null);
+    lastAnalyzedLinkRef.current = '';
+    lastAutoTitleRef.current = '';
+    lastAutoThumbRef.current = '';
+    setRating(generateRandomRating());
+    setSavedItems([]);
+    setErrorMsg(null);
+  };
+
   const handleFilesSelected = async (files: FileList | File[]) => {
     setErrorMsg(null);
-    const list = Array.from(files).filter((f) => f.type.startsWith('video/') || /\.(mp4|mkv|webm|mov|m3u8)$/i.test(f.name));
+    const list = Array.from(files).filter(
+      (f) => f.type.startsWith('video/') || /\.(mp4|mkv|webm|mov|m3u8)$/i.test(f.name)
+    );
     if (list.length === 0) {
       setErrorMsg('يرجى اختيار ملفات فيديو صالحة (MP4, WebM, MKV, MOV)');
       return;
@@ -298,6 +341,8 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
     anime: 'أنمي',
   };
 
+  const GENRE_LABELS_AR_LOOKUP = (slug: string) => GENRE_NAME_MAP[slug] || slug;
+
   const applyLinkAnalysis = (
     rawUrl: string,
     meta?: Partial<YouTubeOEmbedMetadata> | null
@@ -377,8 +422,6 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
     }
   };
 
-  const GENRE_LABELS_AR_LOOKUP = (slug: string) => GENRE_NAME_MAP[slug] || slug;
-
   const analyzeUrlWithMetadata = async (rawUrl: string) => {
     const cleanUrl = normalizeExternalHttpUrl(rawUrl);
     if (!cleanUrl) return;
@@ -411,7 +454,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
           );
         } else if (ext?.embedUrl) {
           setLinkAnalysisNote(
-            'تم تجهيز الرابط بنجاح وسيتم تشغيله عبر مشغل الموقع التلقائي مع تجاوز الحظر!'
+            'تم تجهيز الرابط بنجاح وسيتم تشغيله عبر مشغل الموقع التلقائي!'
           );
         }
       } finally {
@@ -487,7 +530,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
       !hasExternalUrl &&
       !hasYoutubeUrl
     ) {
-      setErrorMsg('يرجى اختيار ملف فيديو من جهازك، أو ربط فيلم عبر يوتيوب، أو إدخال رابط بث مباشر، أو اختيار وضع قريباً');
+      setErrorMsg('يرجى اختيار ملف فيديو من جهازك، أو إدخال رابط الفيديو أو الموقع، أو اختيار وضع قريباً');
       return;
     }
 
@@ -537,7 +580,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
           };
         });
 
-      // 2. Coming soon teaser (no video uploaded yet — visitors can subscribe to 'تنبيهي عند الإضافة')
+      // 2. Coming soon teaser
       if (uploadSourceMode === 'coming_soon') {
         const saved = await saveMovieToDatabases(
           {
@@ -576,11 +619,13 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
         (queue.length === 0 || (uploadSourceMode !== 'file' && activeQueue.length === 0 && !hasCompletedTask)) &&
         (hasYoutubeUrl || hasExternalUrl)
       ) {
-        // 2b. Saving via YouTube link or direct/external universal stream URL (no device file queue)
+        // 2b. Saving via YouTube link or Embed / direct universal stream / external web URL
         const rawMainUrl =
           uploadSourceMode === 'youtube'
             ? trimmedYoutubeUrl
-            : normalizeExternalHttpUrl(trimmedExternalUrl) || trimmedYoutubeUrl;
+            : extractEmbedInputUrl(trimmedExternalUrl) ||
+              normalizeExternalHttpUrl(trimmedExternalUrl) ||
+              trimmedYoutubeUrl;
         const isYt = isYouTubeUrl(rawMainUrl);
         const mainUrl = isYt ? getYouTubeCanonicalUrl(rawMainUrl) || rawMainUrl : rawMainUrl;
         const resolvedFmt = isYt ? 'youtube' : resolveMediaFormat(mainUrl);
@@ -790,15 +835,15 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
     <form onSubmit={handleSubmitAll} className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="text-base sm:text-lg font-black text-white">إضافة فيلم جديد ورفع الفيديوهات</h2>
+          <h2 className="text-base sm:text-lg font-black text-white">إضافة عمل جديد ورفع الفيديو</h2>
           <p className="text-xs text-zinc-400 mt-0.5">
-            يدعم رفع فيديو واحد أو عدة فيديوهات بالتتابع مع الإيقاف المؤقت والاستكمال والمعاينة قبل النشر
+            يدعم الرفع المباشر من الجهاز أو يوتيوب أو روابط المشاهدة الخارجية وEmbed مع المعاينة والتحليل التلقائي
           </p>
         </div>
       </div>
 
       {errorMsg && (
-        <div className="p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-center justify-between gap-2">
+        <div className="p-3.5 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{errorMsg}</span>
@@ -810,7 +855,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
       )}
 
       {savedItems.length > 0 && (
-        <div className="p-4 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 space-y-2.5">
+        <div className="p-4 rounded-2xl bg-emerald-500/12 border border-emerald-500/30 space-y-2.5">
           <div className="flex items-center gap-2 text-emerald-300 font-black text-sm">
             <CheckCircle2 className="w-5 h-5 shrink-0" />
             <span>تم حفظ ونشر {savedItems.length} عمل بنجاح في قاعدة البيانات!</span>
@@ -820,33 +865,41 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
               <button
                 type="button"
                 onClick={() => onPlayMedia(savedItems[0])}
-                className="px-3.5 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-black font-black text-xs flex items-center gap-1.5 cursor-pointer"
+                className="px-4 py-1.5 rounded-full bg-[#ff2e93] hover:bg-[#ff47a1] text-white font-black text-xs flex items-center gap-1.5 cursor-pointer"
               >
-                <Play className="w-3.5 h-3.5 fill-black" />
+                <Play className="w-3.5 h-3.5 fill-white" />
                 <span>تشغيل ومعاينة في المشغل</span>
               </button>
             )}
             <button
               type="button"
               onClick={onNavigateManage}
-              className="px-3.5 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white font-bold text-xs border border-white/10 cursor-pointer"
+              className="px-4 py-1.5 rounded-full bg-[#1a1a20] hover:bg-[#25252d] text-white font-bold text-xs border border-white/[0.08] cursor-pointer"
             >
               عرض في إدارة الأفلام
+            </button>
+            <button
+              type="button"
+              onClick={handleResetFormForNew}
+              className="px-4 py-1.5 rounded-full bg-white/[0.06] hover:bg-white/[0.12] text-zinc-200 font-bold text-xs border border-white/[0.08] flex items-center gap-1.5 cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>إضافة عمل آخر</span>
             </button>
           </div>
         </div>
       )}
 
-      {/* 1. Video Source Selector: Device Upload / YouTube Link / Direct Stream */}
-      <div className="p-4 rounded-2xl bg-[#111116] border border-white/[0.08] space-y-4">
+      {/* 1. Video Source Selector */}
+      <div className="p-4 rounded-2xl bg-[#121215] border border-white/[0.07] space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.06] pb-3">
-          <div className="flex flex-wrap items-center gap-1.5 p-1 rounded-xl bg-zinc-950 border border-white/10 text-xs font-bold">
+          <div className="flex flex-wrap items-center gap-1.5 p-1 rounded-2xl bg-[#08080a] border border-white/[0.08] text-xs font-bold">
             <button
               type="button"
               onClick={() => setUploadSourceMode('file')}
-              className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer ${
+              className={`px-3.5 py-1.5 rounded-full flex items-center gap-1.5 transition-colors cursor-pointer ${
                 uploadSourceMode === 'file'
-                  ? 'bg-amber-400 text-black font-black'
+                  ? 'bg-[#ff2e93] text-white font-black'
                   : 'text-zinc-400 hover:text-white'
               }`}
             >
@@ -856,9 +909,9 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
             <button
               type="button"
               onClick={() => setUploadSourceMode('youtube')}
-              className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer ${
+              className={`px-3.5 py-1.5 rounded-full flex items-center gap-1.5 transition-colors cursor-pointer ${
                 uploadSourceMode === 'youtube'
-                  ? 'bg-amber-400 text-black font-black'
+                  ? 'bg-[#ff2e93] text-white font-black'
                   : 'text-zinc-400 hover:text-white'
               }`}
             >
@@ -868,21 +921,21 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
             <button
               type="button"
               onClick={() => setUploadSourceMode('external')}
-              className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer ${
+              className={`px-3.5 py-1.5 rounded-full flex items-center gap-1.5 transition-colors cursor-pointer ${
                 uploadSourceMode === 'external'
-                  ? 'bg-amber-400 text-black font-black'
+                  ? 'bg-[#ff2e93] text-white font-black'
                   : 'text-zinc-400 hover:text-white'
               }`}
             >
               <Link2 className="w-3.5 h-3.5" />
-              <span>رابط بث مباشر</span>
+              <span>رابط الفيديو / Embed</span>
             </button>
             <button
               type="button"
               onClick={() => setUploadSourceMode('coming_soon')}
-              className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer ${
+              className={`px-3.5 py-1.5 rounded-full flex items-center gap-1.5 transition-colors cursor-pointer ${
                 uploadSourceMode === 'coming_soon'
-                  ? 'bg-amber-400 text-black font-black'
+                  ? 'bg-[#ff2e93] text-white font-black'
                   : 'text-zinc-400 hover:text-white'
               }`}
             >
@@ -895,7 +948,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
             <button
               type="button"
               onClick={() => videoInputRef.current?.click()}
-              className="text-xs font-bold text-amber-400 hover:text-amber-300 flex items-center gap-1 cursor-pointer"
+              className="px-3 py-1.5 rounded-full bg-[#ff2e93]/15 hover:bg-[#ff2e93]/25 text-[#ff5ec4] text-xs font-bold border border-[#ff2e93]/30 flex items-center gap-1 cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>إضافة فيديو</span>
@@ -934,14 +987,14 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
                     setYoutubeUrlInput(e.target.value);
                     setYoutubeMetaNote(null);
                   }}
-                  className="flex-1 bg-zinc-950 border border-white/10 focus:border-amber-400 rounded-xl px-3 py-2.5 text-xs text-white font-mono focus:outline-none"
+                  className="flex-1 bg-[#08080a] border border-white/[0.09] focus:border-[#ff2e93]/70 rounded-xl px-3 py-2.5 text-xs text-white font-mono focus:outline-none"
                 />
                 <div className="flex items-center gap-2 shrink-0">
                   <button
                     type="button"
                     disabled={!detectedYoutubeId || isFetchingYoutubeMeta}
                     onClick={handleFetchYoutubeInfo}
-                    className="px-3.5 py-2.5 rounded-xl bg-amber-400/15 hover:bg-amber-400/25 disabled:opacity-45 text-amber-300 text-xs font-black border border-amber-400/35 flex items-center gap-1.5 cursor-pointer"
+                    className="px-4 py-2.5 rounded-full bg-[#ff2e93]/15 hover:bg-[#ff2e93]/25 disabled:opacity-45 text-[#ff5ec4] text-xs font-black border border-[#ff2e93]/35 flex items-center gap-1.5 cursor-pointer"
                   >
                     {isFetchingYoutubeMeta ? (
                       <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -957,7 +1010,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
                         setPreviewVideoSrc(youtubeUrlInput.trim());
                         setPreviewTitle(titleAr || 'معاينة يوتيوب');
                       }}
-                      className="px-3.5 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 text-xs font-bold border border-white/10 flex items-center gap-1.5 cursor-pointer"
+                      className="px-4 py-2.5 rounded-full bg-[#1a1a20] hover:bg-[#25252d] text-zinc-200 text-xs font-bold border border-white/[0.08] flex items-center gap-1.5 cursor-pointer"
                     >
                       <Play className="w-3.5 h-3.5 fill-current" />
                       <span>معاينة</span>
@@ -975,7 +1028,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
             )}
 
             {detectedYoutubeId && (
-              <div className="p-3 rounded-xl bg-zinc-950/90 border border-amber-400/25 flex flex-wrap sm:flex-nowrap items-center gap-3">
+              <div className="p-3 rounded-xl bg-[#0b0b0e] border border-[#ff2e93]/25 flex flex-wrap sm:flex-nowrap items-center gap-3">
                 {detectedYoutubeThumb && (
                   <img
                     src={detectedYoutubeThumb}
@@ -992,7 +1045,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
                     YouTube ID: {detectedYoutubeId}
                   </p>
                   {youtubeMetaNote && (
-                    <p className="text-[11px] text-amber-300 font-semibold">{youtubeMetaNote}</p>
+                    <p className="text-[11px] text-[#ff5ec4] font-semibold">{youtubeMetaNote}</p>
                   )}
                 </div>
               </div>
@@ -1013,9 +1066,9 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
                 e.stopPropagation();
                 if (e.dataTransfer.files?.length) handleFilesSelected(e.dataTransfer.files);
               }}
-              className="border-2 border-dashed border-zinc-700 hover:border-amber-400/80 rounded-2xl p-6 text-center cursor-pointer transition-all hover:bg-amber-400/[0.03]"
+              className="border-2 border-dashed border-white/[0.14] hover:border-[#ff2e93]/70 rounded-2xl p-6 text-center cursor-pointer transition-all hover:bg-[#ff2e93]/[0.03]"
             >
-              <div className="w-11 h-11 rounded-2xl bg-zinc-900 text-amber-400 flex items-center justify-center mx-auto mb-2 border border-white/10">
+              <div className="w-11 h-11 rounded-2xl bg-[#1a1a20] text-[#ff45a2] flex items-center justify-center mx-auto mb-2 border border-white/[0.08]">
                 <UploadCloud className="w-5 h-5" />
               </div>
               <p className="text-xs sm:text-sm font-black text-white">
@@ -1034,11 +1087,11 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
                   return (
                     <div
                       key={task.id}
-                      className="p-3.5 rounded-xl bg-zinc-950/90 border border-white/[0.08] space-y-2.5"
+                      className="p-3.5 rounded-xl bg-[#0b0b0e] border border-white/[0.07] space-y-2.5"
                     >
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="flex items-center gap-2.5 min-w-0">
-                          <div className="w-9 h-9 rounded-xl bg-amber-400/15 text-amber-400 flex items-center justify-center shrink-0">
+                          <div className="w-9 h-9 rounded-xl bg-[#ff2e93]/15 text-[#ff45a2] flex items-center justify-center shrink-0">
                             <Film className="w-4 h-4" />
                           </div>
                           <div className="min-w-0">
@@ -1050,14 +1103,14 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
                                   updateTaskState(task.id, (t) => ({ ...t, titleAr: e.target.value }))
                                 }
                                 disabled={isUploadingThis || task.status === 'completed'}
-                                className="bg-transparent border-b border-white/15 focus:border-amber-400 text-xs font-black text-white focus:outline-none w-52 sm:w-72"
+                                className="bg-transparent border-b border-white/15 focus:border-[#ff2e93] text-xs font-black text-white focus:outline-none w-52 sm:w-72"
                               />
                             ) : (
                               <p className="text-xs font-black text-white truncate max-w-xs">
                                 {task.file.name}
                               </p>
                             )}
-                            <div className="flex items-center gap-2 text-[11px] text-zinc-400 font-mono mt-0.5">
+                            <div className="flex items-center gap-2 text-[11px] text-zinc-400 font-mono mt-0.5 tabular-nums">
                               <span>{formatFileSize(task.file.size)}</span>
                               <span>•</span>
                               <span className="flex items-center gap-1">
@@ -1075,7 +1128,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
                               setPreviewVideoSrc(task.previewObjectUrl);
                               setPreviewTitle(task.titleAr || task.file.name);
                             }}
-                            className="px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-200 text-[11px] font-bold border border-white/10 flex items-center gap-1 cursor-pointer"
+                            className="px-3 py-1.5 rounded-full bg-[#1a1a20] hover:bg-[#25252d] text-zinc-200 text-[11px] font-bold border border-white/[0.08] flex items-center gap-1 cursor-pointer"
                           >
                             <Play className="w-3 h-3" />
                             <span>معاينة</span>
@@ -1086,7 +1139,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
                               <button
                                 type="button"
                                 onClick={() => handlePauseResumeTask(task)}
-                                className="px-2.5 py-1.5 rounded-lg bg-amber-400/15 hover:bg-amber-400/25 text-amber-300 text-[11px] font-bold border border-amber-400/30 flex items-center gap-1 cursor-pointer"
+                                className="px-3 py-1.5 rounded-full bg-[#ff2e93]/15 hover:bg-[#ff2e93]/25 text-[#ff5ec4] text-[11px] font-bold border border-[#ff2e93]/30 flex items-center gap-1 cursor-pointer"
                               >
                                 {task.status === 'paused' ? (
                                   <>
@@ -1104,7 +1157,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
                               <button
                                 type="button"
                                 onClick={() => handleCancelTask(task)}
-                                className="px-2.5 py-1.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 text-[11px] font-bold border border-rose-500/30 cursor-pointer"
+                                className="px-3 py-1.5 rounded-full bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 text-[11px] font-bold border border-rose-500/30 cursor-pointer"
                               >
                                 إلغاء
                               </button>
@@ -1115,7 +1168,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
                             <button
                               type="button"
                               onClick={() => removeTaskFromQueue(task)}
-                              className="w-7 h-7 rounded-lg bg-zinc-900 hover:bg-rose-500/20 text-zinc-400 hover:text-rose-400 flex items-center justify-center cursor-pointer"
+                              className="w-7 h-7 rounded-full bg-[#1a1a20] hover:bg-rose-500/20 text-zinc-400 hover:text-rose-400 flex items-center justify-center cursor-pointer"
                               title="إزالة من القائمة"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -1135,7 +1188,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
                                   : task.status === 'error'
                                   ? 'text-rose-400 font-bold'
                                   : task.status === 'paused'
-                                  ? 'text-amber-400 font-bold'
+                                  ? 'text-amber-300 font-bold'
                                   : 'text-zinc-300'
                               }
                             >
@@ -1143,11 +1196,11 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
                                 ? task.error
                                 : `${task.progress.speedFormatted} • ${task.progress.etaFormatted}`}
                             </span>
-                            <span className="text-amber-400 font-black tabular-nums">
+                            <span className="text-[#ff5ec4] font-black tabular-nums">
                               {task.progress.percent}%
                             </span>
                           </div>
-                          <div className="h-2 rounded-full bg-zinc-900 overflow-hidden">
+                          <div className="h-2 rounded-full bg-[#18181d] overflow-hidden">
                             <div
                               className={`h-full transition-all duration-200 ${
                                 task.status === 'completed'
@@ -1155,8 +1208,8 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
                                   : task.status === 'error'
                                   ? 'bg-rose-500'
                                   : task.status === 'paused'
-                                  ? 'bg-amber-500/70'
-                                  : 'bg-amber-400'
+                                  ? 'bg-amber-400'
+                                  : 'bg-gradient-to-l from-[#ff6bc9] to-[#ff2e93]'
                               }`}
                               style={{ width: `${task.progress.percent}%` }}
                             />
@@ -1172,10 +1225,10 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
         )}
 
         {uploadSourceMode === 'coming_soon' && (
-          <div className="p-4 rounded-xl bg-amber-400/10 border border-amber-400/30 flex items-start gap-3">
-            <Clock className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+          <div className="p-4 rounded-xl bg-[#ff2e93]/10 border border-[#ff2e93]/25 flex items-start gap-3">
+            <Clock className="w-5 h-5 text-[#ff45a2] shrink-0 mt-0.5" />
             <div className="space-y-1">
-              <p className="text-xs font-black text-amber-300">
+              <p className="text-xs font-black text-[#ff70c7]">
                 نشر كعمل قادم قريباً (بدون فيديو حالياً)
               </p>
               <p className="text-[11px] text-zinc-300 leading-relaxed">
@@ -1188,19 +1241,26 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
         {uploadSourceMode === 'external' && (
           <div className="space-y-2.5">
             <label className="block text-xs font-black text-white">
-              رابط فيلم أو بث من أي موقع أو منصة في العالم (صفحة فيلم / MP4 / M3U8 / MPD):
+              رابط الفيديو
+              <span className="text-[11px] font-normal text-zinc-400 mr-1.5">
+                (يدعم أي رابط موقع عادي أو YouTube أو MP4 / M3U8 أو كود التضمين &lt;iframe&gt;)
+              </span>
             </label>
             <div className="flex flex-wrap sm:flex-nowrap items-center gap-2">
               <input
                 type="text"
                 dir="ltr"
-                placeholder="https://... (لصق رابط الفيلم من أي موقع في العالم)"
+                placeholder="https://example.com/... أو رابط فيديو MP4 / HLS / YouTube / <iframe>"
                 value={externalVideoUrl}
                 onChange={(e) => {
-                  setExternalVideoUrl(e.target.value);
+                  const rawVal = e.target.value;
+                  const extracted = extractEmbedInputUrl(rawVal);
+                  setExternalVideoUrl(
+                    /<(?:iframe|embed)\b/i.test(rawVal) && extracted ? extracted : rawVal
+                  );
                   setLinkAnalysisNote(null);
                 }}
-                className="flex-1 min-w-[200px] bg-zinc-950 border border-white/10 focus:border-amber-400 rounded-xl px-3 py-2.5 text-xs text-white font-mono focus:outline-none"
+                className="flex-1 min-w-[200px] bg-[#08080a] border border-white/[0.09] focus:border-[#ff2e93]/70 rounded-xl px-3 py-2.5 text-xs text-white font-mono focus:outline-none"
               />
               {externalVideoUrl.trim() && (
                 <>
@@ -1208,11 +1268,13 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
                     type="button"
                     disabled={isFetchingYoutubeMeta}
                     onClick={() => {
-                      const norm = normalizeExternalHttpUrl(externalVideoUrl);
+                      const norm =
+                        extractEmbedInputUrl(externalVideoUrl) ||
+                        normalizeExternalHttpUrl(externalVideoUrl);
                       lastAnalyzedLinkRef.current = norm;
                       void analyzeUrlWithMetadata(norm);
                     }}
-                    className="px-3.5 py-2.5 rounded-xl bg-amber-400/15 hover:bg-amber-400/25 text-amber-300 text-xs font-black border border-amber-400/35 flex items-center gap-1.5 cursor-pointer shrink-0"
+                    className="px-4 py-2.5 rounded-full bg-[#ff2e93]/15 hover:bg-[#ff2e93]/25 text-[#ff5ec4] text-xs font-black border border-[#ff2e93]/35 flex items-center gap-1.5 cursor-pointer shrink-0"
                   >
                     {isFetchingYoutubeMeta ? (
                       <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -1224,10 +1286,13 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      setPreviewVideoSrc(normalizeExternalHttpUrl(externalVideoUrl));
+                      const norm =
+                        extractEmbedInputUrl(externalVideoUrl) ||
+                        normalizeExternalHttpUrl(externalVideoUrl);
+                      setPreviewVideoSrc(norm);
                       setPreviewTitle(titleAr || 'معاينة داخل مشغل الموقع');
                     }}
-                    className="px-3.5 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 text-xs font-bold border border-white/10 cursor-pointer shrink-0 flex items-center gap-1.5"
+                    className="px-4 py-2.5 rounded-full bg-[#1a1a20] hover:bg-[#25252d] text-zinc-200 text-xs font-bold border border-white/[0.08] cursor-pointer shrink-0 flex items-center gap-1.5"
                   >
                     <Play className="w-3.5 h-3.5 fill-current" />
                     <span>معاينة وتشغيل</span>
@@ -1235,8 +1300,22 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
                 </>
               )}
             </div>
+            {externalVideoUrl.trim() && (() => {
+              const clean =
+                extractEmbedInputUrl(externalVideoUrl) || normalizeExternalHttpUrl(externalVideoUrl);
+              const embedTarget = convertToUniversalEmbedUrl(clean);
+              const isPlainSite = isPlainExternalWebUrl(clean);
+              if (!clean || (!embedTarget && !isPlainSite)) return null;
+              return (
+                <p className="text-[11px] text-emerald-400 font-mono truncate" dir="ltr">
+                  {isPlainSite
+                    ? `رابط موقع خارجي (يفتح مباشرة للمستخدم): ${clean}`
+                    : `Embed جاهز للتشغيل داخل مشغل MASHHAD: ${embedTarget}`}
+                </p>
+              );
+            })()}
             {linkAnalysisNote && (
-              <p className="text-[11px] text-amber-300 font-semibold">{linkAnalysisNote}</p>
+              <p className="text-[11px] text-[#ff5ec4] font-semibold">{linkAnalysisNote}</p>
             )}
           </div>
         )}
@@ -1244,16 +1323,16 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
 
       {/* 2. Poster & Banner Images */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="p-4 rounded-2xl bg-[#111116] border border-white/[0.08] space-y-3">
+        <div className="p-4 rounded-2xl bg-[#121215] border border-white/[0.07] space-y-3">
           <div className="flex items-center justify-between">
             <label className="text-xs font-black text-white flex items-center gap-1.5">
-              <ImageIcon className="w-4 h-4 text-amber-400" />
+              <ImageIcon className="w-4 h-4 text-[#ff45a2]" />
               <span>صورة البوستر (Poster)</span>
             </label>
             <button
               type="button"
               onClick={() => posterInputRef.current?.click()}
-              className="text-[11px] font-bold text-amber-400 hover:underline cursor-pointer"
+              className="text-[11px] font-bold text-[#ff5ec4] hover:underline cursor-pointer"
             >
               رفع من الجهاز
             </button>
@@ -1277,7 +1356,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
             placeholder="أو أدخل رابط صورة البوستر..."
             value={posterUrl}
             onChange={(e) => setPosterUrl(e.target.value)}
-            className="w-full bg-zinc-950 border border-white/10 focus:border-amber-400 rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
+            className="w-full bg-[#08080a] border border-white/[0.09] focus:border-[#ff2e93]/70 rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
           />
           {(posterPreview || posterUrl) && (
             <img
@@ -1288,7 +1367,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
           )}
         </div>
 
-        <div className="p-4 rounded-2xl bg-[#111116] border border-white/[0.08] space-y-3">
+        <div className="p-4 rounded-2xl bg-[#121215] border border-white/[0.07] space-y-3">
           <div className="flex items-center justify-between">
             <label className="text-xs font-black text-white flex items-center gap-1.5">
               <ImageIcon className="w-4 h-4 text-sky-400" />
@@ -1297,7 +1376,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
             <button
               type="button"
               onClick={() => bannerInputRef.current?.click()}
-              className="text-[11px] font-bold text-amber-400 hover:underline cursor-pointer"
+              className="text-[11px] font-bold text-[#ff5ec4] hover:underline cursor-pointer"
             >
               رفع من الجهاز
             </button>
@@ -1321,7 +1400,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
             placeholder="أو أدخل رابط صورة الخلفية..."
             value={bannerUrl}
             onChange={(e) => setBannerUrl(e.target.value)}
-            className="w-full bg-zinc-950 border border-white/10 focus:border-amber-400 rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
+            className="w-full bg-[#08080a] border border-white/[0.09] focus:border-[#ff2e93]/70 rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
           />
           {(bannerPreview || bannerUrl) && (
             <img
@@ -1334,22 +1413,22 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
       </div>
 
       {/* 3. Details, Genres, Cast & Director */}
-      <div className="p-4 rounded-2xl bg-[#111116] border border-white/[0.08] space-y-4">
+      <div className="p-4 rounded-2xl bg-[#121215] border border-white/[0.07] space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.06] pb-2">
-          <h3 className="text-xs font-black text-amber-400">
+          <h3 className="text-xs font-black text-[#ff5ec4]">
             بيانات العمل والتصنيف وطاقم التمثيل
           </h3>
           {linkAnalysisNote && (
-            <span className="text-[11px] font-bold text-amber-300 bg-amber-400/10 border border-amber-400/25 px-2.5 py-0.5 rounded-lg">
+            <span className="text-[11px] font-bold text-[#ff70c7] bg-[#ff2e93]/10 border border-[#ff2e93]/25 px-3 py-0.5 rounded-full">
               {linkAnalysisNote}
             </span>
           )}
         </div>
 
-        {/* Media Type Selector (Movie / Series / Anime) */}
+        {/* Media Type Selector */}
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-xs font-bold text-zinc-300">نوع العمل (يتحدد تلقائياً حسب الرابط أو يدوياً):</span>
-          <div className="inline-flex items-center gap-1 p-1 rounded-xl bg-zinc-950 border border-white/10 text-xs font-bold">
+          <div className="inline-flex items-center gap-1 p-1 rounded-full bg-[#08080a] border border-white/[0.08] text-xs font-bold">
             {(
               [
                 { id: 'movie', label: 'فيلم' },
@@ -1361,9 +1440,9 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
                 key={opt.id}
                 type="button"
                 onClick={() => setMediaType(opt.id)}
-                className={`px-3 py-1 rounded-lg transition-colors cursor-pointer ${
+                className={`px-3.5 py-1 rounded-full transition-colors cursor-pointer ${
                   mediaType === opt.id
-                    ? 'bg-amber-400 text-black font-black'
+                    ? 'bg-[#ff2e93] text-white font-black'
                     : 'text-zinc-400 hover:text-white'
                 }`}
               >
@@ -1383,7 +1462,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
               value={titleAr}
               onChange={(e) => setTitleAr(e.target.value)}
               placeholder="مثال: المهمة المستحيلة"
-              className="w-full bg-zinc-950 border border-white/10 focus:border-amber-400 rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
+              className="w-full bg-[#08080a] border border-white/[0.09] focus:border-[#ff2e93]/70 rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
             />
           </div>
           <div>
@@ -1394,7 +1473,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
               value={titleEn}
               onChange={(e) => setTitleEn(e.target.value)}
               placeholder="Mission Impossible"
-              className="w-full bg-zinc-950 border border-white/10 focus:border-amber-400 rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
+              className="w-full bg-[#08080a] border border-white/[0.09] focus:border-[#ff2e93]/70 rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
             />
           </div>
         </div>
@@ -1406,7 +1485,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="ملخص أحداث العمل..."
-            className="w-full bg-zinc-950 border border-white/10 focus:border-amber-400 rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
+            className="w-full bg-[#08080a] border border-white/[0.09] focus:border-[#ff2e93]/70 rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
           />
         </div>
 
@@ -1417,7 +1496,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
               type="number"
               value={year}
               onChange={(e) => setYear(Number(e.target.value))}
-              className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white font-mono"
+              className="w-full bg-[#08080a] border border-white/[0.09] focus:border-[#ff2e93]/70 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none"
             />
           </div>
           <div>
@@ -1426,7 +1505,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
               type="text"
               value={duration}
               onChange={(e) => setDuration(e.target.value)}
-              className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white"
+              className="w-full bg-[#08080a] border border-white/[0.09] focus:border-[#ff2e93]/70 rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
             />
           </div>
           <div>
@@ -1434,7 +1513,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
             <select
               value={videoQuality}
               onChange={(e) => setVideoQuality(e.target.value)}
-              className="w-full bg-zinc-950 border border-white/10 rounded-xl px-2.5 py-2 text-xs text-white"
+              className="w-full bg-[#08080a] border border-white/[0.09] rounded-xl px-2.5 py-2 text-xs text-white focus:outline-none"
             >
               {QUALITY_OPTIONS.map((q) => (
                 <option key={q} value={q}>
@@ -1448,7 +1527,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
             <select
               value={ageRating}
               onChange={(e) => setAgeRating(e.target.value)}
-              className="w-full bg-zinc-950 border border-white/10 rounded-xl px-2.5 py-2 text-xs text-white"
+              className="w-full bg-[#08080a] border border-white/[0.09] rounded-xl px-2.5 py-2 text-xs text-white focus:outline-none"
             >
               {AGE_RATING_OPTIONS.map((a) => (
                 <option key={a} value={a}>
@@ -1463,7 +1542,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
               <button
                 type="button"
                 onClick={() => setRating(generateRandomRating())}
-                className="text-[10px] font-bold text-amber-400 hover:text-amber-300 cursor-pointer"
+                className="text-[10px] font-bold text-[#ff5ec4] hover:text-[#ff85cb] cursor-pointer"
                 title="توليد تقييم جديد"
               >
                 تحديث
@@ -1476,7 +1555,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
               max="10"
               value={rating}
               onChange={(e) => setRating(Number(e.target.value))}
-              className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white font-mono"
+              className="w-full bg-[#08080a] border border-white/[0.09] focus:border-[#ff2e93]/70 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none"
             />
           </div>
         </div>
@@ -1494,10 +1573,10 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
                   key={g.slug}
                   type="button"
                   onClick={() => toggleGenre(g.slug)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
+                  className={`px-3.5 py-1.5 rounded-full text-xs font-bold border transition-colors cursor-pointer ${
                     active
-                      ? 'bg-amber-400 text-black border-amber-400'
-                      : 'bg-zinc-950 text-zinc-400 border-white/10 hover:text-white'
+                      ? 'bg-[#ff2e93] text-white border-[#ff2e93]'
+                      : 'bg-[#08080a] text-zinc-400 border-white/[0.08] hover:text-white'
                   }`}
                 >
                   {g.nameAr}
@@ -1516,7 +1595,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
               value={director}
               onChange={(e) => setDirector(e.target.value)}
               placeholder="اسم المخرج..."
-              className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white"
+              className="w-full bg-[#08080a] border border-white/[0.09] focus:border-[#ff2e93]/70 rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
             />
             {people.filter((p) => p.role !== 'actor').length > 0 && (
               <div className="flex flex-wrap gap-1 mt-1.5">
@@ -1528,7 +1607,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
                       key={p.id}
                       type="button"
                       onClick={() => setDirector(p.name)}
-                      className="text-[10px] px-2 py-0.5 rounded-md bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-white/10 cursor-pointer"
+                      className="text-[10px] px-2.5 py-0.5 rounded-full bg-[#1a1a20] hover:bg-[#25252d] text-zinc-300 border border-white/[0.08] cursor-pointer"
                     >
                       + {p.name}
                     </button>
@@ -1546,7 +1625,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
               value={castInput}
               onChange={(e) => setCastInput(e.target.value)}
               placeholder="ممثل 1، ممثل 2، ..."
-              className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white"
+              className="w-full bg-[#08080a] border border-white/[0.09] focus:border-[#ff2e93]/70 rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
             />
             {people.filter((p) => p.role !== 'director').length > 0 && (
               <div className="flex flex-wrap gap-1 mt-1.5">
@@ -1558,7 +1637,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
                       key={p.id}
                       type="button"
                       onClick={() => addCastChip(p.name)}
-                      className="text-[10px] px-2 py-0.5 rounded-md bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-white/10 cursor-pointer"
+                      className="text-[10px] px-2.5 py-0.5 rounded-full bg-[#1a1a20] hover:bg-[#25252d] text-zinc-300 border border-white/[0.08] cursor-pointer"
                     >
                       + {p.name}
                     </button>
@@ -1579,7 +1658,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
               value={introStart}
               onChange={(e) => setIntroStart(e.target.value)}
               placeholder="مثال: 5"
-              className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white font-mono"
+              className="w-full bg-[#08080a] border border-white/[0.09] rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none"
             />
           </div>
           <div>
@@ -1591,7 +1670,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
               value={introEnd}
               onChange={(e) => setIntroEnd(e.target.value)}
               placeholder="مثال: 75"
-              className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white font-mono"
+              className="w-full bg-[#08080a] border border-white/[0.09] rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none"
             />
           </div>
           <div>
@@ -1600,7 +1679,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
               type="number"
               value={displayOrder}
               onChange={(e) => setDisplayOrder(Number(e.target.value))}
-              className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white font-mono"
+              className="w-full bg-[#08080a] border border-white/[0.09] rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none"
             />
           </div>
         </div>
@@ -1612,7 +1691,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
               type="checkbox"
               checked={isPublished}
               onChange={(e) => setIsPublished(e.target.checked)}
-              className="accent-amber-400 w-4 h-4"
+              className="accent-[#ff2e93] w-4 h-4"
             />
             <span>نشر الفيلم فوراً للزوار</span>
           </label>
@@ -1621,7 +1700,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
               type="checkbox"
               checked={isFeatured}
               onChange={(e) => setIsFeatured(e.target.checked)}
-              className="accent-amber-400 w-4 h-4"
+              className="accent-[#ff2e93] w-4 h-4"
             />
             <span>فيلم مميز (Hero Banner)</span>
           </label>
@@ -1630,7 +1709,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
               type="checkbox"
               checked={isLatest}
               onChange={(e) => setIsLatest(e.target.checked)}
-              className="accent-amber-400 w-4 h-4"
+              className="accent-[#ff2e93] w-4 h-4"
             />
             <span>أحدث الإضافات</span>
           </label>
@@ -1639,7 +1718,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
               type="checkbox"
               checked={isMostWatched}
               onChange={(e) => setIsMostWatched(e.target.checked)}
-              className="accent-amber-400 w-4 h-4"
+              className="accent-[#ff2e93] w-4 h-4"
             />
             <span>الأكثر مشاهدة</span>
           </label>
@@ -1647,10 +1726,10 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
       </div>
 
       {/* 4. Additional Playback Sources */}
-      <div className="p-4 rounded-2xl bg-[#111116] border border-white/[0.08] space-y-3">
+      <div className="p-4 rounded-2xl bg-[#121215] border border-white/[0.07] space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2 text-xs font-black text-white">
-            <Link2 className="w-4 h-4 text-amber-400" />
+            <Link2 className="w-4 h-4 text-[#ff45a2]" />
             <span>روابط تشغيل متعددة (مشغل GR / مشغل G / يوتيوب)</span>
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
@@ -1668,7 +1747,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
                   },
                 ])
               }
-              className="px-2.5 py-1.5 rounded-xl bg-amber-400/15 hover:bg-amber-400/25 text-amber-300 text-xs font-bold border border-amber-400/30 flex items-center gap-1 cursor-pointer"
+              className="px-3 py-1.5 rounded-full bg-[#ff2e93]/15 hover:bg-[#ff2e93]/25 text-[#ff5ec4] text-xs font-bold border border-[#ff2e93]/30 flex items-center gap-1 cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>مشغل GR</span>
@@ -1687,7 +1766,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
                   },
                 ])
               }
-              className="px-2.5 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 text-xs font-bold border border-white/10 flex items-center gap-1 cursor-pointer"
+              className="px-3 py-1.5 rounded-full bg-[#1a1a20] hover:bg-[#25252d] text-zinc-200 text-xs font-bold border border-white/[0.08] flex items-center gap-1 cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>مشغل G</span>
@@ -1695,7 +1774,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
             <button
               type="button"
               onClick={addExtraSource}
-              className="px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-amber-400 text-xs font-bold border border-white/10 flex items-center gap-1 cursor-pointer"
+              className="px-3 py-1.5 rounded-full bg-[#1a1a20] hover:bg-[#25252d] text-[#ff5ec4] text-xs font-bold border border-white/[0.08] flex items-center gap-1 cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>إضافة مصدر تشغيل</span>
@@ -1714,7 +1793,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
                 )
               }
               placeholder="اسم السيرفر"
-              className="sm:col-span-3 bg-zinc-950 border border-white/10 rounded-xl px-2.5 py-2 text-xs text-white"
+              className="sm:col-span-3 bg-[#08080a] border border-white/[0.09] rounded-xl px-2.5 py-2 text-xs text-white focus:outline-none"
             />
             <input
               type="text"
@@ -1735,7 +1814,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
                 );
               }}
               placeholder="https://... أو /uploads/videos/..."
-              className="sm:col-span-5 bg-zinc-950 border border-white/10 rounded-xl px-2.5 py-2 text-xs text-white font-mono"
+              className="sm:col-span-5 bg-[#08080a] border border-white/[0.09] rounded-xl px-2.5 py-2 text-xs text-white font-mono focus:outline-none"
             />
             <select
               value={src.format || 'mp4'}
@@ -1744,7 +1823,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
                   prev.map((s, i) => (i === idx ? { ...s, format: e.target.value } : s))
                 )
               }
-              className="sm:col-span-2 bg-zinc-950 border border-white/10 rounded-xl px-2 py-2 text-xs text-white"
+              className="sm:col-span-2 bg-[#08080a] border border-white/[0.09] rounded-xl px-2 py-2 text-xs text-white focus:outline-none"
             >
               <option value="mp4">MP4</option>
               <option value="hls">HLS (.m3u8)</option>
@@ -1761,12 +1840,12 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
                 )
               }
               placeholder="720p HD"
-              className="sm:col-span-1 bg-zinc-950 border border-white/10 rounded-xl px-2 py-2 text-xs text-white"
+              className="sm:col-span-1 bg-[#08080a] border border-white/[0.09] rounded-xl px-2 py-2 text-xs text-white focus:outline-none"
             />
             <button
               type="button"
               onClick={() => setExtraSources((prev) => prev.filter((_, i) => i !== idx))}
-              className="sm:col-span-1 h-9 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 flex items-center justify-center cursor-pointer"
+              className="sm:col-span-1 h-9 rounded-full bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 flex items-center justify-center cursor-pointer"
             >
               <Trash2 className="w-3.5 h-3.5" />
             </button>
@@ -1778,7 +1857,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
       <button
         type="submit"
         disabled={isSubmitting}
-        className="w-full py-3 rounded-2xl bg-amber-400 hover:bg-amber-300 disabled:opacity-60 text-black font-black text-sm flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20 cursor-pointer"
+        className="w-full py-3 rounded-full bg-[#ff2e93] hover:bg-[#ff47a1] disabled:opacity-60 text-white font-black text-sm flex items-center justify-center gap-2 shadow-[0_10px_28px_rgba(255,46,147,0.35)] cursor-pointer transition-all"
       >
         {isSubmitting ? (
           <>
@@ -1797,7 +1876,7 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
         )}
       </button>
 
-      {/* Video Preview Modal — uses GoldenFlix's real VideoPlayer for external links */}
+      {/* Video Preview Modal */}
       {previewVideoSrc &&
         (isExternalHttpUrl(previewVideoSrc) ? (
           <VideoPlayer
@@ -1826,15 +1905,15 @@ export const MediaUploadSection: React.FC<MediaUploadSectionProps> = ({
             className="fixed inset-0 z-[130] bg-black/90 backdrop-blur-md flex items-center justify-center p-4"
             dir="rtl"
           >
-            <div className="bg-[#111116] border border-white/15 rounded-2xl w-full max-w-3xl overflow-hidden shadow-2xl">
-              <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
+            <div className="bg-[#121215] border border-white/[0.12] rounded-3xl w-full max-w-3xl overflow-hidden shadow-2xl">
+              <div className="px-4 py-3 border-b border-white/[0.08] flex items-center justify-between">
                 <p className="text-xs sm:text-sm font-black text-white truncate">
                   معاينة الفيديو: {previewTitle}
                 </p>
                 <button
                   type="button"
                   onClick={() => setPreviewVideoSrc(null)}
-                  className="w-8 h-8 rounded-lg bg-zinc-900 text-zinc-400 hover:text-white flex items-center justify-center cursor-pointer"
+                  className="w-8 h-8 rounded-full bg-[#1a1a20] text-zinc-400 hover:text-white flex items-center justify-center cursor-pointer"
                 >
                   <X className="w-4 h-4" />
                 </button>

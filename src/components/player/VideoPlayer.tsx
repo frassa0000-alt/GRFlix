@@ -37,7 +37,6 @@ import {
   X,
 } from 'lucide-react';
 import { Episode, MediaItem, PlayerSettingsConfig, VideoSourceOption } from '../../types';
-import { PlayerCinemaIntro } from './PlayerCinemaIntro';
 import {
   ExtractedStreamCandidate,
   extractExternalStream,
@@ -70,6 +69,7 @@ import {
   convertToUniversalEmbedUrl,
   getPipedMirrorEmbedUrl,
   isDashStreamUrl,
+  isDirectEmbedPlatformUrl,
   isDirectMediaFileUrl,
   isExternalHttpUrl,
   isHlsStreamUrl,
@@ -266,16 +266,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
       ? episodesList[activeEpisodeIndex + 1]
       : null;
 
-  const baseVideoUrl = activeEpisode?.videoUrl || media.videoUrl;
+  const baseVideoUrl =
+    normalizeExternalHttpUrl(activeEpisode?.videoUrl || media.videoUrl) ||
+    activeEpisode?.videoUrl ||
+    media.videoUrl;
   const playbackSessionKey = `${media.id}::${activeEpisode?.id || 'movie'}`;
   const availableCustomSources = useMemo(
     () => activeEpisode?.sources || media.sources || [],
     [activeEpisode?.sources, media.sources]
   );
-
-  // Pre-roll cinema intro state (plays once per movie/episode launch; never replays on pause/resume/quality switch)
-  const [isPreRollIntroActive, setIsPreRollIntroActive] = useState<boolean>(true);
-  const isPreRollIntroActiveRef = useRef<boolean>(true);
 
   // Playback & stream state
   const [selectedSourceUrl, setSelectedSourceUrl] = useState<string>(() =>
@@ -964,8 +963,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
   const isWaitingForExtraction = useMemo(() => {
     if (!activeNormalizedSource) return false;
     if (!pendingExtractionUrls[activeNormalizedSource]) return false;
-    // Direct file/HLS links can start playing immediately while extraction completes; arbitrary webpage URLs wait cleanly so HTML isn't fed to <video>
-    if (isDirectMediaFileUrl(selectedSourceUrl) || isHlsStreamUrl(selectedSourceUrl) || isDashStreamUrl(selectedSourceUrl)) {
+    // Direct media files and direct embed platforms (Vimeo, Dailymotion, Drive preview) start immediately without stalling
+    if (
+      isDirectMediaFileUrl(selectedSourceUrl) ||
+      isHlsStreamUrl(selectedSourceUrl) ||
+      isDashStreamUrl(selectedSourceUrl) ||
+      isDirectEmbedPlatformUrl(selectedSourceUrl)
+    ) {
       return false;
     }
     return isExternalHttpUrl(selectedSourceUrl) && !isYouTubeUrl(selectedSourceUrl);
@@ -1106,22 +1110,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
     setActivePanel(null);
     setDetectedResolution(null);
     pendingSeekRef.current = null;
-    resumeAutoplayRef.current = false;
+    resumeAutoplayRef.current = true;
   }, [baseVideoUrl]);
-
-  // Activate pre-roll cinema intro whenever a different movie or episode session begins
-  useEffect(() => {
-    isPreRollIntroActiveRef.current = true;
-    setIsPreRollIntroActive(true);
-  }, [playbackSessionKey]);
-
-  // Immediately dismiss pre-roll intro if stream encounters a fatal loading error
-  useEffect(() => {
-    if (errorMessage && isPreRollIntroActiveRef.current) {
-      isPreRollIntroActiveRef.current = false;
-      setIsPreRollIntroActive(false);
-    }
-  }, [errorMessage]);
 
   // Lock body scroll while player is mounted
   useEffect(() => {
@@ -1613,8 +1603,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
           const startSeconds =
             pendingSeekRef.current !== null
               ? pendingSeekRef.current
-              : isPreRollIntroActiveRef.current
-              ? 0
               : extractYouTubeStartSeconds(selectedSourceUrl);
 
           const enforceYoutubeIframeStyle = () => {
@@ -1641,7 +1629,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
             width: '100%',
             height: '100%',
             playerVars: {
-              autoplay: isPreRollIntroActiveRef.current ? 0 : 1,
+              autoplay: 1,
               controls: 0,
               disablekb: 1,
               fs: 0,
@@ -1694,11 +1682,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
                   pendingSeekRef.current = null;
                 }
 
-                if (!isPreRollIntroActiveRef.current || resumeAutoplayRef.current) {
-                  resumeAutoplayRef.current = false;
-                  if (typeof target.playVideo === 'function') {
-                    target.playVideo();
-                  }
+                resumeAutoplayRef.current = false;
+                if (typeof target.playVideo === 'function') {
+                  target.playVideo();
                 }
 
                 progressTimer = window.setInterval(() => {
@@ -1968,7 +1954,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
         dashPlayer.initialize(
           video,
           selectedSourceUrl,
-          !isPreRollIntroActiveRef.current || resumeAutoplayRef.current
+          true
         );
         dashPlayer.on(dashjs.MediaPlayer.events?.ERROR || 'error', () => {
           if (cancelledDash) return;
@@ -2546,83 +2532,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
     [episodesList.length]
   );
 
-  const handlePreRollComplete = useCallback(() => {
-    if (!isPreRollIntroActiveRef.current) return;
-    isPreRollIntroActiveRef.current = false;
-    setIsPreRollIntroActive(false);
-    setIsEnded(false);
-
-    if (hasFatalErrorRef.current) return;
-
-    if (isUniversalEmbedMode) {
-      isPlayingRef.current = true;
-      setIsPlaying(true);
-      setIsLoading(false);
-      revealControls();
-      return;
-    }
-
-    if (isYouTubeSource) {
-      const yt = ytPlayerRef.current;
-      setCurrentTime(0);
-      resumeAutoplayRef.current = true;
-      if (yt && typeof yt.playVideo === 'function') {
-        try {
-          if (typeof yt.seekTo === 'function') yt.seekTo(0, true);
-          yt.playVideo();
-          isPlayingRef.current = true;
-          setIsPlaying(true);
-        } catch {
-          isPlayingRef.current = false;
-          setIsPlaying(false);
-        }
-      }
-      revealControls();
-      return;
-    }
-
-    const video = videoRef.current;
-    if (video) {
-      try {
-        if (!video.currentSrc || video.readyState < 1 || isWaitingForExtraction) {
-          resumeAutoplayRef.current = true;
-          setIsLoading(true);
-          revealControls();
-          return;
-        }
-        video.currentTime = 0;
-        setCurrentTime(0);
-        video.playbackRate = playbackSpeed;
-        video.muted = isMuted;
-        video.volume = volume;
-        pendingSeekRef.current = null;
-        resumeAutoplayRef.current = false;
-
-        const playPromise = video.play();
-        if (playPromise && typeof playPromise.then === 'function') {
-          playPromise
-            .then(() => {
-              isPlayingRef.current = true;
-              setIsPlaying(true);
-              setIsLoading(false);
-              revealControls();
-            })
-            .catch(() => {
-              isPlayingRef.current = false;
-              setIsPlaying(false);
-              setIsLoading(false);
-              revealControls();
-            });
-        }
-      } catch {
-        isPlayingRef.current = false;
-        setIsPlaying(false);
-        setIsLoading(false);
-        revealControls();
-      }
-    }
-  }, [isMuted, isUniversalEmbedMode, isWaitingForExtraction, isYouTubeSource, playbackSpeed, revealControls, volume]);
-
   const handleRetry = useCallback(() => {
     failedServerIdsRef.current.clear();
     proxyTriedUrlsRef.current.clear();
@@ -2743,25 +2652,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
 
       const key = e.key.toLowerCase();
 
-      if (isPreRollIntroActiveRef.current) {
-        if (key === 'f') {
-          e.preventDefault();
-          toggleFullscreen();
-        } else if (e.key === 'Escape') {
-          const fsEl =
-            document.fullscreenElement ||
-            (document as unknown as { webkitFullscreenElement?: Element }).webkitFullscreenElement;
-          if (isLandscapeMode) {
-            e.preventDefault();
-            setIsLandscapeMode(false);
-          } else if (!fsEl) {
-            e.preventDefault();
-            handleClosePlayer();
-          }
-        }
-        return;
-      }
-
       if (e.code === 'Space' || key === 'k') {
         e.preventDefault();
         togglePlay();
@@ -2823,7 +2713,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
 
   // Viewport pointer down/up gesture handler (respects 90° landscape rotation & pause lock)
   const handleViewportPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (isPreRollIntroActiveRef.current) return;
     if (activePanel || errorMessage || isEnded) {
       revealedOnPointerDownRef.current = false;
       return;
@@ -2848,7 +2737,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
   };
 
   const handleViewportPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (isPreRollIntroActiveRef.current) return;
     if (activePanel) {
       setActivePanel(null);
       revealControls();
@@ -3141,8 +3029,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
 
       {/* 1. Minimal Sleek Top Bar: [<] Centered Title + Season/Episode [Cast/FS] [⋮] */}
       <AnimatePresence>
-        {!isPreRollIntroActive &&
-          activePanel !== 'episodes' &&
+        {activePanel !== 'episodes' &&
           (showControls || isUniversalEmbedMode || errorMessage || isEnded) && (
             <motion.header
               dir="ltr"
@@ -3234,7 +3121,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
               key={`${resolvedActiveServer?.id || 'embed'}::${universalEmbedUrl}::${retryToken}`}
               src={universalEmbedUrl}
               title={media.titleAr || media.title}
-              allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
+              allow="autoplay; fullscreen; picture-in-picture; encrypted-media *; clipboard-write"
               allowFullScreen
               referrerPolicy="no-referrer-when-downgrade"
               onLoad={() => setIsLoading(false)}
@@ -3289,13 +3176,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
               setDuration(video.duration || 0);
               if (video.videoHeight) {
                 setDetectedResolution(`${video.videoHeight}p`);
-              }
-
-              if (isPreRollIntroActiveRef.current) {
-                if (video.currentTime !== 0) {
-                  video.currentTime = 0;
-                }
-                return;
               }
 
               if (pendingSeekRef.current !== null) {
@@ -3404,7 +3284,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
         </AnimatePresence>
 
         {/* Minimal Loading Indicator */}
-        {!isPreRollIntroActive && isLoading && !errorMessage && !isEnded && (
+        {isLoading && !errorMessage && !isEnded && (
           <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/35 pointer-events-none">
             <div className="w-11 h-11 sm:w-12 sm:h-12 border-[3px] border-white/25 border-t-white rounded-full animate-spin" />
           </div>
@@ -3428,7 +3308,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
 
         {/* Resume Prompt Banner when returning mid-way */}
         <AnimatePresence>
-          {resumePrompt !== null && !errorMessage && !isEnded && !isPreRollIntroActive && (
+          {resumePrompt !== null && !errorMessage && !isEnded && (
             <motion.button
               type="button"
               initial={{ opacity: 0, y: 8 }}
@@ -3482,7 +3362,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
         {/* Minimal Center Transport Controls: (↺10)  ▶ / ||  (↻10) */}
         <AnimatePresence>
           {!isUniversalEmbedMode &&
-            !isPreRollIntroActive &&
             !activePanel &&
             (showControls || !isPlaying) &&
             !errorMessage &&
@@ -3706,8 +3585,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
 
       {/* 3. Centered Settings & Audio/Subtitles Floating Card Modal (Matches Phone 3 in Reference) */}
       <AnimatePresence>
-        {!isPreRollIntroActive &&
-          activePanel &&
+        {activePanel &&
           activePanel !== 'episodes' && (
             <motion.div
               initial={{ opacity: 0 }}
@@ -4198,7 +4076,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
 
       {/* 4. Full-Screen Dark "المواسم والحلقات" View (Matches Phone 2 in Reference) */}
       <AnimatePresence>
-        {!isPreRollIntroActive && activePanel === 'episodes' && episodesList.length > 0 && (
+        {activePanel === 'episodes' && episodesList.length > 0 && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -4329,7 +4207,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
       {/* 5. Minimal Bottom Dock: Timestamps + Thin White Line & Dot + Action Links */}
       <AnimatePresence>
         {!isUniversalEmbedMode &&
-          !isPreRollIntroActive &&
           activePanel !== 'episodes' &&
           (showControls || errorMessage) &&
           !isEnded && (
@@ -4530,15 +4407,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ media, onClose, player
             </motion.footer>
           )}
       </AnimatePresence>
-
-      {/* 6. MASHHAD Pre-Roll Cinematic Intro */}
-      {isPreRollIntroActive && !errorMessage && (
-        <PlayerCinemaIntro
-          key={playbackSessionKey}
-          onComplete={handlePreRollComplete}
-          isLandscape={isLandscapeMode}
-        />
-      )}
     </div>
   );
 };

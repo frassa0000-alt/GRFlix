@@ -19,6 +19,12 @@ import {
   deleteMovieFromDatabases,
 } from './services/movieService';
 import {
+  fetchTmdbSyncStatus,
+  searchTmdbCatalog,
+  fetchTmdbMediaDetails,
+  isTmdbMediaItem,
+} from './services/tmdbClient';
+import {
   fetchPublicSiteSettings,
   fetchPublicNotifications,
   fetchPublicCategories,
@@ -53,6 +59,11 @@ import {
   markAllReleaseNotificationsRead,
   hasPlayableMediaVideo,
 } from './services/releaseAlertService';
+import {
+  isPlainExternalWebUrl,
+  normalizeExternalHttpUrl,
+  openExternalWebsiteUrl,
+} from './utils/videoEngines';
 import {
   onAuthUserChanged,
   completeGoogleRedirectResult,
@@ -132,6 +143,8 @@ export default function App() {
   );
   const [releaseToast, setReleaseToast] = useState<UserReleaseNotification | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [tmdbSearchResults, setTmdbSearchResults] = useState<MediaItem[]>([]);
+  const [isSearchingTmdb, setIsSearchingTmdb] = useState<boolean>(false);
 
   // User Authentication State (Verified Email Session + Firebase Auth)
   const [authUser, setAuthUser] = useState<AppUserProfile | null>(() => getStoredVerifiedUser());
@@ -511,6 +524,27 @@ export default function App() {
     return () => window.removeEventListener('focus', handleTabFocus);
   }, [refreshData, loadNotifications, playingMedia, isAdminModalOpen]);
 
+  // Periodic automatic catalog sync (checks 24h server sync completion and updates counts automatically)
+  const lastKnownTmdbSyncRef = useRef<number>(0);
+  useEffect(() => {
+    const intervalId = window.setInterval(async () => {
+      if (
+        document.visibilityState === 'visible' &&
+        !playingMedia &&
+        !isAdminModalOpen
+      ) {
+        const status = await fetchTmdbSyncStatus();
+        if (status && status.lastSyncAt > lastKnownTmdbSyncRef.current) {
+          lastKnownTmdbSyncRef.current = status.lastSyncAt;
+          refreshData();
+        } else {
+          refreshData();
+        }
+      }
+    }, 300_000);
+    return () => window.clearInterval(intervalId);
+  }, [refreshData, playingMedia, isAdminModalOpen]);
+
   // Sync personal release alerts and notifications from Firestore when user signs in
   useEffect(() => {
     let active = true;
@@ -719,13 +753,56 @@ export default function App() {
   );
 
   const handleStartPlay = (media: MediaItem) => {
-    if (!hasPlayableMediaVideo(media)) {
-      setSelectedMedia(media);
+    const primaryUrl =
+      media.videoUrl ||
+      media.sources?.find((s) => Boolean(s?.url))?.url ||
+      media.seasons?.[0]?.episodes?.[0]?.videoUrl ||
+      '';
+
+    if (hasPlayableMediaVideo(media)) {
+      if (isPlainExternalWebUrl(primaryUrl, media.storageType)) {
+        openExternalWebsiteUrl(normalizeExternalHttpUrl(primaryUrl));
+        recordMediaView(media.id, undefined, authUser?.email);
+        return;
+      }
+      setPlayingMedia(media);
+      setSelectedMedia(null);
+      recordMediaView(media.id, undefined, authUser?.email);
       return;
     }
-    setPlayingMedia(media);
-    setSelectedMedia(null);
-    recordMediaView(media.id, undefined, authUser?.email);
+
+    if (isTmdbMediaItem(media)) {
+      void fetchTmdbMediaDetails(media).then((enriched) => {
+        if (enriched && hasPlayableMediaVideo(enriched)) {
+          const merged: MediaItem = {
+            ...media,
+            ...enriched,
+            isFeatured: media.isFeatured,
+            isLatest: media.isLatest,
+            isMostWatched: media.isMostWatched,
+            displayOrder: media.displayOrder,
+          };
+          const enrichedUrl =
+            merged.videoUrl ||
+            merged.sources?.find((s) => Boolean(s?.url))?.url ||
+            merged.seasons?.[0]?.episodes?.[0]?.videoUrl ||
+            '';
+          if (isPlainExternalWebUrl(enrichedUrl, merged.storageType)) {
+            openExternalWebsiteUrl(normalizeExternalHttpUrl(enrichedUrl));
+            recordMediaView(media.id, undefined, authUser?.email);
+            return;
+          }
+          setPlayingMedia(merged);
+          setSelectedMedia(null);
+          recordMediaView(media.id, undefined, authUser?.email);
+        } else {
+          setSelectedMedia(media);
+        }
+      });
+      return;
+    }
+
+    setSelectedMedia(media);
   };
 
   // Real Admin-Driven Hero Slides: active banners from siteSettings.banners + media.isFeatured
@@ -799,7 +876,7 @@ export default function App() {
       }
     }
 
-    return slides.slice(0, 6);
+    return slides.slice(0, 8);
   }, [siteSettings?.banners, mediaItems]);
 
   // Real Home Lists
@@ -831,18 +908,56 @@ export default function App() {
       .sort((a, b) => score(b) - score(a));
   }, [mediaItems]);
 
-  // Search Results
+  // Live TMDB multi-search (debounced)
+  useEffect(() => {
+    const clean = searchQuery.trim();
+    if (!clean) {
+      setTmdbSearchResults([]);
+      setIsSearchingTmdb(false);
+      return;
+    }
+    const controller = new AbortController();
+    setIsSearchingTmdb(true);
+    const timer = window.setTimeout(async () => {
+      try {
+        const remote = await searchTmdbCatalog(clean, controller.signal);
+        if (!controller.signal.aborted) {
+          setTmdbSearchResults(remote);
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsSearchingTmdb(false);
+        }
+      }
+    }, 350);
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [searchQuery]);
+
+  // Search Results (local catalog + live TMDB search merged & deduplicated)
   const searchResults = useMemo(() => {
     if (!searchQuery.trim()) return [];
     const query = searchQuery.trim().toLowerCase();
-    return mediaItems.filter(
+    const localMatches = mediaItems.filter(
       (m) =>
         m.title.toLowerCase().includes(query) ||
         m.titleAr.toLowerCase().includes(query) ||
         m.genres.some((g) => g.toLowerCase().includes(query)) ||
         m.description.toLowerCase().includes(query)
     );
-  }, [mediaItems, searchQuery]);
+    if (tmdbSearchResults.length === 0) return localMatches;
+    const seen = new Set(localMatches.map((m) => m.id));
+    const merged = [...localMatches];
+    for (const item of tmdbSearchResults) {
+      if (!seen.has(item.id)) {
+        seen.add(item.id);
+        merged.push(item);
+      }
+    }
+    return merged;
+  }, [mediaItems, searchQuery, tmdbSearchResults]);
 
   // Tab filtered items
   const tabFilteredItems = useMemo(() => {
@@ -1107,10 +1222,22 @@ export default function App() {
               <>
                 <div className="flex items-center justify-between text-xs sm:text-sm text-zinc-400">
                   <span>{t(`نتائج البحث عن: "${searchQuery}"`, `Search results for: "${searchQuery}"`)}</span>
-                  <span className="font-bold text-amber-400 tabular-nums">({searchResults.length})</span>
+                  <span className="font-bold text-amber-400 tabular-nums flex items-center gap-1.5">
+                    {isSearchingTmdb && (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin text-zinc-400" />
+                    )}
+                    ({searchResults.length})
+                  </span>
                 </div>
 
-                {searchResults.length === 0 ? (
+                {searchResults.length === 0 && isSearchingTmdb ? (
+                  <div className="py-16 text-center text-zinc-400">
+                    <RefreshCw className="w-8 h-8 mx-auto mb-2 animate-spin text-[#ea1d24]" />
+                    <p className="text-xs font-bold text-zinc-300">
+                      {t('جاري البحث في المكتبة...', 'Searching catalog...')}
+                    </p>
+                  </div>
+                ) : searchResults.length === 0 ? (
                   <div className="py-20 text-center text-zinc-500">
                     <Search className="w-12 h-12 mx-auto mb-2 text-zinc-600" />
                     <p className="text-sm font-bold text-zinc-300">
@@ -1502,10 +1629,10 @@ export default function App() {
                     />
                   )}
 
-                {/* 3. Latest Movies Section */}
+                {/* 3. New Movies Section */}
                 {latestMovies.length > 0 && siteSettings?.homeSections?.showLatestMovies !== false && (
                   <ContentSection
-                    title={t('أحدث الأفلام', 'Popular Movies')}
+                    title={t('الأفلام الجديدة', 'New Movies')}
                     iconType="movies"
                     items={latestMovies}
                     onSelectMedia={(item) => setSelectedMedia(item)}
@@ -1519,10 +1646,10 @@ export default function App() {
                   />
                 )}
 
-                {/* 4. Latest Series Section */}
+                {/* 4. New Series Section */}
                 {seriesItems.length > 0 && siteSettings?.homeSections?.showSeries !== false && (
                   <ContentSection
-                    title=""
+                    title={t('المسلسلات الجديدة', 'New Series')}
                     iconType="series"
                     items={seriesItems}
                     onSelectMedia={(item) => setSelectedMedia(item)}
@@ -1532,6 +1659,23 @@ export default function App() {
                     onToggleAlert={handleToggleMediaAlert}
                     history={history}
                     onViewAll={() => handleTopTabSelect('series')}
+                    variant="poster"
+                  />
+                )}
+
+                {/* 5. Most Watched Section */}
+                {mostWatched.length > 0 && siteSettings?.homeSections?.showMostWatched !== false && (
+                  <ContentSection
+                    title={t('الأكثر مشاهدة', 'Most Watched')}
+                    iconType="trending"
+                    items={mostWatched}
+                    onSelectMedia={(item) => setSelectedMedia(item)}
+                    favorites={favorites}
+                    onToggleFavorite={handleToggleFav}
+                    alertSubscribedIds={alertSubscribedIds}
+                    onToggleAlert={handleToggleMediaAlert}
+                    history={history}
+                    onViewAll={() => handleTopTabSelect('trending')}
                     variant="poster"
                   />
                 )}
@@ -1748,6 +1892,8 @@ export default function App() {
         onToggleAlert={() => selectedMedia && handleToggleMediaAlert(selectedMedia)}
         relatedMedia={mediaItems}
         onSelectMedia={(item) => setSelectedMedia(item)}
+        currentUserName={authUser?.displayName || authUser?.name}
+        currentUserEmail={authUser?.email}
         isAdmin={isDeveloperUser || Boolean(adminAccess?.permissions?.canDeleteMedia)}
         onDeleteMovie={
           isDeveloperUser || Boolean(adminAccess?.permissions?.canDeleteMedia)

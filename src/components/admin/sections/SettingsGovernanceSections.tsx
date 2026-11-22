@@ -91,7 +91,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
   const [bannerImage, setBannerImage] = useState<string>('');
   const [bannerMediaId, setBannerMediaId] = useState<string>('');
 
-  // Mail / SMTP Settings (Preserved working email config)
+  // Mail / SMTP Settings
   const [emailDiagnostics, setEmailDiagnostics] = useState<AuthDiagnosticsResponse | null>(null);
   const [smtpHost, setSmtpHost] = useState<string>('smtp.gmail.com');
   const [smtpPort, setSmtpPort] = useState<string>('465');
@@ -228,7 +228,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
       <div className="space-y-5">
         <div>
           <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
-            <Clapperboard className="w-5 h-5 text-amber-400" />
+            <Clapperboard className="w-5 h-5 text-[#ff45a2]" />
             <span>إدارة البنرات والواجهة الرئيسية</span>
           </h2>
           <p className="text-xs text-zinc-400 mt-0.5">
@@ -238,7 +238,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
 
         {feedback && (
           <div
-            className={`p-3 rounded-xl text-xs border ${
+            className={`p-3 rounded-2xl text-xs border ${
               feedback.type === 'success'
                 ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
                 : 'bg-rose-500/15 border-rose-500/30 text-rose-300'
@@ -251,8 +251,8 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
         {settings && (
           <>
             {/* Home Section Visibility Toggles */}
-            <div className="p-4 rounded-2xl bg-[#111116] border border-white/[0.08] space-y-3">
-              <h3 className="text-xs font-black text-amber-400">أقسام الصفحة الرئيسية الظاهرة للزوار</h3>
+            <div className="p-4 rounded-2xl bg-[#121215] border border-white/[0.07] space-y-3">
+              <h3 className="text-xs font-black text-[#ff5ec4]">أقسام الصفحة الرئيسية الظاهرة للزوار</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 text-xs">
                 {(
                   [
@@ -267,7 +267,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
                 ).map(([key, label]) => (
                   <label
                     key={key}
-                    className="p-3 rounded-xl bg-zinc-950 border border-white/[0.06] flex items-center justify-between gap-2 cursor-pointer"
+                    className="p-3 rounded-xl bg-[#0b0b0e] border border-white/[0.06] flex items-center justify-between gap-2 cursor-pointer"
                   >
                     <span className="font-bold text-zinc-200">{label}</span>
                     <input
@@ -283,7 +283,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
                           'تم تحديث ظهور الأقسام على الواجهة الرئيسية'
                         );
                       }}
-                      className="accent-amber-400 w-4 h-4"
+                      className="accent-[#ff2e93] w-4 h-4"
                     />
                   </label>
                 ))}
@@ -293,7 +293,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
             {/* Custom Banners */}
             <form
               onSubmit={handleAddBanner}
-              className="p-4 rounded-2xl bg-[#111116] border border-white/[0.08] space-y-3 text-xs"
+              className="p-4 rounded-2xl bg-[#121215] border border-white/[0.07] space-y-3 text-xs"
             >
               <h3 className="font-black text-white">إضافة بنر ترويجي مخصص</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
@@ -303,14 +303,14 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
                   value={bannerTitle}
                   onChange={(e) => setBannerTitle(e.target.value)}
                   placeholder="عنوان البنر *"
-                  className="bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white"
+                  className="bg-[#08080a] border border-white/[0.09] focus:border-[#ff2e93]/70 rounded-xl px-3 py-2 text-white focus:outline-none"
                 />
                 <input
                   type="text"
                   value={bannerSubtitle}
                   onChange={(e) => setBannerSubtitle(e.target.value)}
                   placeholder="وصف قصير (اختياري)"
-                  className="bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white"
+                  className="bg-[#08080a] border border-white/[0.09] focus:border-[#ff2e93]/70 rounded-xl px-3 py-2 text-white focus:outline-none"
                 />
                 <input
                   type="url"
@@ -319,19 +319,19 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
                   value={bannerImage}
                   onChange={(e) => setBannerImage(e.target.value)}
                   placeholder="رابط صورة البنر (16:9) *"
-                  className="bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono"
+                  className="bg-[#08080a] border border-white/[0.09] focus:border-[#ff2e93]/70 rounded-xl px-3 py-2 text-white font-mono focus:outline-none"
                 />
                 <input
                   type="text"
                   value={bannerCtaLabel}
                   onChange={(e) => setBannerCtaLabel(e.target.value)}
                   placeholder="نص زر التشغيل (مثال: مشاهدة الآن)"
-                  className="bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white"
+                  className="bg-[#08080a] border border-white/[0.09] focus:border-[#ff2e93]/70 rounded-xl px-3 py-2 text-white focus:outline-none"
                 />
                 <select
                   value={bannerMediaId}
                   onChange={(e) => setBannerMediaId(e.target.value)}
-                  className="sm:col-span-2 bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white"
+                  className="sm:col-span-2 bg-[#08080a] border border-white/[0.09] rounded-xl px-3 py-2 text-white focus:outline-none"
                 >
                   <option value="">ربط بعمل معين (اختياري)</option>
                   {mediaItems.map((m) => (
@@ -344,7 +344,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
               <button
                 type="submit"
                 disabled={isSaving}
-                className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black font-black flex items-center gap-1.5 cursor-pointer"
+                className="px-5 py-2 rounded-full bg-[#ff2e93] hover:bg-[#ff47a1] text-white font-black flex items-center gap-1.5 cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 <span>إضافة البنر</span>
@@ -355,7 +355,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
                   {sortedBanners.map((b, idx) => (
                     <div
                       key={b.id}
-                      className="p-2.5 rounded-xl bg-zinc-950 border border-white/[0.06] flex flex-wrap items-center justify-between gap-3"
+                      className="p-2.5 rounded-xl bg-[#0b0b0e] border border-white/[0.06] flex flex-wrap items-center justify-between gap-3"
                     >
                       <div className="flex items-center gap-3 min-w-0">
                         <img
@@ -367,7 +367,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
                           <div className="flex items-center gap-2">
                             <p className="font-bold text-white truncate">{b.title}</p>
                             {b.ctaLabel && (
-                              <span className="px-1.5 py-0.5 rounded bg-zinc-900 text-amber-300 text-[10px]">
+                              <span className="px-2 py-0.5 rounded-full bg-[#1a1a20] text-[#ff5ec4] text-[10px]">
                                 {b.ctaLabel}
                               </span>
                             )}
@@ -380,7 +380,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
                           type="button"
                           disabled={idx === 0 || isSaving}
                           onClick={() => handleMoveBanner(idx, -1)}
-                          className="w-7 h-7 rounded-lg bg-zinc-900 hover:bg-zinc-800 disabled:opacity-40 text-zinc-300 flex items-center justify-center cursor-pointer"
+                          className="w-7 h-7 rounded-full bg-[#1a1a20] hover:bg-[#25252d] disabled:opacity-40 text-zinc-300 flex items-center justify-center cursor-pointer"
                           title="تقديم للأعلى"
                         >
                           <ArrowUp className="w-3.5 h-3.5" />
@@ -389,7 +389,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
                           type="button"
                           disabled={idx === sortedBanners.length - 1 || isSaving}
                           onClick={() => handleMoveBanner(idx, 1)}
-                          className="w-7 h-7 rounded-lg bg-zinc-900 hover:bg-zinc-800 disabled:opacity-40 text-zinc-300 flex items-center justify-center cursor-pointer"
+                          className="w-7 h-7 rounded-full bg-[#1a1a20] hover:bg-[#25252d] disabled:opacity-40 text-zinc-300 flex items-center justify-center cursor-pointer"
                           title="تأخير للأسفل"
                         >
                           <ArrowDown className="w-3.5 h-3.5" />
@@ -406,10 +406,10 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
                               b.isActive !== false ? 'تم إخفاء البنر مؤقتاً' : 'تم تفعيل البنر بنجاح'
                             );
                           }}
-                          className={`px-2 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer border ${
+                          className={`px-2.5 py-1 rounded-full text-[10px] font-bold flex items-center gap-1 cursor-pointer border ${
                             b.isActive !== false
                               ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
-                              : 'bg-zinc-900 text-zinc-400 border-white/10'
+                              : 'bg-[#1a1a20] text-zinc-400 border-white/[0.08]'
                           }`}
                         >
                           {b.isActive !== false ? (
@@ -428,7 +428,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
                               'تم حذف البنر'
                             )
                           }
-                          className="w-7 h-7 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 flex items-center justify-center cursor-pointer"
+                          className="w-7 h-7 rounded-full bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 flex items-center justify-center cursor-pointer"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -450,7 +450,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
       <div className="space-y-4">
         <div>
           <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
-            <MonitorPlay className="w-5 h-5 text-amber-400" />
+            <MonitorPlay className="w-5 h-5 text-[#ff45a2]" />
             <span>إعدادات مشغل الفيديو الافتراضية</span>
           </h2>
           <p className="text-xs text-zinc-400 mt-0.5">
@@ -460,7 +460,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
 
         {feedback && (
           <div
-            className={`p-3 rounded-xl text-xs border ${
+            className={`p-3 rounded-2xl text-xs border ${
               feedback.type === 'success'
                 ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
                 : 'bg-rose-500/15 border-rose-500/30 text-rose-300'
@@ -479,7 +479,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
                 'تم حفظ إعدادات مشغل الفيديو بنجاح'
               );
             }}
-            className="p-4 rounded-2xl bg-[#111116] border border-white/[0.08] space-y-4 text-xs"
+            className="p-4 rounded-2xl bg-[#121215] border border-white/[0.07] space-y-4 text-xs"
           >
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
@@ -495,7 +495,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
                       },
                     })
                   }
-                  className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono"
+                  className="w-full bg-[#08080a] border border-white/[0.09] rounded-xl px-3 py-2 text-white font-mono focus:outline-none"
                 >
                   <option value={0.75}>0.75x</option>
                   <option value={1}>1x (عادي)</option>
@@ -516,7 +516,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
                       },
                     })
                   }
-                  className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white"
+                  className="w-full bg-[#08080a] border border-white/[0.09] rounded-xl px-3 py-2 text-white focus:outline-none"
                 >
                   <option value="auto">تلقائي (Auto)</option>
                   <option value="100p">100p</option>
@@ -541,7 +541,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
                       },
                     })
                   }
-                  className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white"
+                  className="w-full bg-[#08080a] border border-white/[0.09] rounded-xl px-3 py-2 text-white focus:outline-none"
                 >
                   <option value="sm">صغير</option>
                   <option value="md">متوسط</option>
@@ -565,7 +565,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
                       },
                     })
                   }
-                  className="accent-amber-400"
+                  className="accent-[#ff2e93]"
                 />
                 <span>تشغيل الحلقة التالية تلقائياً</span>
               </label>
@@ -583,7 +583,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
                       },
                     })
                   }
-                  className="accent-amber-400"
+                  className="accent-[#ff2e93]"
                 />
                 <span>السماح برفع ملفات ترجمة خارجية (SRT/VTT)</span>
               </label>
@@ -601,7 +601,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
                       },
                     })
                   }
-                  className="accent-amber-400"
+                  className="accent-[#ff2e93]"
                 />
                 <span>تفعيل زر تخطي المقدمة</span>
               </label>
@@ -610,7 +610,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
             <button
               type="submit"
               disabled={isSaving}
-              className="px-5 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-black font-black flex items-center gap-1.5 cursor-pointer"
+              className="px-5 py-2.5 rounded-full bg-[#ff2e93] hover:bg-[#ff47a1] text-white font-black flex items-center gap-1.5 cursor-pointer"
             >
               <Save className="w-4 h-4" />
               <span>حفظ إعدادات المشغل</span>
@@ -686,23 +686,24 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
       <div className="space-y-4">
         <div>
           <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
-            <KeyRound className="w-5 h-5 text-amber-400" />
+            <KeyRound className="w-5 h-5 text-[#ff45a2]" />
             <span>إدارة الصلاحيات والمديرين المتعاونين ({admins.length})</span>
           </h2>
           <p className="text-xs text-zinc-400 mt-0.5">
-            أضف مشرفاً عبر بريده الإلكتروني مع كلمة مرور دخول تتضمن الرمز الإلزامي <span className="text-amber-400 font-mono font-bold">VBL/9</span> وحدد صلاحياته بدقة
+            أضف مشرفاً عبر بريده الإلكتروني مع كلمة مرور دخول تتضمن الرمز الإلزامي{' '}
+            <span className="text-[#ff5ec4] font-mono font-bold">VBL/9</span> وحدد صلاحياته بدقة
           </p>
         </div>
 
         {!isSuperAdmin && (
-          <div className="p-3 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs">
+          <div className="p-3 rounded-2xl bg-[#ff2e93]/12 border border-[#ff2e93]/25 text-[#ff70c7] text-xs">
             هذا القسم للمطور الرئيسي فقط. يمكنك استعراض صلاحياتك من القائمة الجانبية.
           </div>
         )}
 
         {feedback && (
           <div
-            className={`p-3 rounded-xl text-xs border ${
+            className={`p-3 rounded-2xl text-xs border ${
               feedback.type === 'success'
                 ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
                 : 'bg-rose-500/15 border-rose-500/30 text-rose-300'
@@ -715,7 +716,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
         {isSuperAdmin && (
           <form
             onSubmit={handleAddAdmin}
-            className="p-4 rounded-2xl bg-[#111116] border border-white/[0.08] space-y-3 text-xs"
+            className="p-4 rounded-2xl bg-[#121215] border border-white/[0.07] space-y-3 text-xs"
           >
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
               <input
@@ -724,7 +725,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
                 value={newAdminName}
                 onChange={(e) => setNewAdminName(e.target.value)}
                 placeholder="اسم المشرف *"
-                className="bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white"
+                className="bg-[#08080a] border border-white/[0.09] focus:border-[#ff2e93]/70 rounded-xl px-3 py-2 text-white focus:outline-none"
               />
               <input
                 type="email"
@@ -733,14 +734,14 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
                 value={newAdminEmail}
                 onChange={(e) => setNewAdminEmail(e.target.value)}
                 placeholder="email@example.com *"
-                className="bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono"
+                className="bg-[#08080a] border border-white/[0.09] focus:border-[#ff2e93]/70 rounded-xl px-3 py-2 text-white font-mono focus:outline-none"
               />
               <input
                 type="text"
                 value={newAdminRole}
                 onChange={(e) => setNewAdminRole(e.target.value)}
                 placeholder="المسمى الوظيفي"
-                className="bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white"
+                className="bg-[#08080a] border border-white/[0.09] focus:border-[#ff2e93]/70 rounded-xl px-3 py-2 text-white focus:outline-none"
               />
               <div className="relative">
                 <input
@@ -750,7 +751,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
                   value={newAdminPassword}
                   onChange={(e) => setNewAdminPassword(e.target.value)}
                   placeholder="كلمة مرور تتضمن VBL/9 *"
-                  className={`w-full bg-zinc-950 border rounded-xl pl-3 pr-8 py-2 text-white font-mono ${
+                  className={`w-full bg-[#08080a] border rounded-xl pl-3 pr-8 py-2 text-white font-mono focus:outline-none ${
                     newAdminPassword.includes('VBL/9')
                       ? 'border-emerald-500/40'
                       : 'border-rose-500/50'
@@ -767,14 +768,14 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
               <button
                 type="submit"
                 disabled={isSaving || !newAdminPassword.includes('VBL/9')}
-                className="py-2 rounded-xl bg-amber-400 hover:bg-amber-300 disabled:opacity-50 text-black font-black cursor-pointer flex items-center justify-center gap-1"
+                className="py-2 rounded-full bg-[#ff2e93] hover:bg-[#ff47a1] disabled:opacity-50 text-white font-black cursor-pointer flex items-center justify-center gap-1"
               >
                 <Plus className="w-4 h-4" />
                 <span>إضافة مشرف</span>
               </button>
             </div>
             <p className="text-[11px] text-zinc-400">
-              شرط كلمة المرور: يجب أن تتضمن الرمز <span className="font-mono text-amber-400 font-bold">VBL/9</span> (القيمة الافتراضية <span className="font-mono text-white">VBL/9</span> أو يمكنك إضافة بادئة مثل <span className="font-mono text-white">Editor@VBL/9</span>).
+              شرط كلمة المرور: يجب أن تتضمن الرمز <span className="font-mono text-[#ff5ec4] font-bold">VBL/9</span> (القيمة الافتراضية <span className="font-mono text-white">VBL/9</span> أو يمكنك إضافة بادئة مثل <span className="font-mono text-white">Editor@VBL/9</span>).
             </p>
           </form>
         )}
@@ -786,21 +787,21 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
             return (
               <div
                 key={adm.id}
-                className="p-4 rounded-2xl bg-[#111116] border border-white/[0.08] space-y-3 text-xs"
+                className="p-4 rounded-2xl bg-[#121215] border border-white/[0.07] space-y-3 text-xs"
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2.5">
-                    <div className="w-9 h-9 rounded-xl bg-amber-400/15 text-amber-400 flex items-center justify-center">
+                    <div className="w-9 h-9 rounded-xl bg-[#ff2e93]/15 text-[#ff45a2] flex items-center justify-center">
                       <Shield className="w-4 h-4" />
                     </div>
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-black text-white">{adm.name}</span>
-                        <span className="px-2 py-0.5 rounded bg-zinc-800 text-amber-300 text-[10px] font-bold">
-                          {adm.roleTitle}
+                        <span className="text-[#ff5ec4] text-[10px] font-bold">
+                          · {adm.roleTitle}
                         </span>
                         <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                             adm.isActive !== false
                               ? 'bg-emerald-500/15 text-emerald-300'
                               : 'bg-rose-500/15 text-rose-300'
@@ -827,10 +828,10 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
                               : `تم إيقاف حساب المشرف ${adm.email} مؤقتاً`
                           )
                         }
-                        className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1 cursor-pointer ${
+                        className={`px-3 py-1.5 rounded-full text-[11px] font-bold flex items-center gap-1 cursor-pointer ${
                           adm.isActive === false
                             ? 'bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25'
-                            : 'bg-amber-500/15 text-amber-300 hover:bg-amber-500/25'
+                            : 'bg-[#1a1a20] text-[#ff5ec4] hover:bg-[#25252d] border border-white/[0.08]'
                         }`}
                       >
                         {adm.isActive === false ? (
@@ -850,7 +851,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
                         type="button"
                         disabled={isBusy}
                         onClick={() => setConfirmRemoveAdmin(adm)}
-                        className="px-3 py-1.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 font-bold cursor-pointer"
+                        className="px-3 py-1.5 rounded-full bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 font-bold cursor-pointer"
                       >
                         سحب الصلاحية
                       </button>
@@ -882,7 +883,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
                             `تم تحديث صلاحية "${label}" للمشرف ${adm.name}`
                           )
                         }
-                        className="accent-amber-400"
+                        className="accent-[#ff2e93]"
                       />
                       <span>{label}</span>
                     </label>
@@ -902,7 +903,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
                         setResetPasswords((prev) => ({ ...prev, [adm.id]: e.target.value }))
                       }
                       placeholder="كلمة مرور جديدة تتضمن VBL/9"
-                      className="bg-zinc-950 border border-white/10 rounded-lg px-2.5 py-1.5 text-white font-mono text-[11px] w-56"
+                      className="bg-[#08080a] border border-white/[0.09] rounded-xl px-2.5 py-1.5 text-white font-mono text-[11px] w-56 focus:outline-none"
                     />
                     <button
                       type="button"
@@ -915,7 +916,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
                         );
                         setResetPasswords((prev) => ({ ...prev, [adm.id]: '' }));
                       }}
-                      className="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-white/10 text-amber-300 font-bold text-[11px] disabled:opacity-40 cursor-pointer"
+                      className="px-3.5 py-1.5 rounded-full bg-[#1a1a20] hover:bg-[#25252d] border border-white/[0.08] text-[#ff5ec4] font-bold text-[11px] disabled:opacity-40 cursor-pointer"
                     >
                       تحديث كلمة المرور
                     </button>
@@ -964,7 +965,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
-              <History className="w-5 h-5 text-amber-400" />
+              <History className="w-5 h-5 text-[#ff45a2]" />
               <span>سجل العمليات الإدارية ({filteredLogs.length})</span>
             </h2>
             <p className="text-xs text-zinc-400 mt-0.5">
@@ -975,7 +976,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
             <button
               type="button"
               onClick={loadLogs}
-              className="px-3 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-xs font-bold text-zinc-200 border border-white/10 flex items-center gap-1.5 cursor-pointer"
+              className="px-3.5 py-2 rounded-full bg-[#1a1a20] hover:bg-[#25252d] text-xs font-bold text-zinc-200 border border-white/[0.08] flex items-center gap-1.5 cursor-pointer"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
               <span>تحديث</span>
@@ -983,7 +984,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
             <button
               type="button"
               onClick={() => setConfirmClearLogs(true)}
-              className="px-3.5 py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 text-xs font-black cursor-pointer"
+              className="px-4 py-2 rounded-full bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 text-xs font-black cursor-pointer"
             >
               مسح السجل
             </button>
@@ -992,7 +993,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
 
         {feedback && (
           <div
-            className={`p-3 rounded-xl text-xs border ${
+            className={`p-3 rounded-2xl text-xs border ${
               feedback.type === 'success'
                 ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
                 : 'bg-rose-500/15 border-rose-500/30 text-rose-300'
@@ -1007,29 +1008,29 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
           value={logSearch}
           onChange={(e) => setLogSearch(e.target.value)}
           placeholder="تصفية العمليات..."
-          className="w-full bg-[#111116] border border-white/[0.08] rounded-xl px-3.5 py-2 text-xs text-white"
+          className="w-full bg-[#121215] border border-white/[0.07] focus:border-[#ff2e93]/70 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none"
         />
 
         {isLoading ? (
           <div className="py-16 text-center text-zinc-400 text-xs">جارٍ تحميل السجل...</div>
         ) : filteredLogs.length === 0 ? (
-          <div className="py-12 text-center rounded-2xl bg-[#111116] border border-white/[0.08] text-zinc-500 text-xs">
+          <div className="py-12 text-center rounded-2xl bg-[#121215] border border-white/[0.07] text-zinc-500 text-xs">
             السجل فارغ حالياً.
           </div>
         ) : (
-          <div className="rounded-2xl bg-[#111116] border border-white/[0.08] divide-y divide-white/[0.05] text-xs">
+          <div className="rounded-2xl bg-[#121215] border border-white/[0.07] divide-y divide-white/[0.05] text-xs">
             {filteredLogs.map((log) => (
               <div key={log.id} className="p-3.5 flex flex-wrap items-center justify-between gap-2">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="font-black text-white">{log.action}</span>
-                    <span className="text-[10px] px-2 py-0.5 rounded bg-zinc-900 text-amber-300 font-mono">
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#1a1a20] text-[#ff5ec4] font-mono">
                       {log.category}
                     </span>
                   </div>
                   <p className="text-zinc-400 mt-0.5">{log.details}</p>
                 </div>
-                <div className="text-left font-mono text-[10px] text-zinc-500 shrink-0">
+                <div className="text-left font-mono text-[10px] text-zinc-500 shrink-0 tabular-nums">
                   <div>{log.adminEmail}</div>
                   <div>{new Date(log.createdAt).toLocaleString('ar-EG')}</div>
                 </div>
@@ -1128,7 +1129,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
     <div className="space-y-5">
       <div>
         <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
-          <Settings className="w-5 h-5 text-amber-400" />
+          <Settings className="w-5 h-5 text-[#ff45a2]" />
           <span>إعدادات الموقع العامة والبريد الإلكتروني</span>
         </h2>
         <p className="text-xs text-zinc-400 mt-0.5">
@@ -1138,7 +1139,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
 
       {feedback && (
         <div
-          className={`p-3 rounded-xl text-xs border ${
+          className={`p-3 rounded-2xl text-xs border ${
             feedback.type === 'success'
               ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
               : 'bg-rose-500/15 border-rose-500/30 text-rose-300'
@@ -1154,9 +1155,9 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
             e.preventDefault();
             handleSaveSettingsPayload(settings, 'تم حفظ إعدادات المنصة العامة بنجاح');
           }}
-          className="p-4 rounded-2xl bg-[#111116] border border-white/[0.08] space-y-4 text-xs"
+          className="p-4 rounded-2xl bg-[#121215] border border-white/[0.07] space-y-4 text-xs"
         >
-          <h3 className="font-black text-amber-400 border-b border-white/[0.06] pb-2">
+          <h3 className="font-black text-[#ff5ec4] border-b border-white/[0.06] pb-2">
             الإعدادات العامة والألوان والأمان والتخزين
           </h3>
 
@@ -1167,7 +1168,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
                 type="text"
                 value={settings.siteName}
                 onChange={(e) => setSettings({ ...settings, siteName: e.target.value })}
-                className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white"
+                className="w-full bg-[#08080a] border border-white/[0.09] focus:border-[#ff2e93]/70 rounded-xl px-3 py-2 text-white focus:outline-none"
               />
             </div>
             <div>
@@ -1176,7 +1177,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
                 type="text"
                 value={settings.siteTagline}
                 onChange={(e) => setSettings({ ...settings, siteTagline: e.target.value })}
-                className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white"
+                className="w-full bg-[#08080a] border border-white/[0.09] focus:border-[#ff2e93]/70 rounded-xl px-3 py-2 text-white focus:outline-none"
               />
             </div>
             <div>
@@ -1186,7 +1187,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
                 dir="ltr"
                 value={settings.logoText}
                 onChange={(e) => setSettings({ ...settings, logoText: e.target.value })}
-                className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono"
+                className="w-full bg-[#08080a] border border-white/[0.09] focus:border-[#ff2e93]/70 rounded-xl px-3 py-2 text-white font-mono focus:outline-none"
               />
             </div>
           </div>
@@ -1199,14 +1200,14 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
                   type="color"
                   value={settings.accentColor || '#f7c600'}
                   onChange={(e) => setSettings({ ...settings, accentColor: e.target.value })}
-                  className="w-10 h-9 rounded-lg bg-zinc-950 border border-white/10 cursor-pointer shrink-0"
+                  className="w-10 h-9 rounded-lg bg-[#08080a] border border-white/[0.09] cursor-pointer shrink-0"
                 />
                 <input
                   type="text"
                   dir="ltr"
                   value={settings.accentColor || '#f7c600'}
                   onChange={(e) => setSettings({ ...settings, accentColor: e.target.value })}
-                  className="flex-1 bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono"
+                  className="flex-1 bg-[#08080a] border border-white/[0.09] rounded-xl px-3 py-2 text-white font-mono focus:outline-none"
                 />
               </div>
             </div>
@@ -1217,14 +1218,14 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
                   type="color"
                   value={settings.backgroundColor || '#050507'}
                   onChange={(e) => setSettings({ ...settings, backgroundColor: e.target.value })}
-                  className="w-10 h-9 rounded-lg bg-zinc-950 border border-white/10 cursor-pointer shrink-0"
+                  className="w-10 h-9 rounded-lg bg-[#08080a] border border-white/[0.09] cursor-pointer shrink-0"
                 />
                 <input
                   type="text"
                   dir="ltr"
                   value={settings.backgroundColor || '#050507'}
                   onChange={(e) => setSettings({ ...settings, backgroundColor: e.target.value })}
-                  className="flex-1 bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono"
+                  className="flex-1 bg-[#08080a] border border-white/[0.09] rounded-xl px-3 py-2 text-white font-mono focus:outline-none"
                 />
               </div>
             </div>
@@ -1246,7 +1247,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
                     },
                   })
                 }
-                className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono"
+                className="w-full bg-[#08080a] border border-white/[0.09] rounded-xl px-3 py-2 text-white font-mono focus:outline-none"
               />
             </div>
             <div>
@@ -1264,7 +1265,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
                     },
                   })
                 }
-                className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono"
+                className="w-full bg-[#08080a] border border-white/[0.09] rounded-xl px-3 py-2 text-white font-mono focus:outline-none"
               />
             </div>
             <div>
@@ -1282,7 +1283,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
                     },
                   })
                 }
-                className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono"
+                className="w-full bg-[#08080a] border border-white/[0.09] rounded-xl px-3 py-2 text-white font-mono focus:outline-none"
               />
             </div>
             <div>
@@ -1301,7 +1302,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
                     },
                   })
                 }
-                className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono"
+                className="w-full bg-[#08080a] border border-white/[0.09] rounded-xl px-3 py-2 text-white font-mono focus:outline-none"
               />
             </div>
           </div>
@@ -1320,7 +1321,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
                     },
                   })
                 }
-                className="accent-amber-400"
+                className="accent-[#ff2e93]"
               />
               <span>السماح بتسجيل حسابات جديدة</span>
             </label>
@@ -1337,7 +1338,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
                     },
                   })
                 }
-                className="accent-amber-400"
+                className="accent-[#ff2e93]"
               />
               <span>إلزام التحقق عبر رابط البريد الإلكتروني</span>
             </label>
@@ -1354,7 +1355,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
                     },
                   })
                 }
-                className="accent-amber-400"
+                className="accent-[#ff2e93]"
               />
               <span>تفعيل التحقق الصارم للإدارة</span>
             </label>
@@ -1371,7 +1372,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
                     },
                   })
                 }
-                className="accent-amber-400"
+                className="accent-[#ff2e93]"
               />
               <span>إظهار إشعارات الموقع العامة</span>
             </label>
@@ -1388,7 +1389,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
                     },
                   })
                 }
-                className="accent-amber-400"
+                className="accent-[#ff2e93]"
               />
               <span>تنبيه عند إضافة أعمال جديدة</span>
             </label>
@@ -1397,7 +1398,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
           <button
             type="submit"
             disabled={isSaving}
-            className="px-5 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-black font-black flex items-center gap-1.5 cursor-pointer"
+            className="px-5 py-2.5 rounded-full bg-[#ff2e93] hover:bg-[#ff47a1] text-white font-black flex items-center gap-1.5 cursor-pointer"
           >
             <Save className="w-4 h-4" />
             <span>حفظ إعدادات المنصة</span>
@@ -1408,19 +1409,19 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
       {/* Email / SMTP / Resend Dispatch Configuration */}
       <form
         onSubmit={handleSaveMail}
-        className="p-4 rounded-2xl bg-[#111116] border border-white/[0.08] space-y-4 text-xs"
+        className="p-4 rounded-2xl bg-[#121215] border border-white/[0.07] space-y-4 text-xs"
       >
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.06] pb-2">
           <div className="flex items-center gap-2 font-black text-white">
-            <Mail className="w-4 h-4 text-amber-400" />
+            <Mail className="w-4 h-4 text-[#ff45a2]" />
             <span>خادم إرسال روابط تسجيل الدخول (SMTP / Resend)</span>
           </div>
           {emailDiagnostics && (
             <span
-              className={`px-2.5 py-0.5 rounded text-[11px] font-bold ${
+              className={`px-3 py-0.5 rounded-full text-[11px] font-bold ${
                 emailDiagnostics.realDeliveryReady
                   ? 'bg-emerald-500/15 text-emerald-300'
-                  : 'bg-amber-500/15 text-amber-300'
+                  : 'bg-[#ff2e93]/15 text-[#ff5ec4]'
               }`}
             >
               {emailDiagnostics.realDeliveryReady ? 'متصل وجاهز للإرسال' : 'بانتظار الإعداد'}
@@ -1430,7 +1431,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
 
         {mailResult && (
           <div
-            className={`p-3 rounded-xl border flex items-center gap-2 ${
+            className={`p-3 rounded-2xl border flex items-center gap-2 ${
               mailResult.success
                 ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
                 : 'bg-rose-500/15 border-rose-500/30 text-rose-300'
@@ -1453,7 +1454,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
               dir="ltr"
               value={smtpHost}
               onChange={(e) => setSmtpHost(e.target.value)}
-              className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono"
+              className="w-full bg-[#08080a] border border-white/[0.09] rounded-xl px-3 py-2 text-white font-mono focus:outline-none"
             />
           </div>
           <div>
@@ -1463,7 +1464,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
               dir="ltr"
               value={smtpPort}
               onChange={(e) => setSmtpPort(e.target.value)}
-              className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono"
+              className="w-full bg-[#08080a] border border-white/[0.09] rounded-xl px-3 py-2 text-white font-mono focus:outline-none"
             />
           </div>
           <div>
@@ -1473,7 +1474,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
               dir="ltr"
               value={smtpUser}
               onChange={(e) => setSmtpUser(e.target.value)}
-              className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono"
+              className="w-full bg-[#08080a] border border-white/[0.09] rounded-xl px-3 py-2 text-white font-mono focus:outline-none"
             />
           </div>
           <div>
@@ -1486,7 +1487,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
               value={smtpPass}
               onChange={(e) => setSmtpPass(e.target.value)}
               placeholder={hasSavedSmtpPass ? '••••••••••••' : 'أدخل كلمة مرور التطبيقات'}
-              className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono"
+              className="w-full bg-[#08080a] border border-white/[0.09] rounded-xl px-3 py-2 text-white font-mono focus:outline-none"
             />
           </div>
           <div>
@@ -1497,7 +1498,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
               value={smtpFrom}
               onChange={(e) => setSmtpFrom(e.target.value)}
               placeholder="MASHHAD <noreply@domain.com>"
-              className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono"
+              className="w-full bg-[#08080a] border border-white/[0.09] rounded-xl px-3 py-2 text-white font-mono focus:outline-none"
             />
           </div>
           <div>
@@ -1510,7 +1511,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
               value={resendKey}
               onChange={(e) => setResendKey(e.target.value)}
               placeholder="re_..."
-              className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono"
+              className="w-full bg-[#08080a] border border-white/[0.09] rounded-xl px-3 py-2 text-white font-mono focus:outline-none"
             />
           </div>
         </div>
@@ -1519,7 +1520,7 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
           <button
             type="submit"
             disabled={isSaving}
-            className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black font-black flex items-center gap-1.5 cursor-pointer"
+            className="px-5 py-2 rounded-full bg-[#ff2e93] hover:bg-[#ff47a1] text-white font-black flex items-center gap-1.5 cursor-pointer"
           >
             <Save className="w-3.5 h-3.5" />
             <span>حفظ والتحقق من البريد</span>
@@ -1531,13 +1532,13 @@ export const SettingsGovernanceSections: React.FC<SettingsGovernanceSectionsProp
               dir="ltr"
               value={testEmailAddr}
               onChange={(e) => setTestEmailAddr(e.target.value)}
-              className="bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono w-56"
+              className="bg-[#08080a] border border-white/[0.09] rounded-xl px-3 py-2 text-white font-mono w-56 focus:outline-none"
             />
             <button
               type="button"
               disabled={isTestingMail}
               onClick={handleSendTestMail}
-              className="px-3.5 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 font-bold border border-white/10 flex items-center gap-1.5 cursor-pointer"
+              className="px-4 py-2 rounded-full bg-[#1a1a20] hover:bg-[#25252d] text-zinc-200 font-bold border border-white/[0.08] flex items-center gap-1.5 cursor-pointer"
             >
               {isTestingMail ? (
                 <RefreshCw className="w-3.5 h-3.5 animate-spin" />

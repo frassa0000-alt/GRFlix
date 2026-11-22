@@ -36,9 +36,65 @@ export function unwrapProxiedTargetUrl(url?: string | null): string | null {
   }
 }
 
+/**
+ * Safely extracts a clean video/embed URL from either a plain URL or pasted <iframe>/<embed> HTML code.
+ * Never returns raw HTML tags or unsafe schemes (javascript:, data:, vbscript:).
+ */
+export function extractEmbedInputUrl(rawInput?: string | null): string {
+  const raw = (rawInput || '').trim();
+  if (!raw) return '';
+
+  let candidate = raw;
+  if (/<(?:iframe|embed)\b/i.test(raw) || /\bsrc\s*=\s*["']/i.test(raw)) {
+    const srcMatch =
+      raw.match(/<(?:iframe|embed)\b[^>]*\bsrc\s*=\s*"([^"]+)"/i) ||
+      raw.match(/<(?:iframe|embed)\b[^>]*\bsrc\s*=\s*'([^']+)'/i) ||
+      raw.match(/<(?:iframe|embed)\b[^>]*\bsrc\s*=\s*([^\s>]+)/i) ||
+      raw.match(/\bsrc\s*=\s*"([^"]+)"/i) ||
+      raw.match(/\bsrc\s*=\s*'([^']+)'/i);
+    if (!srcMatch?.[1]) {
+      return '';
+    }
+    candidate = srcMatch[1]
+      .replace(/&amp;/gi, '&')
+      .replace(/&#38;/g, '&')
+      .trim();
+  }
+
+  if (
+    !candidate ||
+    /[<>]/.test(candidate) ||
+    /^(javascript|data|vbscript):/i.test(candidate)
+  ) {
+    return '';
+  }
+
+  if (candidate.startsWith('/') || candidate.startsWith('blob:')) {
+    return candidate;
+  }
+  if (/^\/\//.test(candidate)) {
+    return `https:${candidate}`;
+  }
+  if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(candidate) && /^[\w.-]+\.[a-zA-Z]{2,}(\/|$)/.test(candidate)) {
+    return `https://${candidate}`;
+  }
+  try {
+    const parsed = new URL(candidate);
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+      return parsed.href;
+    }
+  } catch {
+    return '';
+  }
+  return '';
+}
+
 export function normalizeExternalHttpUrl(rawUrl?: string | null): string {
   const trimmed = (rawUrl || '').trim();
   if (!trimmed) return '';
+  if (/<(?:iframe|embed)\b/i.test(trimmed) || /\bsrc\s*=\s*["']/i.test(trimmed)) {
+    return extractEmbedInputUrl(trimmed);
+  }
   if (trimmed.startsWith('/') || trimmed.startsWith('blob:')) return trimmed;
   if (/^\/\//.test(trimmed)) return `https:${trimmed}`;
   if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(trimmed) && /^[\w.-]+\.[a-zA-Z]{2,}(\/|$)/.test(trimmed)) {
@@ -50,7 +106,7 @@ export function normalizeExternalHttpUrl(rawUrl?: string | null): string {
 export function isExternalHttpUrl(url?: string | null): boolean {
   if (!url) return false;
   const normalized = normalizeExternalHttpUrl(url);
-  if (normalized.startsWith('/') || normalized.startsWith('blob:')) return false;
+  if (!normalized || normalized.startsWith('/') || normalized.startsWith('blob:')) return false;
   try {
     const parsed = new URL(normalized);
     return parsed.protocol === 'http:' || parsed.protocol === 'https:';
@@ -151,13 +207,33 @@ export function isLikelyFrameBlockedHost(url?: string | null): boolean {
   }
 }
 
+export function isDirectEmbedPlatformUrl(url?: string | null): boolean {
+  if (!url) return false;
+  if (isProxiedEmbedUrl(url)) return true;
+  try {
+    const parsed = new URL(normalizeExternalHttpUrl(url));
+    const host = parsed.hostname.replace(/^www\./i, '').toLowerCase();
+    const path = parsed.pathname.toLowerCase();
+    if (host === 'player.vimeo.com') return true;
+    if ((host === 'dailymotion.com' || host === 'geo.dailymotion.com') && path.includes('/embed/')) return true;
+    if (host === 'drive.google.com' && path.includes('/preview')) return true;
+    if (host === 'archive.org' && path.includes('/embed/')) return true;
+    if ((host === 'ok.ru' || host === 'odnoklassniki.ru') && path.includes('/videoembed/')) return true;
+    if (host === 'piped.video' && path.includes('/embed/')) return true;
+    if (/\/(embed|player)\b/i.test(path)) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Converts a known non-YouTube external video page link or embed URL into a clean iframe-embeddable URL.
  * Returns null if the URL appears to be a direct video stream (MP4/HLS/WebM/DASH) or proxied stream.
  */
 export function convertToUniversalEmbedUrl(rawUrl?: string | null): string | null {
   if (!rawUrl || typeof rawUrl !== 'string') return null;
-  const trimmed = rawUrl.trim();
+  const trimmed = normalizeExternalHttpUrl(rawUrl);
   if (isProxiedEmbedUrl(trimmed)) return trimmed;
   if (!trimmed || trimmed.startsWith('/') || trimmed.startsWith('blob:') || isProxiedStreamUrl(trimmed)) {
     return null;
@@ -173,7 +249,7 @@ export function convertToUniversalEmbedUrl(rawUrl?: string | null): string | nul
 
   let parsed: URL;
   try {
-    parsed = new URL(normalizeExternalHttpUrl(trimmed));
+    parsed = new URL(trimmed);
   } catch {
     return null;
   }
@@ -242,7 +318,7 @@ export function convertToUniversalEmbedUrl(rawUrl?: string | null): string | nul
     (pattern) => host === pattern || host.includes(pattern)
   );
   const hasEmbedPath =
-    /\/(embed|videoembed|preview|e)\b/i.test(path) ||
+    /\/(embed|videoembed|preview|player|e)\b/i.test(path) ||
     parsed.searchParams.has('embed');
 
   if (isKnownHost || hasEmbedPath) {
@@ -277,4 +353,89 @@ export function getPipedMirrorEmbedUrl(
   const id = extractYouTubeVideoId(youtubeUrlOrId);
   if (!id) return null;
   return `https://piped.video/embed/${id}${autoplay ? '?autoplay=1' : ''}`;
+}
+
+const EXTRACTOR_MEDIA_HOST_PATTERNS = [
+  'dropbox.com',
+  'mega.nz',
+  'mediafire.com',
+  'twitch.tv',
+  'streamable.com',
+  'rumble.com',
+  'bitchute.com',
+  'terabox.com',
+  '1024terabox.com',
+  'pixeldrain.com',
+  'gofile.io',
+  'krakenfiles.com',
+  'bunkr.',
+];
+
+/**
+ * Returns true if the URL is an ordinary external website (e.g. cooking site, transit site, blog)
+ * rather than a video file, stream manifest, YouTube link, or dedicated video embed host.
+ */
+export function isPlainExternalWebUrl(
+  url?: string | null,
+  storageType?: string
+): boolean {
+  if (!url || typeof url !== 'string') return false;
+  if (storageType === 'youtube') return false;
+
+  const normalized = normalizeExternalHttpUrl(url);
+  if (!normalized || normalized.startsWith('/') || normalized.startsWith('blob:')) {
+    return false;
+  }
+  if (isProxiedStreamUrl(normalized) || isProxiedEmbedUrl(normalized)) {
+    return false;
+  }
+  if (
+    isYouTubeUrl(normalized) ||
+    isHlsStreamUrl(normalized) ||
+    isDashStreamUrl(normalized) ||
+    isDirectMediaFileUrl(normalized) ||
+    Boolean(convertToUniversalEmbedUrl(normalized))
+  ) {
+    return false;
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(normalized);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    return false;
+  }
+
+  const host = parsed.hostname.replace(/^www\./i, '').toLowerCase();
+  const cleanPath = parsed.pathname.toLowerCase();
+  if (/\.(mp4|m4v|webm|mov|mkv|m3u8|mpd|mp3|aac|ogg|flv|ts|avi|3gp)$/i.test(cleanPath)) {
+    return false;
+  }
+  if (EXTRACTOR_MEDIA_HOST_PATTERNS.some((p) => host === p || host.includes(p))) {
+    return false;
+  }
+
+  return true;
+}
+
+export function openExternalWebsiteUrl(url: string): void {
+  const normalized = normalizeExternalHttpUrl(url);
+  if (!normalized || typeof document === 'undefined') return;
+  try {
+    const parsed = new URL(normalized);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return;
+    const anchor = document.createElement('a');
+    anchor.href = parsed.href;
+    anchor.target = '_blank';
+    anchor.rel = 'noopener noreferrer';
+    anchor.style.display = 'none';
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+  } catch {
+    // ignore invalid external URL
+  }
 }

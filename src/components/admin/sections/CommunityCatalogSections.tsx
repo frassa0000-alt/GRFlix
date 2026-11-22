@@ -216,7 +216,7 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
       <div className="space-y-4">
         <div>
           <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
-            <Tags className="w-5 h-5 text-amber-400" />
+            <Tags className="w-5 h-5 text-[#ff45a2]" />
             <span>إدارة التصنيفات ({categories.length})</span>
           </h2>
           <p className="text-xs text-zinc-400 mt-0.5">
@@ -226,19 +226,22 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
 
         {feedback && (
           <div
-            className={`p-3 rounded-xl text-xs border ${
+            className={`p-3 rounded-2xl text-xs border flex items-center justify-between ${
               feedback.type === 'success'
                 ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
                 : 'bg-rose-500/15 border-rose-500/30 text-rose-300'
             }`}
           >
-            {feedback.msg}
+            <span>{feedback.msg}</span>
+            <button type="button" onClick={() => setFeedback(null)} className="cursor-pointer">
+              <X className="w-4 h-4" />
+            </button>
           </div>
         )}
 
         <form
           onSubmit={handleAddOrUpdateCat}
-          className="p-4 rounded-2xl bg-[#111116] border border-white/[0.08] grid grid-cols-1 sm:grid-cols-12 gap-2.5 text-xs items-end"
+          className="p-4 rounded-2xl bg-[#121215] border border-white/[0.07] grid grid-cols-1 sm:grid-cols-12 gap-2.5 text-xs items-end"
         >
           <div className="sm:col-span-4">
             <label className="block text-zinc-400 font-bold mb-1">اسم التصنيف بالعربية *</label>
@@ -248,7 +251,7 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
               value={catNameAr}
               onChange={(e) => setCatNameAr(e.target.value)}
               placeholder="مثال: تشويق وإثارة"
-              className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white"
+              className="w-full bg-[#08080a] border border-white/[0.09] focus:border-[#ff2e93]/70 rounded-xl px-3 py-2 text-white focus:outline-none"
             />
           </div>
           <div className="sm:col-span-3">
@@ -259,7 +262,7 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
               value={catNameEn}
               onChange={(e) => setCatNameEn(e.target.value)}
               placeholder="Thriller"
-              className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white"
+              className="w-full bg-[#08080a] border border-white/[0.09] rounded-xl px-3 py-2 text-white"
             />
           </div>
           <div className="sm:col-span-3">
@@ -270,14 +273,14 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
               value={catSlug}
               onChange={(e) => setCatSlug(e.target.value)}
               placeholder="thriller"
-              className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono"
+              className="w-full bg-[#08080a] border border-white/[0.09] rounded-xl px-3 py-2 text-white font-mono"
             />
           </div>
           <div className="sm:col-span-2 flex gap-1.5">
             <button
               type="submit"
               disabled={isProcessing}
-              className="flex-1 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black font-black cursor-pointer"
+              className="flex-1 py-2 rounded-full bg-[#ff2e93] hover:bg-[#ff47a1] text-white font-black cursor-pointer"
             >
               {editingCat ? 'تحديث' : 'إضافة'}
             </button>
@@ -290,7 +293,7 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
                   setCatNameEn('');
                   setCatSlug('');
                 }}
-                className="px-2.5 py-2 rounded-xl bg-zinc-900 text-zinc-300 border border-white/10 cursor-pointer"
+                className="px-2.5 py-2 rounded-full bg-[#1a1a20] text-zinc-300 border border-white/[0.08] cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -298,20 +301,20 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
           </div>
         </form>
 
-        <div className="rounded-2xl bg-[#111116] border border-white/[0.08] divide-y divide-white/[0.05]">
+        <div className="rounded-2xl bg-[#121215] border border-white/[0.07] divide-y divide-white/[0.05]">
           {sortedCategories.map((cat, idx) => (
             <div
               key={cat.id}
               className="p-3.5 flex flex-wrap items-center justify-between gap-2 text-xs"
             >
               <div className="flex items-center gap-3">
-                <span className="w-7 h-7 rounded-lg bg-zinc-900 text-amber-400 font-mono font-bold flex items-center justify-center">
+                <span className="w-7 h-7 rounded-lg bg-[#1a1a20] text-[#ff5ec4] font-mono font-bold flex items-center justify-center tabular-nums">
                   {cat.order || idx + 1}
                 </span>
                 <div>
                   <p className="font-black text-white">{cat.nameAr}</p>
                   <p className="text-[11px] font-mono text-zinc-400">
-                    {cat.nameEn} • {cat.slug}
+                    {cat.nameEn} · {cat.slug}
                   </p>
                 </div>
               </div>
@@ -321,7 +324,7 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
                   type="button"
                   disabled={idx === 0 || isProcessing}
                   onClick={() => handleMoveCategory(idx, -1)}
-                  className="w-7 h-7 rounded-lg bg-zinc-900 hover:bg-zinc-800 disabled:opacity-40 text-zinc-300 flex items-center justify-center cursor-pointer"
+                  className="w-7 h-7 rounded-full bg-[#1a1a20] hover:bg-[#25252d] disabled:opacity-40 text-zinc-300 flex items-center justify-center cursor-pointer"
                   title="تقديم للأعلى"
                 >
                   <ArrowUp className="w-3.5 h-3.5" />
@@ -330,7 +333,7 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
                   type="button"
                   disabled={idx === sortedCategories.length - 1 || isProcessing}
                   onClick={() => handleMoveCategory(idx, 1)}
-                  className="w-7 h-7 rounded-lg bg-zinc-900 hover:bg-zinc-800 disabled:opacity-40 text-zinc-300 flex items-center justify-center cursor-pointer"
+                  className="w-7 h-7 rounded-full bg-[#1a1a20] hover:bg-[#25252d] disabled:opacity-40 text-zinc-300 flex items-center justify-center cursor-pointer"
                   title="تأخير للأسفل"
                 >
                   <ArrowDown className="w-3.5 h-3.5" />
@@ -351,10 +354,10 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
                       setFeedback({ type: 'error', msg: err?.message || 'تعذر تغيير حالة التصنيف' });
                     }
                   }}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 cursor-pointer border ${
+                  className={`px-2.5 py-1 rounded-full text-[11px] font-bold flex items-center gap-1 cursor-pointer border ${
                     cat.isVisible
                       ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
-                      : 'bg-zinc-900 text-zinc-400 border-white/10'
+                      : 'bg-[#1a1a20] text-zinc-400 border-white/[0.08]'
                   }`}
                 >
                   {cat.isVisible ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
@@ -368,7 +371,7 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
                     setCatNameEn(cat.nameEn);
                     setCatSlug(cat.slug);
                   }}
-                  className="w-7 h-7 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 flex items-center justify-center cursor-pointer"
+                  className="w-7 h-7 rounded-full bg-[#1a1a20] hover:bg-[#25252d] text-zinc-300 flex items-center justify-center cursor-pointer"
                 >
                   <Edit3 className="w-3.5 h-3.5" />
                 </button>
@@ -377,7 +380,7 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
                   onClick={() =>
                     setConfirmDelete({ kind: 'category', id: cat.id, label: cat.nameAr })
                   }
-                  className="w-7 h-7 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 flex items-center justify-center cursor-pointer"
+                  className="w-7 h-7 rounded-full bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 flex items-center justify-center cursor-pointer"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
@@ -448,7 +451,7 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
       <div className="space-y-4">
         <div>
           <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
-            <UserCheck className="w-5 h-5 text-amber-400" />
+            <UserCheck className="w-5 h-5 text-[#ff45a2]" />
             <span>إدارة الممثلين والمخرجين ({people.length})</span>
           </h2>
           <p className="text-xs text-zinc-400 mt-0.5">
@@ -458,19 +461,22 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
 
         {feedback && (
           <div
-            className={`p-3 rounded-xl text-xs border ${
+            className={`p-3 rounded-2xl text-xs border flex items-center justify-between ${
               feedback.type === 'success'
                 ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
                 : 'bg-rose-500/15 border-rose-500/30 text-rose-300'
             }`}
           >
-            {feedback.msg}
+            <span>{feedback.msg}</span>
+            <button type="button" onClick={() => setFeedback(null)} className="cursor-pointer">
+              <X className="w-4 h-4" />
+            </button>
           </div>
         )}
 
         <form
           onSubmit={handleSavePerson}
-          className="p-4 rounded-2xl bg-[#111116] border border-white/[0.08] space-y-3 text-xs"
+          className="p-4 rounded-2xl bg-[#121215] border border-white/[0.07] space-y-3 text-xs"
         >
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
             <input
@@ -479,12 +485,12 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
               value={personName}
               onChange={(e) => setPersonName(e.target.value)}
               placeholder="الاسم الكامل *"
-              className="bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white"
+              className="bg-[#08080a] border border-white/[0.09] focus:border-[#ff2e93]/70 rounded-xl px-3 py-2 text-white focus:outline-none"
             />
             <select
               value={personRole}
               onChange={(e) => setPersonRole(e.target.value as any)}
-              className="bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white"
+              className="bg-[#08080a] border border-white/[0.09] rounded-xl px-3 py-2 text-white"
             >
               <option value="actor">ممثل</option>
               <option value="director">مخرج</option>
@@ -495,13 +501,13 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
               value={personNationality}
               onChange={(e) => setPersonNationality(e.target.value)}
               placeholder="الجنسية (اختياري)"
-              className="bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white"
+              className="bg-[#08080a] border border-white/[0.09] rounded-xl px-3 py-2 text-white"
             />
             <div className="flex gap-1.5">
               <button
                 type="submit"
                 disabled={isProcessing}
-                className="flex-1 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black font-black flex items-center justify-center gap-1 cursor-pointer"
+                className="flex-1 py-2 rounded-full bg-[#ff2e93] hover:bg-[#ff47a1] text-white font-black flex items-center justify-center gap-1 cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 <span>{editingPerson ? 'حفظ التعديل' : 'إضافة'}</span>
@@ -516,7 +522,7 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
                     setPersonAvatarUrl('');
                     setPersonNationality('');
                   }}
-                  className="px-2.5 rounded-xl bg-zinc-900 text-zinc-300 border border-white/10 cursor-pointer"
+                  className="px-2.5 rounded-full bg-[#1a1a20] text-zinc-300 border border-white/[0.08] cursor-pointer"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -530,55 +536,61 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
               value={personAvatarUrl}
               onChange={(e) => setPersonAvatarUrl(e.target.value)}
               placeholder="رابط الصورة الشخصية (اختياري)"
-              className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono"
+              className="w-full bg-[#08080a] border border-white/[0.09] rounded-xl px-3 py-2 text-white font-mono"
             />
             <input
               type="text"
               value={personBio}
               onChange={(e) => setPersonBio(e.target.value)}
               placeholder="نبذة مختصرة..."
-              className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white"
+              className="w-full bg-[#08080a] border border-white/[0.09] rounded-xl px-3 py-2 text-white"
             />
           </div>
         </form>
 
         <div className="relative">
-          <Search className="w-4 h-4 text-zinc-500 absolute right-3 top-1/2 -translate-y-1/2" />
+          <Search className="w-4 h-4 text-zinc-500 absolute right-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             value={personSearch}
             onChange={(e) => setPersonSearch(e.target.value)}
             placeholder="بحث باسم الممثل أو المخرج..."
-            className="w-full bg-[#111116] border border-white/[0.08] rounded-xl pr-9 pl-3 py-2 text-xs text-white"
+            className="w-full bg-[#121215] border border-white/[0.07] rounded-2xl pr-10 pl-3 py-2.5 text-xs text-white focus:outline-none focus:border-[#ff2e93]/70"
           />
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {filteredPeople.length === 0 ? (
-            <div className="col-span-full py-12 text-center text-xs text-zinc-500 rounded-2xl bg-[#111116] border border-white/[0.08]">
+            <div className="col-span-full py-12 text-center text-xs text-zinc-500 rounded-2xl bg-[#121215] border border-white/[0.07]">
               لا توجد سجلات مضافة بعد.
             </div>
           ) : (
             filteredPeople.map((p) => (
               <div
                 key={p.id}
-                className="p-3.5 rounded-2xl bg-[#111116] border border-white/[0.08] flex items-start justify-between gap-2 text-xs"
+                className="p-3.5 rounded-2xl bg-[#121215] border border-white/[0.07] flex items-start justify-between gap-2 text-xs"
               >
                 <div className="flex items-start gap-2.5 min-w-0">
                   {p.avatarUrl && (
                     <img
                       src={p.avatarUrl}
                       alt={p.name}
+                      referrerPolicy="no-referrer"
                       className="w-10 h-10 rounded-full object-cover border border-white/10 shrink-0"
                     />
                   )}
                   <div className="min-w-0">
                     <p className="font-black text-white truncate">{p.name}</p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="px-2 py-0.5 rounded bg-amber-400/15 text-amber-300 text-[10px] font-bold">
+                    <div className="flex items-center gap-2 mt-1 text-[11px] text-zinc-400">
+                      <span className="text-[#ff5ec4] font-bold">
                         {p.role === 'director' ? 'مخرج' : p.role === 'both' ? 'ممثل ومخرج' : 'ممثل'}
                       </span>
-                      {p.nationality && <span className="text-[11px] text-zinc-400">{p.nationality}</span>}
+                      {p.nationality && (
+                        <>
+                          <span aria-hidden="true">·</span>
+                          <span>{p.nationality}</span>
+                        </>
+                      )}
                     </div>
                     {p.bio && <p className="text-[11px] text-zinc-400 mt-1.5 line-clamp-2">{p.bio}</p>}
                   </div>
@@ -594,14 +606,14 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
                       setPersonAvatarUrl(p.avatarUrl || '');
                       setPersonBio(p.bio || '');
                     }}
-                    className="w-7 h-7 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 flex items-center justify-center cursor-pointer"
+                    className="w-7 h-7 rounded-full bg-[#1a1a20] hover:bg-[#25252d] text-zinc-300 flex items-center justify-center cursor-pointer"
                   >
                     <Edit3 className="w-3.5 h-3.5" />
                   </button>
                   <button
                     type="button"
                     onClick={() => setConfirmDelete({ kind: 'person', id: p.id, label: p.name })}
-                    className="w-7 h-7 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 flex items-center justify-center cursor-pointer"
+                    className="w-7 h-7 rounded-full bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 flex items-center justify-center cursor-pointer"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -635,7 +647,7 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
-              <MessageSquare className="w-5 h-5 text-amber-400" />
+              <MessageSquare className="w-5 h-5 text-[#ff45a2]" />
               <span>التعليقات والتقييمات ({comments.length})</span>
             </h2>
             <p className="text-xs text-zinc-400 mt-0.5">
@@ -646,31 +658,33 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
             <button
               type="button"
               onClick={loadComments}
-              className="px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-white/10 text-xs font-bold flex items-center gap-1 cursor-pointer"
+              className="px-3.5 py-1.5 rounded-full bg-[#16161a] hover:bg-[#202026] text-zinc-200 border border-white/[0.08] text-xs font-bold flex items-center gap-1 cursor-pointer"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${loadingComments ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${loadingComments ? 'animate-spin text-[#ff45a2]' : ''}`} />
               <span>تحديث</span>
             </button>
-            {(['all', 'approved', 'pending', 'hidden'] as const).map((st) => (
-              <button
-                key={st}
-                type="button"
-                onClick={() => setCommentFilter(st)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold border cursor-pointer ${
-                  commentFilter === st
-                    ? 'bg-amber-400 text-black border-amber-400'
-                    : 'bg-[#111116] text-zinc-400 border-white/10'
-                }`}
-              >
-                {st === 'all' ? 'الكل' : st === 'approved' ? 'مقبول' : st === 'pending' ? 'بانتظار المراجعة' : 'مخفي'}
-              </button>
-            ))}
+            <div className="flex items-center gap-1 p-1 rounded-full bg-[#121215] border border-white/[0.08]">
+              {(['all', 'approved', 'pending', 'hidden'] as const).map((st) => (
+                <button
+                  key={st}
+                  type="button"
+                  onClick={() => setCommentFilter(st)}
+                  className={`px-3 py-1 rounded-full text-xs font-bold cursor-pointer transition-colors ${
+                    commentFilter === st
+                      ? 'bg-[#ff2e93] text-white'
+                      : 'text-zinc-400 hover:text-white'
+                  }`}
+                >
+                  {st === 'all' ? 'الكل' : st === 'approved' ? 'مقبول' : st === 'pending' ? 'بانتظار المراجعة' : 'مخفي'}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
         {feedback && (
           <div
-            className={`p-3 rounded-xl text-xs border ${
+            className={`p-3 rounded-2xl text-xs border ${
               feedback.type === 'success'
                 ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
                 : 'bg-rose-500/15 border-rose-500/30 text-rose-300'
@@ -682,11 +696,11 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
 
         {loadingComments ? (
           <div className="py-16 text-center text-zinc-400">
-            <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-amber-400" />
+            <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-[#ff45a2]" />
             <p className="text-xs">جارٍ تحميل التعليقات...</p>
           </div>
         ) : visibleComments.length === 0 ? (
-          <div className="py-14 text-center rounded-2xl bg-[#111116] border border-white/[0.08] text-zinc-500 text-xs">
+          <div className="py-14 text-center rounded-2xl bg-[#121215] border border-white/[0.07] text-zinc-500 text-xs">
             لا توجد تعليقات أو تقييمات مسجلة في هذا التصنيف بعد.
           </div>
         ) : (
@@ -694,27 +708,27 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
             {visibleComments.map((c) => (
               <div
                 key={c.id}
-                className="p-4 rounded-2xl bg-[#111116] border border-white/[0.08] flex flex-wrap items-start justify-between gap-3 text-xs"
+                className="p-4 rounded-2xl bg-[#121215] border border-white/[0.07] flex flex-wrap items-start justify-between gap-3 text-xs"
               >
                 <div className="space-y-1 min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-black text-white">{c.userName}</span>
                     <span className="text-zinc-500">على:</span>
-                    <span className="text-amber-400 font-bold">{c.mediaTitle}</span>
-                    <span className="flex items-center gap-0.5 text-amber-400 font-mono">
+                    <span className="text-[#ff5ec4] font-bold">{c.mediaTitle}</span>
+                    <span className="flex items-center gap-0.5 text-amber-400 font-mono tabular-nums">
                       <Star className="w-3 h-3 fill-current" />
                       {c.rating}
                     </span>
                     <span
-                      className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                      className={`text-[11px] font-bold ${
                         c.status === 'approved'
-                          ? 'bg-emerald-500/15 text-emerald-300'
+                          ? 'text-emerald-400'
                           : c.status === 'hidden'
-                          ? 'bg-zinc-800 text-zinc-400'
-                          : 'bg-amber-400/15 text-amber-300'
+                          ? 'text-zinc-500'
+                          : 'text-[#ff5ec4]'
                       }`}
                     >
-                      {c.status === 'approved' ? 'معتمد' : c.status === 'hidden' ? 'مخفي' : 'معلق'}
+                      · {c.status === 'approved' ? 'معتمد' : c.status === 'hidden' ? 'مخفي' : 'معلق'}
                     </span>
                   </div>
                   <p className="text-zinc-200 leading-relaxed">{c.text}</p>
@@ -733,7 +747,7 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
                           setFeedback({ type: 'error', msg: err?.message || 'تعذر اعتماد التعليق' });
                         }
                       }}
-                      className="px-2.5 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 font-bold flex items-center gap-1 cursor-pointer"
+                      className="px-3 py-1.5 rounded-full bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 font-bold flex items-center gap-1 cursor-pointer"
                     >
                       <Check className="w-3.5 h-3.5" />
                       <span>اعتماد</span>
@@ -751,7 +765,7 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
                           setFeedback({ type: 'error', msg: err?.message || 'تعذر إخفاء التعليق' });
                         }
                       }}
-                      className="px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 font-bold flex items-center gap-1 cursor-pointer"
+                      className="px-3 py-1.5 rounded-full bg-[#1a1a20] hover:bg-[#25252d] text-zinc-300 font-bold flex items-center gap-1 cursor-pointer"
                     >
                       <EyeOff className="w-3.5 h-3.5" />
                       <span>إخفاء</span>
@@ -762,7 +776,7 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
                     onClick={() =>
                       setConfirmDelete({ kind: 'comment', id: c.id, label: c.userName })
                     }
-                    className="w-7 h-7 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 flex items-center justify-center cursor-pointer"
+                    className="w-7 h-7 rounded-full bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 flex items-center justify-center cursor-pointer"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -812,7 +826,7 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
     <div className="space-y-4">
       <div>
         <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
-          <Bell className="w-5 h-5 text-amber-400" />
+          <Bell className="w-5 h-5 text-[#ff45a2]" />
           <span>إدارة وإرسال الإشعارات ({notifications.length})</span>
         </h2>
         <p className="text-xs text-zinc-400 mt-0.5">
@@ -822,7 +836,7 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
 
       {feedback && (
         <div
-          className={`p-3 rounded-xl text-xs border ${
+          className={`p-3 rounded-2xl text-xs border ${
             feedback.type === 'success'
               ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
               : 'bg-rose-500/15 border-rose-500/30 text-rose-300'
@@ -834,7 +848,7 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
 
       <form
         onSubmit={handleSendNotif}
-        className="p-4 rounded-2xl bg-[#111116] border border-white/[0.08] space-y-3 text-xs"
+        className="p-4 rounded-2xl bg-[#121215] border border-white/[0.07] space-y-3 text-xs"
       >
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
           <input
@@ -843,12 +857,12 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
             value={notifTitle}
             onChange={(e) => setNotifTitle(e.target.value)}
             placeholder="عنوان الإشعار *"
-            className="bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white"
+            className="bg-[#08080a] border border-white/[0.09] focus:border-[#ff2e93]/70 rounded-xl px-3 py-2 text-white focus:outline-none"
           />
           <select
             value={notifType}
             onChange={(e) => setNotifType(e.target.value as any)}
-            className="bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white"
+            className="bg-[#08080a] border border-white/[0.09] rounded-xl px-3 py-2 text-white"
           >
             <option value="new_release">إصدار جديد</option>
             <option value="info">معلومة عامة</option>
@@ -857,7 +871,7 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
           <select
             value={notifTarget}
             onChange={(e) => setNotifTarget(e.target.value as any)}
-            className="bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white"
+            className="bg-[#08080a] border border-white/[0.09] rounded-xl px-3 py-2 text-white"
           >
             <option value="all">جميع الزوار والأعضاء</option>
             <option value="members">الأعضاء المسجلون فقط</option>
@@ -870,13 +884,13 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
           value={notifMessage}
           onChange={(e) => setNotifMessage(e.target.value)}
           placeholder="نص الإشعار..."
-          className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white"
+          className="w-full bg-[#08080a] border border-white/[0.09] focus:border-[#ff2e93]/70 rounded-xl px-3 py-2 text-white focus:outline-none"
         />
 
         <button
           type="submit"
           disabled={isProcessing}
-          className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black font-black flex items-center gap-1.5 cursor-pointer"
+          className="px-5 py-2 rounded-full bg-[#ff2e93] hover:bg-[#ff47a1] text-white font-black flex items-center gap-1.5 cursor-pointer"
         >
           <Send className="w-3.5 h-3.5" />
           <span>إرسال الإشعار الآن</span>
@@ -884,9 +898,12 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
       </form>
 
       {loadingNotifs ? (
-        <div className="py-12 text-center text-zinc-400 text-xs">جارٍ التحميل...</div>
+        <div className="py-12 text-center text-zinc-400 text-xs">
+          <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-[#ff45a2]" />
+          <span>جارٍ التحميل...</span>
+        </div>
       ) : notifications.length === 0 ? (
-        <div className="py-12 text-center rounded-2xl bg-[#111116] border border-white/[0.08] text-zinc-500 text-xs">
+        <div className="py-12 text-center rounded-2xl bg-[#121215] border border-white/[0.07] text-zinc-500 text-xs">
           لم يتم إرسال أي إشعارات بعد.
         </div>
       ) : (
@@ -894,13 +911,13 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
           {notifications.map((n) => (
             <div
               key={n.id}
-              className="p-3.5 rounded-2xl bg-[#111116] border border-white/[0.08] flex flex-wrap items-center justify-between gap-3 text-xs"
+              className="p-3.5 rounded-2xl bg-[#121215] border border-white/[0.07] flex flex-wrap items-center justify-between gap-3 text-xs"
             >
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <span className="font-black text-white">{n.title}</span>
-                  <span className="text-[10px] px-2 py-0.5 rounded bg-zinc-800 text-zinc-300">
-                    {n.target === 'members' ? 'الأعضاء' : 'الجميع'}
+                  <span className="text-[11px] text-zinc-400">
+                    · {n.target === 'members' ? 'الأعضاء' : 'الجميع'}
                   </span>
                 </div>
                 <p className="text-zinc-400 mt-1">{n.message}</p>
@@ -920,10 +937,10 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
                       setFeedback({ type: 'error', msg: err?.message || 'تعذر تغيير حالة الإشعار' });
                     }
                   }}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer border ${
+                  className={`px-3 py-1 rounded-full text-[11px] font-bold cursor-pointer border ${
                     n.isActive
                       ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
-                      : 'bg-zinc-900 text-zinc-400 border-white/10'
+                      : 'bg-[#1a1a20] text-zinc-400 border-white/[0.08]'
                   }`}
                 >
                   {n.isActive ? 'نشط' : 'موقوف'}
@@ -933,7 +950,7 @@ export const CommunityCatalogSections: React.FC<CommunityCatalogSectionsProps> =
                   onClick={() =>
                     setConfirmDelete({ kind: 'notification', id: n.id, label: n.title })
                   }
-                  className="w-7 h-7 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 flex items-center justify-center cursor-pointer"
+                  className="w-7 h-7 rounded-full bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 flex items-center justify-center cursor-pointer"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>

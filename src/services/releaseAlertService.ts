@@ -59,8 +59,13 @@ export const getLatestEpisodeInfo = (
 };
 
 export const hasPlayableMediaVideo = (media: MediaItem): boolean => {
-  if (Boolean(media.videoUrl && media.videoUrl.trim().length > 0)) return true;
-  if (Array.isArray(media.sources) && media.sources.some((s) => Boolean(s?.url && s.url.trim()))) {
+  if (Boolean(media.videoUrl && media.videoUrl.trim().length > 0)) {
+    return true;
+  }
+  if (
+    Array.isArray(media.sources) &&
+    media.sources.some((s) => Boolean(s?.url && s.url.trim()))
+  ) {
     return true;
   }
   if (
@@ -76,7 +81,7 @@ export const hasPlayableMediaVideo = (media: MediaItem): boolean => {
 
 export const isMediaComingSoon = (media: MediaItem): boolean => {
   if (hasPlayableMediaVideo(media)) return false;
-  return Boolean(media.isComingSoon) || media.type !== 'series';
+  return Boolean(media.isComingSoon) || !hasPlayableMediaVideo(media);
 };
 
 export const getStoredMediaAlerts = (): MediaAlertSubscription[] => {

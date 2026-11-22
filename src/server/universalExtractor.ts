@@ -90,6 +90,18 @@ export function assertSafePublicHttpUrl(rawUrl: string): URL {
   if (!candidate) {
     throw new Error('الرابط فارغ');
   }
+  if (/<(?:iframe|embed)\b/i.test(candidate) || /\bsrc\s*=\s*["']/i.test(candidate)) {
+    const srcMatch =
+      candidate.match(/<(?:iframe|embed)\b[^>]*\bsrc\s*=\s*"([^"]+)"/i) ||
+      candidate.match(/<(?:iframe|embed)\b[^>]*\bsrc\s*=\s*'([^']+)'/i) ||
+      candidate.match(/<(?:iframe|embed)\b[^>]*\bsrc\s*=\s*([^\s>]+)/i) ||
+      candidate.match(/\bsrc\s*=\s*"([^"]+)"/i) ||
+      candidate.match(/\bsrc\s*=\s*'([^']+)'/i);
+    if (!srcMatch?.[1]) {
+      throw new Error('كود التضمين لا يحتوي على رابط src صالح');
+    }
+    candidate = srcMatch[1].replace(/&amp;/gi, '&').replace(/&#38;/g, '&').trim();
+  }
   if (/^\/\//.test(candidate)) {
     candidate = `https:${candidate}`;
   } else if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(candidate) && /^[\w.-]+\.[a-zA-Z]{2,}(\/|$)/.test(candidate)) {

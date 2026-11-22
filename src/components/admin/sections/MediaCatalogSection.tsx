@@ -26,7 +26,14 @@ import {
   updateMovieInDatabases,
 } from '../../../services/movieService';
 import { getYouTubeThumbnailUrl, isYouTubeUrl } from '../../../utils/youtube';
-import { isExternalHttpUrl, normalizeExternalHttpUrl } from '../../../utils/videoEngines';
+import {
+  convertToUniversalEmbedUrl,
+  extractEmbedInputUrl,
+  isExternalHttpUrl,
+  isPlainExternalWebUrl,
+  normalizeExternalHttpUrl,
+  resolveMediaFormat,
+} from '../../../utils/videoEngines';
 
 interface MediaCatalogSectionProps {
   mode: 'movie' | 'series';
@@ -167,7 +174,9 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
     setIsSavingEdit(true);
     setActionError(null);
     try {
-      const nextVideoUrl = normalizeExternalHttpUrl(editingItem.videoUrl || '');
+      const rawVideoInput = editingItem.videoUrl || '';
+      const nextVideoUrl =
+        extractEmbedInputUrl(rawVideoInput) || normalizeExternalHttpUrl(rawVideoInput);
       const isYt = isYouTubeUrl(nextVideoUrl);
       const nextPoster =
         (editingItem.posterUrl || '').trim() ||
@@ -175,6 +184,36 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
 
       const cleanTitleAr =
         (editingItem.titleAr || '').trim() || (editingItem.title || '').trim() || 'عمل سينمائي';
+
+      const existingSources = Array.isArray(editingItem.sources) ? editingItem.sources : [];
+      const nonTrailerSources = nextVideoUrl
+        ? existingSources.filter((s) => {
+            if (!s?.url) return false;
+            if (!isYt && s.id?.startsWith('yt-')) return false;
+            if (!isYt && editingItem.trailerUrl && s.url === editingItem.trailerUrl) return false;
+            return true;
+          })
+        : [];
+
+      const updatedSources = nextVideoUrl
+        ? [
+            {
+              id: nonTrailerSources[0]?.id?.startsWith('src-')
+                ? nonTrailerSources[0].id
+                : 'src-main',
+              label: isPlainExternalWebUrl(nextVideoUrl)
+                ? 'رابط موقع مباشر'
+                : isYt
+                ? 'مشغل يوتيوب'
+                : `السيرفر الرئيسي (${editingItem.videoQuality || 'HD'})`,
+              url: nextVideoUrl,
+              format: resolveMediaFormat(nextVideoUrl),
+              quality: editingItem.videoQuality || '1080p',
+              isDefault: true,
+            },
+            ...nonTrailerSources.filter((s, idx) => idx > 0 && s.url !== nextVideoUrl),
+          ]
+        : [];
 
       await updateMovieInDatabases(
         editingItem.id,
@@ -186,6 +225,7 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
           posterUrl: nextPoster,
           bannerUrl: (editingItem.bannerUrl || '').trim() || nextPoster,
           videoUrl: nextVideoUrl,
+          sources: updatedSources,
           isComingSoon: !nextVideoUrl && editingItem.type !== 'series',
           storageType: isYt ? 'youtube' : isExternalHttpUrl(nextVideoUrl) ? 'external' : editingItem.storageType || 'server',
           year: Number(editingItem.year) || new Date().getFullYear(),
@@ -220,7 +260,7 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
             {mode === 'series' ? (
               <Tv className="w-5 h-5 text-sky-400" />
             ) : (
-              <Film className="w-5 h-5 text-amber-400" />
+              <Film className="w-5 h-5 text-[#ff45a2]" />
             )}
             <span>
               {mode === 'series' ? 'إدارة المسلسلات' : 'إدارة الأفلام'} ({filtered.length})
@@ -234,7 +274,7 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
         <button
           type="button"
           onClick={onAddNew}
-          className="px-3.5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black font-black text-xs flex items-center gap-1.5 cursor-pointer"
+          className="px-4 py-2 rounded-full bg-[#ff2e93] hover:bg-[#ff47a1] text-white font-black text-xs flex items-center gap-1.5 cursor-pointer transition-colors shadow-[0_6px_20px_rgba(255,46,147,0.3)]"
         >
           <PlusCircle className="w-4 h-4" />
           <span>{mode === 'series' ? 'إضافة مسلسل جديد' : 'إضافة فيلم جديد'}</span>
@@ -242,7 +282,7 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
       </div>
 
       {actionError && (
-        <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-center justify-between">
+        <div className="p-3 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-center justify-between">
           <span>{actionError}</span>
           <button type="button" onClick={() => setActionError(null)} className="cursor-pointer">
             <X className="w-4 h-4" />
@@ -251,7 +291,7 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
       )}
 
       {/* Search & Filters */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5 p-3 rounded-2xl bg-[#111116] border border-white/[0.08]">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5 p-3 rounded-2xl bg-[#121215] border border-white/[0.07]">
         <div className="lg:col-span-2 relative">
           <Search className="w-4 h-4 text-zinc-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
@@ -259,14 +299,14 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="بحث بالاسم العربي أو الإنجليزي..."
-            className="w-full bg-zinc-950 border border-white/10 focus:border-amber-400 rounded-xl pr-9 pl-3 py-2 text-xs text-white focus:outline-none"
+            className="w-full bg-[#08080a] border border-white/[0.09] focus:border-[#ff2e93]/70 rounded-xl pr-9 pl-3 py-2 text-xs text-white focus:outline-none"
           />
         </div>
 
         <select
           value={filterGenre}
           onChange={(e) => setFilterGenre(e.target.value)}
-          className="bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white"
+          className="bg-[#08080a] border border-white/[0.09] rounded-xl px-3 py-2 text-xs text-white"
         >
           <option value="all">كل التصنيفات</option>
           {categories.map((c) => (
@@ -279,7 +319,7 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
         <select
           value={filterYear}
           onChange={(e) => setFilterYear(e.target.value)}
-          className="bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white"
+          className="bg-[#08080a] border border-white/[0.09] rounded-xl px-3 py-2 text-xs text-white"
         >
           <option value="all">كل السنوات</option>
           {availableYears.map((y) => (
@@ -292,7 +332,7 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
         <select
           value={filterStatus}
           onChange={(e) => setFilterStatus(e.target.value as any)}
-          className="bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white"
+          className="bg-[#08080a] border border-white/[0.09] rounded-xl px-3 py-2 text-xs text-white"
         >
           <option value="all">كل الحالات</option>
           <option value="published">منشور</option>
@@ -310,7 +350,7 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
             <button
               type="button"
               onClick={() => setSelectedIds([])}
-              className="px-3 py-1.5 rounded-xl bg-zinc-900 text-zinc-300 hover:text-white font-bold cursor-pointer"
+              className="px-3 py-1.5 rounded-full bg-[#1a1a1f] text-zinc-300 hover:text-white font-bold cursor-pointer"
             >
               إلغاء التحديد
             </button>
@@ -318,42 +358,42 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
               type="button"
               disabled={isBulkDeleting}
               onClick={handleBulkDeleteImmediate}
-              className="px-3.5 py-1.5 rounded-xl bg-rose-500 hover:bg-rose-400 text-white font-black flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+              className="px-4 py-1.5 rounded-full bg-rose-500 hover:bg-rose-400 text-white font-black flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
             >
               {isBulkDeleting ? (
                 <RefreshCw className="w-3.5 h-3.5 animate-spin" />
               ) : (
                 <Trash2 className="w-3.5 h-3.5" />
               )}
-              <span>حذف المحدد نهائياً من الموقع</span>
+              <span>حذف المحدد نهائياً</span>
             </button>
           </div>
         </div>
       )}
 
-      {/* Table (Desktop) & Cards (Mobile) */}
+      {/* Table */}
       {isLoading ? (
         <div className="py-16 text-center text-zinc-400">
-          <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-amber-400" />
+          <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-[#ff45a2]" />
           <p className="text-xs">جارٍ تحميل المحتوى...</p>
         </div>
       ) : filtered.length === 0 ? (
-        <div className="py-14 text-center rounded-2xl bg-[#111116] border border-white/[0.08] text-zinc-500">
+        <div className="py-14 text-center rounded-2xl bg-[#121215] border border-white/[0.07] text-zinc-500">
           <p className="text-sm font-bold text-zinc-300">لا توجد نتائج مطابقة</p>
           <p className="text-xs mt-1">أضف محتوى جديداً أو قم بتعديل معايير البحث والفلترة</p>
         </div>
       ) : (
-        <div className="rounded-2xl bg-[#111116] border border-white/[0.08] overflow-hidden">
+        <div className="rounded-2xl bg-[#121215] border border-white/[0.07] overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-right border-collapse">
               <thead>
-                <tr className="border-b border-white/[0.08] bg-zinc-950/60 text-[11px] font-black text-zinc-400">
+                <tr className="border-b border-white/[0.07] bg-[#0b0b0e] text-[11px] font-black text-zinc-400">
                   <th className="py-3 px-3 w-9">
                     <input
                       type="checkbox"
                       checked={allFilteredSelected}
                       onChange={toggleSelectAll}
-                      className="accent-amber-400 cursor-pointer"
+                      className="accent-[#ff2e93] cursor-pointer"
                       title="تحديد الكل"
                     />
                   </th>
@@ -378,7 +418,7 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
                           type="checkbox"
                           checked={selectedIds.includes(item.id)}
                           onChange={() => toggleSelectOne(item.id)}
-                          className="accent-amber-400 cursor-pointer"
+                          className="accent-[#ff2e93] cursor-pointer"
                           aria-label={`تحديد ${item.titleAr}`}
                         />
                       </td>
@@ -388,10 +428,11 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
                             <img
                               src={item.posterUrl}
                               alt={item.titleAr}
+                              referrerPolicy="no-referrer"
                               className="w-10 h-14 rounded-lg object-cover bg-zinc-900 shrink-0"
                             />
                           ) : (
-                            <div className="w-10 h-14 rounded-lg bg-zinc-900 border border-white/10 flex items-center justify-center text-amber-400/60 shrink-0">
+                            <div className="w-10 h-14 rounded-lg bg-[#19191f] border border-white/[0.06] flex items-center justify-center text-[#ff45a2]/70 shrink-0">
                               <Film className="w-4 h-4" />
                             </div>
                           )}
@@ -404,7 +445,7 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
                             </p>
                             {mode === 'series' ? (
                               <span className="text-[10px] text-sky-400 font-mono">
-                                {(item.seasons || []).length} مواسم • {totalEps} حلقة
+                                {(item.seasons || []).length} مواسم · {totalEps} حلقة
                               </span>
                             ) : (
                               <span className="text-[10px] text-zinc-500 font-mono">
@@ -415,9 +456,9 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
                         </div>
                       </td>
 
-                      <td className="py-3 px-3 font-mono text-[11px] text-zinc-300 whitespace-nowrap">
+                      <td className="py-3 px-3 font-mono text-[11px] text-zinc-300 whitespace-nowrap tabular-nums">
                         <div>{item.year}</div>
-                        <div className="text-amber-400 font-bold">{item.videoQuality || 'HD'}</div>
+                        <div className="text-[#ff5ec4] font-bold">{item.videoQuality || 'HD'}</div>
                       </td>
 
                       <td className="py-3 px-3 font-mono tabular-nums text-zinc-300 whitespace-nowrap">
@@ -433,12 +474,12 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
                                 displayOrder: Math.max(0, (item.displayOrder || 0) - 1),
                               })
                             }
-                            className="w-6 h-6 rounded-md bg-zinc-900 hover:bg-zinc-800 text-zinc-300 flex items-center justify-center cursor-pointer"
+                            className="w-6 h-6 rounded-md bg-[#1a1a20] hover:bg-[#25252d] text-zinc-300 flex items-center justify-center cursor-pointer"
                             title="تقديم الترتيب"
                           >
                             <ArrowUp className="w-3 h-3" />
                           </button>
-                          <span className="w-6 text-center font-mono text-[11px] text-zinc-300">
+                          <span className="w-6 text-center font-mono text-[11px] text-zinc-300 tabular-nums">
                             {item.displayOrder || 0}
                           </span>
                           <button
@@ -448,7 +489,7 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
                                 displayOrder: (item.displayOrder || 0) + 1,
                               })
                             }
-                            className="w-6 h-6 rounded-md bg-zinc-900 hover:bg-zinc-800 text-zinc-300 flex items-center justify-center cursor-pointer"
+                            className="w-6 h-6 rounded-md bg-[#1a1a20] hover:bg-[#25252d] text-zinc-300 flex items-center justify-center cursor-pointer"
                             title="تأخير الترتيب"
                           >
                             <ArrowDown className="w-3 h-3" />
@@ -466,7 +507,7 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
                             className={`px-2 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer border ${
                               item.isPublished !== false
                                 ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
-                                : 'bg-zinc-900 text-zinc-400 border-white/10'
+                                : 'bg-[#1a1a20] text-zinc-400 border-white/[0.08]'
                             }`}
                           >
                             {item.isPublished !== false ? (
@@ -487,8 +528,8 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
                             onClick={() => quickUpdate(item, { isFeatured: !item.isFeatured })}
                             className={`px-2 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer border ${
                               item.isFeatured
-                                ? 'bg-amber-400/20 text-amber-300 border-amber-400/40'
-                                : 'bg-zinc-900 text-zinc-500 border-white/10'
+                                ? 'bg-[#ff2e93]/20 text-[#ff6bc9] border-[#ff2e93]/40'
+                                : 'bg-[#1a1a20] text-zinc-500 border-white/[0.08]'
                             }`}
                             title="تعيين كعمل مميز في البانر الرئيسي"
                           >
@@ -502,7 +543,7 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
                             className={`px-2 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer border ${
                               item.isLatest !== false
                                 ? 'bg-sky-500/15 text-sky-300 border-sky-500/30'
-                                : 'bg-zinc-900 text-zinc-500 border-white/10'
+                                : 'bg-[#1a1a20] text-zinc-500 border-white/[0.08]'
                             }`}
                             title="تضمين في أحدث الإضافات"
                           >
@@ -510,10 +551,22 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
                             <span>أحدث</span>
                           </button>
 
-                          {!item.videoUrl && item.type !== 'series' && (
-                            <span className="px-2 py-1 rounded-lg text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">
-                              قريباً
+                          {item.videoUrl ? (
+                            <span
+                              className={`text-[10px] font-bold px-1.5 py-1 ${
+                                isPlainExternalWebUrl(item.videoUrl, item.storageType)
+                                  ? 'text-sky-400'
+                                  : 'text-emerald-400'
+                              }`}
+                            >
+                              {isPlainExternalWebUrl(item.videoUrl, item.storageType) ? 'رابط موقع' : 'فيديو جاهز'}
                             </span>
+                          ) : (
+                            item.type !== 'series' && (
+                              <span className="text-[10px] font-bold text-amber-400 px-1.5 py-1">
+                                قريباً
+                              </span>
+                            )
                           )}
                         </div>
                       </td>
@@ -524,7 +577,7 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
                             <button
                               type="button"
                               onClick={() => onPlayMedia(item)}
-                              className="w-7 h-7 rounded-lg bg-amber-400/15 hover:bg-amber-400 text-amber-400 hover:text-black flex items-center justify-center cursor-pointer transition-colors"
+                              className="w-7 h-7 rounded-full bg-[#ff2e93]/15 hover:bg-[#ff2e93] text-[#ff5ec4] hover:text-white flex items-center justify-center cursor-pointer transition-colors"
                               title="معاينة وتشغيل"
                             >
                               <Play className="w-3.5 h-3.5 fill-current" />
@@ -535,7 +588,7 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
                             <button
                               type="button"
                               onClick={() => onManageSeasons(item.id)}
-                              className="px-2 py-1 rounded-lg bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 text-[10px] font-bold flex items-center gap-1 cursor-pointer"
+                              className="px-2.5 py-1 rounded-full bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 text-[10px] font-bold flex items-center gap-1 cursor-pointer"
                               title="إدارة المواسم والحلقات"
                             >
                               <Layers className="w-3 h-3" />
@@ -546,7 +599,7 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
                           <button
                             type="button"
                             onClick={() => setEditingItem({ ...item })}
-                            className="w-7 h-7 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 flex items-center justify-center border border-white/10 cursor-pointer"
+                            className="w-7 h-7 rounded-full bg-[#1a1a20] hover:bg-[#25252d] text-zinc-300 flex items-center justify-center border border-white/[0.08] cursor-pointer"
                             title="تعديل البيانات"
                           >
                             <Edit3 className="w-3.5 h-3.5" />
@@ -556,7 +609,7 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
                             type="button"
                             disabled={deletingIds.includes(item.id)}
                             onClick={() => handleImmediateDelete(item)}
-                            className="w-7 h-7 rounded-lg bg-rose-500/15 hover:bg-rose-500/30 text-rose-400 flex items-center justify-center cursor-pointer disabled:opacity-50"
+                            className="w-7 h-7 rounded-full bg-rose-500/15 hover:bg-rose-500/30 text-rose-400 flex items-center justify-center cursor-pointer disabled:opacity-50"
                             title="حذف الفيديو فوراً من الموقع"
                           >
                             {deletingIds.includes(item.id) ? (
@@ -579,21 +632,21 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
       {/* Edit Modal */}
       {editingItem && (
         <div
-          className="fixed inset-0 z-[125] bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto"
+          className="fixed inset-0 z-[130] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto"
           dir="rtl"
         >
           <form
             onSubmit={handleSaveEdit}
-            className="bg-[#111116] border border-white/15 rounded-2xl w-full max-w-2xl p-5 space-y-4 my-auto"
+            className="bg-[#161619] border border-white/[0.09] rounded-3xl w-full max-w-2xl p-5 sm:p-6 space-y-4 my-auto shadow-[0_24px_80px_rgba(0,0,0,0.85)]"
           >
-            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+            <div className="flex items-center justify-between border-b border-white/[0.07] pb-3">
               <h3 className="text-sm font-black text-white">
                 تعديل بيانات: {editingItem.titleAr}
               </h3>
               <button
                 type="button"
                 onClick={() => setEditingItem(null)}
-                className="w-7 h-7 rounded-lg bg-zinc-900 text-zinc-400 hover:text-white flex items-center justify-center cursor-pointer"
+                className="w-8 h-8 rounded-full bg-[#222227] text-zinc-400 hover:text-white flex items-center justify-center cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -607,7 +660,7 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
                   required
                   value={editingItem.titleAr}
                   onChange={(e) => setEditingItem({ ...editingItem, titleAr: e.target.value })}
-                  className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white"
+                  className="w-full bg-[#09090b] border border-white/[0.09] focus:border-[#ff2e93]/70 rounded-xl px-3 py-2 text-white focus:outline-none"
                 />
               </div>
               <div>
@@ -617,7 +670,7 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
                   dir="ltr"
                   value={editingItem.title}
                   onChange={(e) => setEditingItem({ ...editingItem, title: e.target.value })}
-                  className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white"
+                  className="w-full bg-[#09090b] border border-white/[0.09] focus:border-[#ff2e93]/70 rounded-xl px-3 py-2 text-white focus:outline-none"
                 />
               </div>
               <div>
@@ -627,7 +680,7 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
                   dir="ltr"
                   value={editingItem.posterUrl}
                   onChange={(e) => setEditingItem({ ...editingItem, posterUrl: e.target.value })}
-                  className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono"
+                  className="w-full bg-[#09090b] border border-white/[0.09] rounded-xl px-3 py-2 text-white font-mono"
                 />
               </div>
               <div>
@@ -637,21 +690,46 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
                   dir="ltr"
                   value={editingItem.bannerUrl || ''}
                   onChange={(e) => setEditingItem({ ...editingItem, bannerUrl: e.target.value })}
-                  className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono"
+                  className="w-full bg-[#09090b] border border-white/[0.09] rounded-xl px-3 py-2 text-white font-mono"
                 />
               </div>
               <div className="sm:col-span-2">
-                <label className="block text-zinc-400 mb-1 font-bold">
-                  رابط الفيلم أو الفيديو من أي موقع أو منصة (YouTube / MP4 / HLS / رابط خارجي)
+                <label className="block text-zinc-300 mb-1 font-bold">
+                  رابط الفيديو
+                  <span className="text-[11px] font-normal text-zinc-400 mr-1.5">
+                    (رابط موقع عادي / YouTube / كود التضمين &lt;iframe&gt; / MP4 / HLS)
+                  </span>
                 </label>
                 <input
                   type="text"
                   dir="ltr"
                   value={editingItem.videoUrl || ''}
-                  onChange={(e) => setEditingItem({ ...editingItem, videoUrl: e.target.value })}
-                  placeholder="https://... أو /uploads/videos/..."
-                  className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono"
+                  onChange={(e) => {
+                    const rawVal = e.target.value;
+                    const extracted = extractEmbedInputUrl(rawVal);
+                    setEditingItem({
+                      ...editingItem,
+                      videoUrl: /<(?:iframe|embed)\b/i.test(rawVal) && extracted ? extracted : rawVal,
+                    });
+                  }}
+                  placeholder="https://example.com/... أو رابط YouTube أو MP4 / M3U8 أو كود التضمين <iframe>"
+                  className="w-full bg-[#09090b] border border-white/[0.09] focus:border-[#ff2e93]/70 rounded-xl px-3 py-2 text-white font-mono focus:outline-none"
                 />
+                {editingItem.videoUrl && (() => {
+                  const clean = extractEmbedInputUrl(editingItem.videoUrl) || normalizeExternalHttpUrl(editingItem.videoUrl);
+                  const embedTarget = convertToUniversalEmbedUrl(clean);
+                  const isPlainSite = isPlainExternalWebUrl(clean);
+                  if (!clean) return null;
+                  return (
+                    <p className="mt-1 text-[10px] text-emerald-400 font-mono truncate" dir="ltr">
+                      {isPlainSite
+                        ? `رابط موقع خارجي (يفتح مباشرة عند الضغط): ${clean}`
+                        : embedTarget
+                        ? `Embed جاهز للتشغيل داخل المشغل: ${embedTarget}`
+                        : `مصدر الفيديو: ${clean}`}
+                    </p>
+                  );
+                })()}
               </div>
               <div>
                 <label className="block text-zinc-400 mb-1 font-bold">السنة</label>
@@ -659,7 +737,7 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
                   type="number"
                   value={editingItem.year}
                   onChange={(e) => setEditingItem({ ...editingItem, year: Number(e.target.value) })}
-                  className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono"
+                  className="w-full bg-[#09090b] border border-white/[0.09] rounded-xl px-3 py-2 text-white font-mono"
                 />
               </div>
               <div>
@@ -670,7 +748,7 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
                   onChange={(e) =>
                     setEditingItem({ ...editingItem, videoQuality: e.target.value })
                   }
-                  className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white"
+                  className="w-full bg-[#09090b] border border-white/[0.09] rounded-xl px-3 py-2 text-white"
                 />
               </div>
               <div>
@@ -679,7 +757,7 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
                   type="text"
                   value={editingItem.director || ''}
                   onChange={(e) => setEditingItem({ ...editingItem, director: e.target.value })}
-                  className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white"
+                  className="w-full bg-[#09090b] border border-white/[0.09] rounded-xl px-3 py-2 text-white"
                 />
               </div>
               <div>
@@ -690,7 +768,7 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
                   onChange={(e) =>
                     setEditingItem({ ...editingItem, displayOrder: Number(e.target.value) })
                   }
-                  className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono"
+                  className="w-full bg-[#09090b] border border-white/[0.09] rounded-xl px-3 py-2 text-white font-mono"
                 />
               </div>
             </div>
@@ -701,7 +779,7 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
                 rows={3}
                 value={editingItem.description}
                 onChange={(e) => setEditingItem({ ...editingItem, description: e.target.value })}
-                className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white"
+                className="w-full bg-[#09090b] border border-white/[0.09] rounded-xl px-3 py-2 text-white"
               />
             </div>
 
@@ -736,10 +814,10 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
                           : [...curGenres, g.slug];
                         setEditingItem({ ...editingItem, genres: next });
                       }}
-                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border cursor-pointer ${
+                      className={`px-3 py-1 rounded-full text-[11px] font-bold border cursor-pointer transition-colors ${
                         active
-                          ? 'bg-amber-400 text-black border-amber-400'
-                          : 'bg-zinc-950 text-zinc-400 border-white/10 hover:text-white'
+                          ? 'bg-[#ff2e93] text-white border-[#ff2e93]'
+                          : 'bg-[#09090b] text-zinc-400 border-white/[0.08] hover:text-white'
                       }`}
                     >
                       {g.nameAr}
@@ -757,7 +835,7 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
                   onChange={(e) =>
                     setEditingItem({ ...editingItem, isPublished: e.target.checked })
                   }
-                  className="accent-amber-400"
+                  className="accent-[#ff2e93]"
                 />
                 <span>منشور</span>
               </label>
@@ -768,7 +846,7 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
                   onChange={(e) =>
                     setEditingItem({ ...editingItem, isFeatured: e.target.checked })
                   }
-                  className="accent-amber-400"
+                  className="accent-[#ff2e93]"
                 />
                 <span>مميز</span>
               </label>
@@ -779,7 +857,7 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
                   onChange={(e) =>
                     setEditingItem({ ...editingItem, isLatest: e.target.checked })
                   }
-                  className="accent-amber-400"
+                  className="accent-[#ff2e93]"
                 />
                 <span>أحدث الإضافات</span>
               </label>
@@ -790,24 +868,24 @@ export const MediaCatalogSection: React.FC<MediaCatalogSectionProps> = ({
                   onChange={(e) =>
                     setEditingItem({ ...editingItem, isMostWatched: e.target.checked })
                   }
-                  className="accent-amber-400"
+                  className="accent-[#ff2e93]"
                 />
                 <span>الأكثر مشاهدة</span>
               </label>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-white/10">
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-white/[0.07]">
               <button
                 type="button"
                 onClick={() => setEditingItem(null)}
-                className="px-4 py-2 rounded-xl bg-zinc-900 text-zinc-300 text-xs font-bold border border-white/10 cursor-pointer"
+                className="px-4 py-2 rounded-full bg-[#222227] text-zinc-300 text-xs font-bold border border-white/[0.08] cursor-pointer"
               >
                 إلغاء
               </button>
               <button
                 type="submit"
                 disabled={isSavingEdit}
-                className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black font-black text-xs cursor-pointer disabled:opacity-60"
+                className="px-5 py-2 rounded-full bg-[#ff2e93] hover:bg-[#ff47a1] text-white font-black text-xs cursor-pointer disabled:opacity-60"
               >
                 {isSavingEdit ? 'جارٍ الحفظ...' : 'حفظ التعديلات'}
               </button>

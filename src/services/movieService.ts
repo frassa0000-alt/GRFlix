@@ -14,7 +14,7 @@ import {
   query,
   orderBy,
 } from 'firebase/firestore';
-import { db, storage, handleFirestoreError, OperationType } from './firebase';
+import { auth, db, storage, DEVELOPER_ADMIN_EMAIL, handleFirestoreError, OperationType } from './firebase';
 import { MediaItem } from '../types';
 import { generateRandomRating, getEffectiveMediaRating } from '../utils/rating';
 import {
@@ -35,6 +35,8 @@ import {
   removeLocalDeletedMediaId,
   removeMediaFromLocalUserData,
 } from './storage';
+import { fetchTmdbCatalog } from './tmdbClient';
+import { extractEmbedInputUrl } from '../utils/videoEngines';
 
 export interface UploadProgressInfo {
   percent: number;
@@ -722,6 +724,23 @@ export const saveMovieToDatabases = async (
     movieData.id || `${mediaType}-${Date.now()}-${Math.round(Math.random() * 1e6)}`;
   const now = Date.now();
 
+  const cleanVideoUrl = extractEmbedInputUrl(movieData.videoUrl) || (movieData.videoUrl || '').trim();
+  const cleanSources = Array.isArray(movieData.sources)
+    ? movieData.sources.map((s) => ({
+        ...s,
+        url: extractEmbedInputUrl(s?.url) || (s?.url || '').trim(),
+      }))
+    : [];
+  const cleanSeasons = Array.isArray(movieData.seasons)
+    ? movieData.seasons.map((sn) => ({
+        ...sn,
+        episodes: (sn.episodes || []).map((ep) => ({
+          ...ep,
+          videoUrl: extractEmbedInputUrl(ep?.videoUrl) || (ep?.videoUrl || '').trim(),
+        })),
+      }))
+    : [];
+
   const finalMovie: MediaItem = {
     id: movieId,
     title: movieData.title || movieData.titleAr || 'Untitled Media',
@@ -731,7 +750,8 @@ export const saveMovieToDatabases = async (
     description: movieData.description || '',
     posterUrl: movieData.posterUrl || '',
     bannerUrl: movieData.bannerUrl || movieData.posterUrl || '',
-    videoUrl: movieData.videoUrl || '',
+    videoUrl: cleanVideoUrl,
+    trailerUrl: movieData.trailerUrl || undefined,
     videoQuality: movieData.videoQuality || '1080p',
     ageRating: movieData.ageRating || '+16',
     duration: movieData.duration || (mediaType === 'series' ? 'مسلسل' : '120 دقيقة'),
@@ -742,13 +762,13 @@ export const saveMovieToDatabases = async (
     isFeatured: Boolean(movieData.isFeatured),
     isLatest: movieData.isLatest !== false,
     isMostWatched: Boolean(movieData.isMostWatched),
-    isComingSoon: Boolean(movieData.isComingSoon) && !(movieData.videoUrl || '').trim(),
+    isComingSoon: Boolean(movieData.isComingSoon) && !cleanVideoUrl,
     displayOrder: Number(movieData.displayOrder) || 0,
     viewsCount: Number(movieData.viewsCount) || 0,
     director: movieData.director || '',
     cast: Array.isArray(movieData.cast) ? movieData.cast : [],
-    seasons: Array.isArray(movieData.seasons) ? movieData.seasons : [],
-    sources: Array.isArray(movieData.sources) ? movieData.sources : [],
+    seasons: cleanSeasons,
+    sources: cleanSources,
     introStart: typeof movieData.introStart === 'number' ? movieData.introStart : undefined,
     introEnd: typeof movieData.introEnd === 'number' ? movieData.introEnd : undefined,
     subtitleUrl: movieData.subtitleUrl || undefined,
@@ -776,7 +796,7 @@ export const saveMovieToDatabases = async (
 
   // 2. Sync to Firebase Firestore
   try {
-    await setDoc(doc(db, 'movies', targetMovie.id), stripUndefinedDeep(targetMovie));
+    await setDoc(doc(db, 'movies', targetMovie.id), buildFirestoreSafeMoviePayload(targetMovie));
   } catch (firestoreErr) {
     if (!serverSaved) {
       handleFirestoreError(firestoreErr, OperationType.WRITE, `movies/${targetMovie.id}`);
@@ -796,8 +816,30 @@ export const updateMovieInDatabases = async (
   token: string
 ): Promise<MediaItem> => {
   const now = Date.now();
+  const sanitizedUpdates: Partial<MediaItem> = { ...updates };
+  if (sanitizedUpdates.videoUrl !== undefined) {
+    sanitizedUpdates.videoUrl =
+      extractEmbedInputUrl(sanitizedUpdates.videoUrl) ||
+      (sanitizedUpdates.videoUrl || '').trim();
+  }
+  if (Array.isArray(sanitizedUpdates.sources)) {
+    sanitizedUpdates.sources = sanitizedUpdates.sources.map((s) => ({
+      ...s,
+      url: extractEmbedInputUrl(s?.url) || (s?.url || '').trim(),
+    }));
+  }
+  if (Array.isArray(sanitizedUpdates.seasons)) {
+    sanitizedUpdates.seasons = sanitizedUpdates.seasons.map((sn) => ({
+      ...sn,
+      episodes: (sn.episodes || []).map((ep) => ({
+        ...ep,
+        videoUrl: extractEmbedInputUrl(ep?.videoUrl) || (ep?.videoUrl || '').trim(),
+      })),
+    }));
+  }
+
   const updatePayload = stripUndefinedDeep({
-    ...updates,
+    ...sanitizedUpdates,
     updatedAt: now,
   });
 
@@ -812,11 +854,11 @@ export const updateMovieInDatabases = async (
     console.warn('Server API unavailable during update, falling back to Firestore:', err);
   }
 
-  // 2. Update in Firestore (use setDoc merge when full doc available, else updateDoc)
+  // 2. Update in Firestore (use strict Firestore whitelist payload when full doc available)
   try {
     const movieRef = doc(db, 'movies', id);
     if (serverResult) {
-      await setDoc(movieRef, stripUndefinedDeep(serverResult), { merge: true });
+      await setDoc(movieRef, buildFirestoreSafeMoviePayload(serverResult), { merge: true });
     } else {
       try {
         await updateDoc(movieRef, updatePayload as Record<string, any>);
@@ -824,10 +866,20 @@ export const updateMovieInDatabases = async (
         if (updateErr?.code === 'not-found') {
           await setDoc(
             movieRef,
-            stripUndefinedDeep({
+            buildFirestoreSafeMoviePayload({
+              ...(updatePayload as MediaItem),
               id,
               titleAr: updates.titleAr || updates.title || 'عمل سينمائي',
-              ...updatePayload,
+              type: updates.type || 'movie',
+              year: Number(updates.year) || new Date().getFullYear(),
+              rating: Number(updates.rating) || 7.5,
+              posterUrl: updates.posterUrl || '',
+              description: updates.description || '',
+              genres: Array.isArray(updates.genres) && updates.genres.length > 0 ? updates.genres : ['drama'],
+              videoUrl: sanitizedUpdates.videoUrl || '',
+              isPublished: updates.isPublished !== false,
+              createdAt: updates.createdAt || now,
+              updatedAt: now,
             }),
             { merge: true }
           );
@@ -958,11 +1010,118 @@ export const deleteMoviesBatchFromDatabases = async (
   }
 };
 
+const normalizeCatalogTitleKey = (raw?: string): string =>
+  String(raw || '')
+    .toLowerCase()
+    .replace(/[\u064B-\u065F\u0670]/g, '')
+    .replace(/[أإآ]/g, 'ا')
+    .replace(/ة/g, 'ه')
+    .replace(/ى/g, 'ي')
+    .replace(/[^\w\u0600-\u06FF\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const buildUnifiedDedupKeys = (item: Partial<MediaItem>): string[] => {
+  const kind = item.type === 'series' ? 'series' : 'movie';
+  const yr = Number(item.year) || 0;
+  const keys: string[] = [];
+  const t1 = normalizeCatalogTitleKey(item.title);
+  const t2 = normalizeCatalogTitleKey(item.titleAr);
+  if (t1) keys.push(`${kind}::${t1}::${yr}`);
+  if (t2 && t2 !== t1) keys.push(`${kind}::${t2}::${yr}`);
+  return keys;
+};
+
+const buildFirestoreSafeMoviePayload = (item: MediaItem): Record<string, any> => {
+  const safeGenres = Array.isArray(item.genres)
+    ? item.genres.filter((g): g is string => typeof g === 'string' && g.trim().length > 0).slice(0, 20)
+    : ['drama'];
+  const safeCast = Array.isArray(item.cast)
+    ? item.cast.filter((c): c is string => typeof c === 'string' && c.trim().length > 0).slice(0, 40)
+    : [];
+  const safeSeasons = Array.isArray(item.seasons) ? item.seasons.slice(0, 50) : [];
+  const safeSources = Array.isArray(item.sources) ? item.sources.slice(0, 15) : [];
+
+  return stripUndefinedDeep({
+    id: String(item.id).slice(0, 128),
+    title: String(item.title || item.titleAr || 'Untitled').slice(0, 200),
+    titleAr: String(item.titleAr || item.title || 'عمل سينمائي').slice(0, 200),
+    originalTitle: String(item.originalTitle || item.title || '').slice(0, 200),
+    type: String(item.type || 'movie').slice(0, 40),
+    description: String(item.description || '').slice(0, 5000),
+    posterUrl: String(item.posterUrl || '').slice(0, 2000),
+    bannerUrl: String(item.bannerUrl || item.posterUrl || '').slice(0, 2000),
+    videoUrl: String(item.videoUrl || '').slice(0, 2000),
+    videoQuality: String(item.videoQuality || '1080p').slice(0, 60),
+    ageRating: String(item.ageRating || '13+').slice(0, 20),
+    duration: String(item.duration || '').slice(0, 60),
+    year: Number(item.year) || new Date().getFullYear(),
+    rating: Number(item.rating) || 7.0,
+    genres: safeGenres.length > 0 ? safeGenres : ['drama'],
+    isPublished: item.isPublished !== false,
+    isLatest: Boolean(item.isLatest),
+    isFeatured: Boolean(item.isFeatured),
+    isMostWatched: Boolean(item.isMostWatched),
+    isComingSoon: Boolean(item.isComingSoon),
+    displayOrder: Number(item.displayOrder) || 0,
+    viewsCount: Number(item.viewsCount) || 0,
+    director: String(item.director || '').slice(0, 200),
+    cast: safeCast,
+    seasons: safeSeasons,
+    sources: safeSources,
+    createdAt: Number(item.createdAt) || Date.now(),
+    updatedAt: Number(item.updatedAt) || Date.now(),
+  });
+};
+
+const sessionMirroredToFirestoreIds = new Set<string>();
+
+const mirrorMissingServerMoviesToFirestore = (
+  serverMovies: MediaItem[],
+  firestoreExistingIds: Set<string>,
+  deletedSet: Set<string>
+): void => {
+  const currentUser = auth.currentUser;
+  if (
+    !currentUser ||
+    !currentUser.emailVerified ||
+    currentUser.email?.trim().toLowerCase() !== DEVELOPER_ADMIN_EMAIL
+  ) {
+    return;
+  }
+
+  const missing = serverMovies
+    .filter(
+      (m) =>
+        m?.id &&
+        /^[a-zA-Z0-9_-]{1,128}$/.test(m.id) &&
+        !deletedSet.has(m.id) &&
+        !firestoreExistingIds.has(m.id) &&
+        !sessionMirroredToFirestoreIds.has(m.id)
+    )
+    .slice(0, 20);
+
+  if (missing.length === 0) return;
+
+  Promise.resolve().then(async () => {
+    for (const m of missing) {
+      sessionMirroredToFirestoreIds.add(m.id);
+      try {
+        await setDoc(doc(db, 'movies', m.id), buildFirestoreSafeMoviePayload(m), { merge: true });
+      } catch {
+        // Non-fatal background mirror
+      }
+    }
+  });
+};
+
 /**
- * Fetch unified list of movies from Server API & Firestore (strictly excluding deleted tombstones)
+ * Fetch unified list of movies from Server API & Firestore (strictly excluding deleted tombstones and duplicates)
  */
 export const fetchAllMoviesUnified = async (token?: string): Promise<MediaItem[]> => {
   const moviesMap = new Map<string, MediaItem>();
+  const titleYearSeen = new Set<string>();
+  const firestoreExistingIds = new Set<string>();
 
   const [serverDeletedIds, serverMoviesResult] = await Promise.all([
     fetchDeletedMovieIds(),
@@ -971,6 +1130,11 @@ export const fetchAllMoviesUnified = async (token?: string): Promise<MediaItem[]
       return [] as MediaItem[];
     }),
   ]);
+
+  const hasServerTmdbItems = serverMoviesResult.some((m) => String(m?.id || '').startsWith('tmdb-'));
+  const tmdbFallbackResult = hasServerTmdbItems
+    ? ([] as MediaItem[])
+    : await fetchTmdbCatalog().catch(() => [] as MediaItem[]);
 
   const deletedSet = new Set<string>([
     ...getLocalDeletedMediaIds(),
@@ -985,11 +1149,23 @@ export const fetchAllMoviesUnified = async (token?: string): Promise<MediaItem[]
     return removedTitlesSet.has(ar) || removedTitlesSet.has(en);
   };
 
-  serverMoviesResult.forEach((m) => {
-    if (m && m.id && !deletedSet.has(m.id) && !isRemovedEntry(m)) {
-      moviesMap.set(m.id, { ...m, rating: getEffectiveMediaRating(m) });
+  const tryRegisterItem = (item: MediaItem, preserveRealRating = false) => {
+    if (!item?.id || deletedSet.has(item.id) || moviesMap.has(item.id) || isRemovedEntry(item)) {
+      return;
     }
-  });
+    const tyKeys = buildUnifiedDedupKeys(item);
+    if (tyKeys.some((k) => titleYearSeen.has(k))) {
+      return;
+    }
+    for (const k of tyKeys) titleYearSeen.add(k);
+    const isTmdb = String(item.id).startsWith('tmdb-');
+    moviesMap.set(item.id, {
+      ...item,
+      rating: preserveRealRating || isTmdb ? item.rating || getEffectiveMediaRating(item) : getEffectiveMediaRating(item),
+    });
+  };
+
+  serverMoviesResult.forEach((m) => tryRegisterItem(m));
 
   try {
     const moviesCol = collection(db, 'movies');
@@ -998,20 +1174,19 @@ export const fetchAllMoviesUnified = async (token?: string): Promise<MediaItem[]
     snapshot.forEach((docSnap) => {
       const data = docSnap.data() as MediaItem;
       const effectiveId = data?.id || docSnap.id;
-      if (
-        data &&
-        effectiveId &&
-        !deletedSet.has(effectiveId) &&
-        !moviesMap.has(effectiveId) &&
-        !isRemovedEntry(data)
-      ) {
-        const merged = { ...data, id: effectiveId };
-        moviesMap.set(effectiveId, { ...merged, rating: getEffectiveMediaRating(merged) });
+      if (effectiveId) firestoreExistingIds.add(effectiveId);
+      if (data && effectiveId) {
+        tryRegisterItem({ ...data, id: effectiveId });
       }
     });
   } catch (err) {
     console.warn('Firestore fetch warning:', err);
   }
+
+  tmdbFallbackResult.forEach((m) => tryRegisterItem(m, true));
+
+  // Background mirror newly synced server titles to Firestore when developer admin is signed in
+  mirrorMissingServerMoviesToFirestore(serverMoviesResult, firestoreExistingIds, deletedSet);
 
   const result = Array.from(moviesMap.values());
   result.sort((a, b) => {

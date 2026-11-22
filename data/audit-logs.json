@@ -1,5 +1,21 @@
 [
   {
+    "id": "log-1795310268250-14363",
+    "action": "تسجيل دخول لوحة التحكم",
+    "category": "auth",
+    "details": "دخول المشرف frassa.wwindows@gmail.com",
+    "adminEmail": "frassa.wwindows@gmail.com",
+    "createdAt": 1795310268250
+  },
+  {
+    "id": "log-1795310264598-55812",
+    "action": "مزامنة TMDB التلقائية",
+    "category": "media",
+    "details": "اكتشاف وإضافة 182 عمل جديد (66 فيلم، 116 مسلسل) مع منع تكرار 0 عمل موجود.",
+    "adminEmail": "TMDB Auto-Sync",
+    "createdAt": 1795310264598
+  },
+  {
     "id": "log-1795013357160-81973",
     "action": "سحب صلاحية إدارية",
     "category": "security",

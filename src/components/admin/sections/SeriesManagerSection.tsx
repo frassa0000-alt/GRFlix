@@ -19,7 +19,13 @@ import {
   X,
 } from 'lucide-react';
 import { CategoryItem, Episode, MediaItem, Season, VideoSourceOption } from '../../../types';
-import { normalizeExternalHttpUrl, resolveMediaFormat } from '../../../utils/videoEngines';
+import {
+  convertToUniversalEmbedUrl,
+  extractEmbedInputUrl,
+  isPlainExternalWebUrl,
+  normalizeExternalHttpUrl,
+  resolveMediaFormat,
+} from '../../../utils/videoEngines';
 import {
   extractVideoDurationFromFile,
   formatAdminErrorMessage,
@@ -71,6 +77,7 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
   const [posterFile, setPosterFile] = useState<File | null>(null);
   const [posterUrl, setPosterUrl] = useState<string>('');
   const [bannerUrl, setBannerUrl] = useState<string>('');
+  const [seriesVideoUrl, setSeriesVideoUrl] = useState<string>('');
   const [isFeatured, setIsFeatured] = useState<boolean>(false);
   const [isCreating, setIsCreating] = useState<boolean>(false);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -152,13 +159,14 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
 
     setIsCreating(true);
     try {
-      let finalPoster =
-        posterUrl.trim() ||
-        'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=800&q=80';
+      let finalPoster = posterUrl.trim();
       if (posterFile) {
         const up = await uploadMoviePoster(posterFile, token);
         finalPoster = up.posterUrl;
       }
+
+      const cleanSeriesVideoUrl =
+        extractEmbedInputUrl(seriesVideoUrl) || normalizeExternalHttpUrl(seriesVideoUrl);
 
       const created = await saveMovieToDatabases(
         {
@@ -178,7 +186,22 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
           genres: selectedGenres,
           posterUrl: finalPoster,
           bannerUrl: bannerUrl.trim() || finalPoster,
-          videoUrl: '',
+          videoUrl: cleanSeriesVideoUrl,
+          isComingSoon: false,
+          sources: cleanSeriesVideoUrl
+            ? [
+                {
+                  id: 'src-main',
+                  label: isPlainExternalWebUrl(cleanSeriesVideoUrl)
+                    ? 'رابط موقع مباشر'
+                    : `السيرفر الرئيسي (${videoQuality})`,
+                  url: cleanSeriesVideoUrl,
+                  format: resolveMediaFormat(cleanSeriesVideoUrl),
+                  quality: videoQuality,
+                  isDefault: true,
+                },
+              ]
+            : [],
           isPublished: true,
           isFeatured,
           isLatest: true,
@@ -192,6 +215,7 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
       setDescription('');
       setPosterFile(null);
       setPosterUrl('');
+      setSeriesVideoUrl('');
       setRating(generateRandomRating());
       onRefresh();
       onSelectSeriesId(created.id);
@@ -218,7 +242,7 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
       return { ...sn, episodes: sortedEps };
     });
 
-    const firstVideoUrl = linkedSeasons[0]?.episodes?.[0]?.videoUrl || activeSeries.videoUrl || '';
+    const firstVideoUrl = activeSeries.videoUrl || linkedSeasons[0]?.episodes?.[0]?.videoUrl || '';
 
     try {
       await updateMovieInDatabases(
@@ -299,7 +323,7 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
       return;
     }
 
-    let finalVideoUrl = normalizeExternalHttpUrl(epVideoUrl);
+    let finalVideoUrl = extractEmbedInputUrl(epVideoUrl) || normalizeExternalHttpUrl(epVideoUrl);
     let finalFileSize = epFileSize;
 
     if (epVideoFile) {
@@ -320,8 +344,8 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
     }
 
     const episodeSources: VideoSourceOption[] = [];
-    const trimmedGr = normalizeExternalHttpUrl(epGrUrl);
-    const trimmedG = normalizeExternalHttpUrl(epGUrl);
+    const trimmedGr = extractEmbedInputUrl(epGrUrl) || normalizeExternalHttpUrl(epGrUrl);
+    const trimmedG = extractEmbedInputUrl(epGUrl) || normalizeExternalHttpUrl(epGUrl);
     if (finalVideoUrl && (trimmedGr || trimmedG)) {
       episodeSources.push({
         id: 'primary',
@@ -429,13 +453,13 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
         </div>
 
         {createError && (
-          <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
+          <div className="p-3 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{createError}</span>
           </div>
         )}
 
-        <div className="p-4 rounded-2xl bg-[#111116] border border-white/[0.08] space-y-4 text-xs">
+        <div className="p-4 rounded-2xl bg-[#121215] border border-white/[0.07] space-y-4 text-xs">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-zinc-300 font-bold mb-1">اسم المسلسل بالعربية *</label>
@@ -445,7 +469,7 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
                 value={titleAr}
                 onChange={(e) => setTitleAr(e.target.value)}
                 placeholder="مثال: صراع العروش"
-                className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white"
+                className="w-full bg-[#08080a] border border-white/[0.09] focus:border-[#ff2e93]/70 rounded-xl px-3 py-2 text-white focus:outline-none"
               />
             </div>
             <div>
@@ -456,7 +480,7 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
                 value={titleEn}
                 onChange={(e) => setTitleEn(e.target.value)}
                 placeholder="Game of Thrones"
-                className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white"
+                className="w-full bg-[#08080a] border border-white/[0.09] rounded-xl px-3 py-2 text-white"
               />
             </div>
           </div>
@@ -467,7 +491,7 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
               rows={3}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white"
+              className="w-full bg-[#08080a] border border-white/[0.09] focus:border-[#ff2e93]/70 rounded-xl px-3 py-2 text-white focus:outline-none"
             />
           </div>
 
@@ -481,9 +505,9 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
                   value={posterUrl}
                   onChange={(e) => setPosterUrl(e.target.value)}
                   placeholder="https://..."
-                  className="flex-1 bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono"
+                  className="flex-1 bg-[#08080a] border border-white/[0.09] rounded-xl px-3 py-2 text-white font-mono"
                 />
-                <label className="px-3 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-white/10 text-amber-400 font-bold cursor-pointer shrink-0">
+                <label className="px-3.5 py-2 rounded-xl bg-[#1a1a20] hover:bg-[#25252d] border border-white/[0.09] text-[#ff5ec4] font-bold cursor-pointer shrink-0">
                   ملف
                   <input
                     type="file"
@@ -504,9 +528,46 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
                 value={bannerUrl}
                 onChange={(e) => setBannerUrl(e.target.value)}
                 placeholder="https://..."
-                className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono"
+                className="w-full bg-[#08080a] border border-white/[0.09] rounded-xl px-3 py-2 text-white font-mono"
               />
             </div>
+          </div>
+
+          <div>
+            <label className="block text-zinc-300 font-bold mb-1">
+              رابط الفيديو (اختياري للمسلسل)
+              <span className="text-[11px] font-normal text-zinc-400 mr-1.5">
+                (رابط موقع عادي / YouTube / كود التضمين &lt;iframe&gt;)
+              </span>
+            </label>
+            <input
+              type="text"
+              dir="ltr"
+              value={seriesVideoUrl}
+              onChange={(e) => {
+                const rawVal = e.target.value;
+                const extracted = extractEmbedInputUrl(rawVal);
+                setSeriesVideoUrl(
+                  /<(?:iframe|embed)\b/i.test(rawVal) && extracted ? extracted : rawVal
+                );
+              }}
+              placeholder="https://example.com/... أو رابط فيديو أو كود التضمين <iframe>"
+              className="w-full bg-[#08080a] border border-white/[0.09] focus:border-[#ff2e93]/70 rounded-xl px-3 py-2 text-white font-mono focus:outline-none"
+            />
+            {seriesVideoUrl.trim() && (() => {
+              const clean =
+                extractEmbedInputUrl(seriesVideoUrl) || normalizeExternalHttpUrl(seriesVideoUrl);
+              const embedTarget = convertToUniversalEmbedUrl(clean);
+              const isPlainSite = isPlainExternalWebUrl(clean);
+              if (!clean || (!embedTarget && !isPlainSite)) return null;
+              return (
+                <p className="mt-1 text-[10px] text-emerald-400 font-mono truncate" dir="ltr">
+                  {isPlainSite
+                    ? `رابط موقع خارجي (يفتح مباشرة للمستخدم): ${clean}`
+                    : `Embed جاهز للتشغيل: ${embedTarget}`}
+                </p>
+              );
+            })()}
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -516,7 +577,7 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
                 type="number"
                 value={year}
                 onChange={(e) => setYear(Number(e.target.value))}
-                className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono"
+                className="w-full bg-[#08080a] border border-white/[0.09] rounded-xl px-3 py-2 text-white font-mono"
               />
             </div>
             <div>
@@ -524,7 +585,7 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
               <select
                 value={videoQuality}
                 onChange={(e) => setVideoQuality(e.target.value)}
-                className="w-full bg-zinc-950 border border-white/10 rounded-xl px-2.5 py-2 text-white"
+                className="w-full bg-[#08080a] border border-white/[0.09] rounded-xl px-2.5 py-2 text-white"
               >
                 <option value="100p">100p</option>
                 <option value="144p">144p</option>
@@ -541,7 +602,7 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
               <select
                 value={ageRating}
                 onChange={(e) => setAgeRating(e.target.value)}
-                className="w-full bg-zinc-950 border border-white/10 rounded-xl px-2.5 py-2 text-white"
+                className="w-full bg-[#08080a] border border-white/[0.09] rounded-xl px-2.5 py-2 text-white"
               >
                 <option value="عام">عام</option>
                 <option value="+13">+13</option>
@@ -556,7 +617,7 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
                 step="0.1"
                 value={rating}
                 onChange={(e) => setRating(Number(e.target.value))}
-                className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono"
+                className="w-full bg-[#08080a] border border-white/[0.09] rounded-xl px-3 py-2 text-white font-mono"
               />
             </div>
           </div>
@@ -568,7 +629,7 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
                 type="text"
                 value={director}
                 onChange={(e) => setDirector(e.target.value)}
-                className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white"
+                className="w-full bg-[#08080a] border border-white/[0.09] rounded-xl px-3 py-2 text-white"
               />
             </div>
             <div>
@@ -577,7 +638,7 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
                 type="text"
                 value={castInput}
                 onChange={(e) => setCastInput(e.target.value)}
-                className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white"
+                className="w-full bg-[#08080a] border border-white/[0.09] rounded-xl px-3 py-2 text-white"
               />
             </div>
           </div>
@@ -600,10 +661,10 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
                           : [...prev, g.slug]
                       )
                     }
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold border cursor-pointer ${
+                    className={`px-3.5 py-1.5 rounded-full text-xs font-bold border cursor-pointer transition-colors ${
                       active
-                        ? 'bg-amber-400 text-black border-amber-400'
-                        : 'bg-zinc-950 text-zinc-400 border-white/10'
+                        ? 'bg-[#ff2e93] text-white border-[#ff2e93]'
+                        : 'bg-[#08080a] text-zinc-400 border-white/[0.08] hover:text-white'
                     }`}
                   >
                     {g.nameAr}
@@ -618,7 +679,7 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
               type="checkbox"
               checked={isFeatured}
               onChange={(e) => setIsFeatured(e.target.checked)}
-              className="accent-amber-400"
+              className="accent-[#ff2e93]"
             />
             <span>إظهار في البنرات المميزة</span>
           </label>
@@ -627,7 +688,7 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
         <button
           type="submit"
           disabled={isCreating}
-          className="w-full py-3 rounded-2xl bg-amber-400 hover:bg-amber-300 text-black font-black text-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
+          className="w-full py-3 rounded-full bg-[#ff2e93] hover:bg-[#ff47a1] text-white font-black text-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 shadow-[0_8px_28px_rgba(255,46,147,0.3)]"
         >
           {isCreating ? (
             <>
@@ -662,7 +723,7 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
 
       {seasonFeedback && (
         <div
-          className={`p-3 rounded-xl border text-xs flex items-center justify-between ${
+          className={`p-3 rounded-2xl border text-xs flex items-center justify-between ${
             seasonFeedback.type === 'success'
               ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
               : 'bg-rose-500/15 border-rose-500/30 text-rose-300'
@@ -683,7 +744,7 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
       )}
 
       {seriesList.length === 0 ? (
-        <div className="p-10 text-center rounded-2xl bg-[#111116] border border-white/[0.08] space-y-2">
+        <div className="p-10 text-center rounded-2xl bg-[#121215] border border-white/[0.07] space-y-2">
           <Tv className="w-9 h-9 text-zinc-600 mx-auto" />
           <p className="text-sm font-bold text-zinc-300">لا توجد مسلسلات مضافة بعد</p>
           <p className="text-xs text-zinc-500">قم بإنشاء مسلسل أولاً من قسم "إضافة مسلسل جديد".</p>
@@ -691,7 +752,7 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
       ) : (
         <>
           {/* Series Picker + Add Season */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 p-4 rounded-2xl bg-[#111116] border border-white/[0.08]">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 p-4 rounded-2xl bg-[#121215] border border-white/[0.07]">
             <div className="lg:col-span-5">
               <label className="block text-[11px] font-bold text-zinc-400 mb-1">
                 اختر المسلسل:
@@ -702,7 +763,7 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
                   onSelectSeriesId(e.target.value);
                   resetEpisodeForm();
                 }}
-                className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white font-bold"
+                className="w-full bg-[#08080a] border border-white/[0.09] rounded-xl px-3 py-2 text-xs text-white font-bold"
               >
                 {seriesList.map((s) => (
                   <option key={s.id} value={s.id}>
@@ -722,13 +783,13 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
                   value={newSeasonTitle}
                   onChange={(e) => setNewSeasonTitle(e.target.value)}
                   placeholder={`الموسم ${seasons.length + 1}`}
-                  className="flex-1 bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white"
+                  className="flex-1 bg-[#08080a] border border-white/[0.09] rounded-xl px-3 py-2 text-xs text-white"
                 />
                 <button
                   type="button"
                   disabled={isSavingSeasons}
                   onClick={handleAddSeason}
-                  className="px-3.5 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-black font-black text-xs flex items-center gap-1 cursor-pointer shrink-0"
+                  className="px-4 py-2 rounded-full bg-[#ff2e93] hover:bg-[#ff47a1] text-white font-black text-xs flex items-center gap-1 cursor-pointer shrink-0"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>موسم</span>
@@ -741,7 +802,7 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
                 <button
                   type="button"
                   onClick={() => onPlayMedia(activeSeries)}
-                  className="w-full py-2 rounded-xl bg-amber-400/15 hover:bg-amber-400 text-amber-300 hover:text-black font-bold text-xs flex items-center justify-center gap-1.5 border border-amber-400/30 cursor-pointer transition-colors"
+                  className="w-full py-2 rounded-full bg-[#ff2e93]/15 hover:bg-[#ff2e93] text-[#ff5ec4] hover:text-white font-bold text-xs flex items-center justify-center gap-1.5 border border-[#ff2e93]/35 cursor-pointer transition-colors"
                 >
                   <Play className="w-3.5 h-3.5 fill-current" />
                   <span>تشغيل</span>
@@ -758,10 +819,10 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
                 return (
                   <div
                     key={sn.seasonNumber}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold ${
+                    className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border text-xs font-bold ${
                       isSel
-                        ? 'bg-amber-400 text-black border-amber-400'
-                        : 'bg-[#111116] text-zinc-300 border-white/10'
+                        ? 'bg-[#ff2e93] text-white border-[#ff2e93]'
+                        : 'bg-[#121215] text-zinc-300 border-white/[0.08]'
                     }`}
                   >
                     <button
@@ -779,8 +840,8 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
                         type="button"
                         disabled={isSavingSeasons}
                         onClick={() => handleDeleteSeasonImmediate(sn.seasonNumber, sn.title)}
-                        className={`p-0.5 rounded hover:bg-black/20 cursor-pointer ${
-                          isSel ? 'text-black' : 'text-zinc-500 hover:text-rose-400'
+                        className={`p-0.5 rounded-full hover:bg-black/20 cursor-pointer ${
+                          isSel ? 'text-white' : 'text-zinc-500 hover:text-rose-400'
                         }`}
                         title="حذف الموسم فوراً"
                       >
@@ -799,10 +860,10 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
               {/* Episode Form */}
               <form
                 onSubmit={handleSaveEpisode}
-                className="lg:col-span-5 p-4 rounded-2xl bg-[#111116] border border-white/[0.08] space-y-3 text-xs h-fit"
+                className="lg:col-span-5 p-4 rounded-2xl bg-[#121215] border border-white/[0.07] space-y-3 text-xs h-fit"
               >
                 <div className="flex items-center justify-between border-b border-white/[0.06] pb-2">
-                  <h3 className="font-black text-amber-400">
+                  <h3 className="font-black text-[#ff5ec4]">
                     {editingEpId
                       ? `تعديل الحلقة (${currentSeason.title})`
                       : `إضافة حلقة إلى ${currentSeason.title}`}
@@ -826,7 +887,7 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
                       min="1"
                       value={epNumber}
                       onChange={(e) => setEpNumber(Number(e.target.value))}
-                      className="w-full bg-zinc-950 border border-white/10 rounded-xl px-2.5 py-2 text-white font-mono"
+                      className="w-full bg-[#08080a] border border-white/[0.09] rounded-xl px-2.5 py-2 text-white font-mono"
                     />
                   </div>
                   <div className="col-span-2">
@@ -837,7 +898,7 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
                       value={epTitle}
                       onChange={(e) => setEpTitle(e.target.value)}
                       placeholder={`الحلقة ${epNumber}`}
-                      className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white"
+                      className="w-full bg-[#08080a] border border-white/[0.09] rounded-xl px-3 py-2 text-white"
                     />
                   </div>
                 </div>
@@ -848,7 +909,7 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
                     rows={2}
                     value={epDesc}
                     onChange={(e) => setEpDesc(e.target.value)}
-                    className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white"
+                    className="w-full bg-[#08080a] border border-white/[0.09] rounded-xl px-3 py-2 text-white"
                   />
                 </div>
 
@@ -859,7 +920,7 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
                       type="text"
                       value={epDuration}
                       onChange={(e) => setEpDuration(e.target.value)}
-                      className="w-full bg-zinc-950 border border-white/10 rounded-xl px-2.5 py-2 text-white"
+                      className="w-full bg-[#08080a] border border-white/[0.09] rounded-xl px-2.5 py-2 text-white"
                     />
                   </div>
                   <div>
@@ -869,7 +930,7 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
                       value={epIntroStart}
                       onChange={(e) => setEpIntroStart(e.target.value)}
                       placeholder="0"
-                      className="w-full bg-zinc-950 border border-white/10 rounded-xl px-2.5 py-2 text-white font-mono"
+                      className="w-full bg-[#08080a] border border-white/[0.09] rounded-xl px-2.5 py-2 text-white font-mono"
                     />
                   </div>
                   <div>
@@ -879,7 +940,7 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
                       value={epIntroEnd}
                       onChange={(e) => setEpIntroEnd(e.target.value)}
                       placeholder="60"
-                      className="w-full bg-zinc-950 border border-white/10 rounded-xl px-2.5 py-2 text-white font-mono"
+                      className="w-full bg-[#08080a] border border-white/[0.09] rounded-xl px-2.5 py-2 text-white font-mono"
                     />
                   </div>
                 </div>
@@ -899,9 +960,9 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
                   <button
                     type="button"
                     onClick={() => epVideoInputRef.current?.click()}
-                    className="w-full py-2.5 px-3 rounded-xl border border-dashed border-zinc-700 hover:border-amber-400 bg-zinc-950 text-zinc-200 flex items-center justify-center gap-2 cursor-pointer"
+                    className="w-full py-2.5 px-3 rounded-xl border border-dashed border-zinc-700 hover:border-[#ff2e93]/70 bg-[#08080a] text-zinc-200 flex items-center justify-center gap-2 cursor-pointer"
                   >
-                    <UploadCloud className="w-4 h-4 text-amber-400" />
+                    <UploadCloud className="w-4 h-4 text-[#ff45a2]" />
                     <span className="truncate">
                       {epVideoFile
                         ? `${epVideoFile.name} (${formatFileSize(epVideoFile.size)})`
@@ -909,43 +970,69 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
                     </span>
                   </button>
 
-                  <input
-                    type="text"
-                    dir="ltr"
-                    value={epVideoUrl}
-                    onChange={(e) => setEpVideoUrl(e.target.value)}
-                    placeholder="أو رابط حلقة من أي موقع / يوتيوب / /uploads/..."
-                    className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono"
-                  />
+                  <div>
+                    <label className="block text-zinc-300 font-bold mb-1">
+                      رابط الفيديو
+                      <span className="text-[10px] font-normal text-zinc-400 mr-1">
+                        (رابط موقع عادي / كود التضمين &lt;iframe&gt; / رابط مباشر)
+                      </span>
+                    </label>
+                    <input
+                      type="text"
+                      dir="ltr"
+                      value={epVideoUrl}
+                      onChange={(e) => {
+                        const rawVal = e.target.value;
+                        const extracted = extractEmbedInputUrl(rawVal);
+                        setEpVideoUrl(
+                          /<(?:iframe|embed)\b/i.test(rawVal) && extracted ? extracted : rawVal
+                        );
+                      }}
+                      placeholder="https://example.com/... أو كود التضمين <iframe> أو /uploads/..."
+                      className="w-full bg-[#08080a] border border-white/[0.09] focus:border-[#ff2e93]/70 rounded-xl px-3 py-2 text-white font-mono focus:outline-none"
+                    />
+                  </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <input
                       type="text"
                       dir="ltr"
                       value={epGrUrl}
-                      onChange={(e) => setEpGrUrl(e.target.value)}
-                      placeholder="رابط مشغل GR (أي موقع / MP4 / M3U8 / Embed)"
-                      className="w-full bg-zinc-950 border border-amber-400/25 rounded-xl px-3 py-2 text-white font-mono text-[11px]"
+                      onChange={(e) => {
+                        const rawVal = e.target.value;
+                        const extracted = extractEmbedInputUrl(rawVal);
+                        setEpGrUrl(
+                          /<(?:iframe|embed)\b/i.test(rawVal) && extracted ? extracted : rawVal
+                        );
+                      }}
+                      placeholder="رابط مشغل GR (Embed / MP4 / M3U8)"
+                      className="w-full bg-[#08080a] border border-[#ff2e93]/30 rounded-xl px-3 py-2 text-white font-mono text-[11px]"
                     />
                     <input
                       type="text"
                       dir="ltr"
                       value={epGUrl}
-                      onChange={(e) => setEpGUrl(e.target.value)}
+                      onChange={(e) => {
+                        const rawVal = e.target.value;
+                        const extracted = extractEmbedInputUrl(rawVal);
+                        setEpGUrl(
+                          /<(?:iframe|embed)\b/i.test(rawVal) && extracted ? extracted : rawVal
+                        );
+                      }}
                       placeholder="رابط مشغل G (احتياطي 2 / HLS / Embed)"
-                      className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono text-[11px]"
+                      className="w-full bg-[#08080a] border border-white/[0.09] rounded-xl px-3 py-2 text-white font-mono text-[11px]"
                     />
                   </div>
 
                   {isUploadingEp && epUploadProgress && (
                     <div className="space-y-1">
-                      <div className="flex justify-between text-[11px] font-mono text-amber-400">
+                      <div className="flex justify-between text-[11px] font-mono text-[#ff5ec4]">
                         <span>{epUploadProgress.speedFormatted}</span>
                         <span>{epUploadProgress.percent}%</span>
                       </div>
-                      <div className="h-1.5 rounded-full bg-zinc-900 overflow-hidden">
+                      <div className="h-1.5 rounded-full bg-[#1a1a20] overflow-hidden">
                         <div
-                          className="h-full bg-amber-400 transition-all"
+                          className="h-full bg-[#ff2e93] transition-all"
                           style={{ width: `${epUploadProgress.percent}%` }}
                         />
                       </div>
@@ -956,7 +1043,7 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
                 <button
                   type="submit"
                   disabled={isUploadingEp || isSavingSeasons}
-                  className="w-full py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-black font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60"
+                  className="w-full py-2.5 rounded-full bg-[#ff2e93] hover:bg-[#ff47a1] text-white font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60"
                 >
                   {isUploadingEp || isSavingSeasons ? (
                     <RefreshCw className="w-4 h-4 animate-spin" />
@@ -968,7 +1055,7 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
               </form>
 
               {/* Episodes List */}
-              <div className="lg:col-span-7 p-4 rounded-2xl bg-[#111116] border border-white/[0.08] space-y-3">
+              <div className="lg:col-span-7 p-4 rounded-2xl bg-[#121215] border border-white/[0.07] space-y-3">
                 <div className="flex items-center justify-between border-b border-white/[0.06] pb-2">
                   <h3 className="text-xs font-black text-white">
                     حلقات {currentSeason.title} ({currentSeason.episodes?.length || 0})
@@ -988,10 +1075,10 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
                     {currentSeason.episodes.map((ep, idx) => (
                       <div
                         key={ep.id}
-                        className="p-3 rounded-xl bg-zinc-950/90 border border-white/[0.06] flex flex-wrap items-center justify-between gap-2"
+                        className="p-3 rounded-xl bg-[#0b0b0e] border border-white/[0.05] flex flex-wrap items-center justify-between gap-2"
                       >
                         <div className="flex items-center gap-3 min-w-0">
-                          <span className="w-8 h-8 rounded-lg bg-sky-500/15 text-sky-400 font-mono font-black text-xs flex items-center justify-center shrink-0">
+                          <span className="w-8 h-8 rounded-lg bg-[#ff2e93]/15 text-[#ff5ec4] font-mono font-black text-xs flex items-center justify-center shrink-0 tabular-nums">
                             {ep.episodeNumber || idx + 1}
                           </span>
                           <div className="min-w-0">
@@ -1004,7 +1091,7 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
                                 {ep.duration}
                               </span>
                               {ep.introEnd ? (
-                                <span className="text-amber-400">
+                                <span className="text-[#ff5ec4]">
                                   مقدمة: {ep.introStart || 0}ث - {ep.introEnd}ث
                                 </span>
                               ) : null}
@@ -1017,7 +1104,7 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
                             type="button"
                             disabled={idx === 0 || isSavingSeasons}
                             onClick={() => handleMoveEpisode(idx, -1)}
-                            className="w-7 h-7 rounded-lg bg-zinc-900 hover:bg-zinc-800 disabled:opacity-40 text-zinc-300 flex items-center justify-center cursor-pointer"
+                            className="w-7 h-7 rounded-full bg-[#1a1a20] hover:bg-[#25252d] disabled:opacity-40 text-zinc-300 flex items-center justify-center cursor-pointer"
                             title="تقديم للأعلى"
                           >
                             <ArrowUp className="w-3.5 h-3.5" />
@@ -1026,7 +1113,7 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
                             type="button"
                             disabled={idx === currentSeason.episodes.length - 1 || isSavingSeasons}
                             onClick={() => handleMoveEpisode(idx, 1)}
-                            className="w-7 h-7 rounded-lg bg-zinc-900 hover:bg-zinc-800 disabled:opacity-40 text-zinc-300 flex items-center justify-center cursor-pointer"
+                            className="w-7 h-7 rounded-full bg-[#1a1a20] hover:bg-[#25252d] disabled:opacity-40 text-zinc-300 flex items-center justify-center cursor-pointer"
                             title="تأخير للأسفل"
                           >
                             <ArrowDown className="w-3.5 h-3.5" />
@@ -1054,7 +1141,7 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
                               setEpIntroStart(ep.introStart !== undefined ? String(ep.introStart) : '');
                               setEpIntroEnd(ep.introEnd !== undefined ? String(ep.introEnd) : '');
                             }}
-                            className="w-7 h-7 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 flex items-center justify-center cursor-pointer"
+                            className="w-7 h-7 rounded-full bg-[#1a1a20] hover:bg-[#25252d] text-zinc-300 flex items-center justify-center cursor-pointer"
                             title="تعديل"
                           >
                             <Edit3 className="w-3.5 h-3.5" />
@@ -1069,7 +1156,7 @@ export const SeriesManagerSection: React.FC<SeriesManagerSectionProps> = ({
                                 ep.title
                               )
                             }
-                            className="w-7 h-7 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 flex items-center justify-center cursor-pointer disabled:opacity-50"
+                            className="w-7 h-7 rounded-full bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 flex items-center justify-center cursor-pointer disabled:opacity-50"
                             title="حذف الحلقة فوراً"
                           >
                             <Trash2 className="w-3.5 h-3.5" />

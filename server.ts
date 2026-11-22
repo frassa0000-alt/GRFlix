@@ -17,6 +17,14 @@ import {
   detectStreamFormatFromUrlOrType,
   extractUniversalVideoStreams,
 } from './src/server/universalExtractor.ts';
+import {
+  configureTmdbPersistence,
+  fetchTmdbDetails,
+  getTmdbSyncStatus,
+  searchTmdbMulti,
+  startTmdbPeriodicSync,
+  syncTmdbCatalog,
+} from './src/server/tmdbService.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -193,6 +201,39 @@ const appendAuditLog = (
 };
 
 // Helpers for persistent movie storage & site-wide deletion tombstones
+const sanitizeVideoUrlInput = (rawInput: unknown): string => {
+  const raw = typeof rawInput === 'string' ? rawInput.trim() : '';
+  if (!raw) return '';
+  let candidate = raw;
+  if (/<(?:iframe|embed)\b/i.test(raw) || /\bsrc\s*=\s*["']/i.test(raw)) {
+    const srcMatch =
+      raw.match(/<(?:iframe|embed)\b[^>]*\bsrc\s*=\s*"([^"]+)"/i) ||
+      raw.match(/<(?:iframe|embed)\b[^>]*\bsrc\s*=\s*'([^']+)'/i) ||
+      raw.match(/<(?:iframe|embed)\b[^>]*\bsrc\s*=\s*([^\s>]+)/i) ||
+      raw.match(/\bsrc\s*=\s*"([^"]+)"/i) ||
+      raw.match(/\bsrc\s*=\s*'([^']+)'/i);
+    if (!srcMatch?.[1]) return '';
+    candidate = srcMatch[1].replace(/&amp;/gi, '&').replace(/&#38;/g, '&').trim();
+  }
+  if (!candidate || /[<>]/.test(candidate) || /^(javascript|data|vbscript):/i.test(candidate)) {
+    return '';
+  }
+  if (candidate.startsWith('/')) return candidate;
+  if (/^\/\//.test(candidate)) return `https:${candidate}`;
+  if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(candidate) && /^[\w.-]+\.[a-zA-Z]{2,}(\/|$)/.test(candidate)) {
+    candidate = `https://${candidate}`;
+  }
+  try {
+    const parsed = new URL(candidate);
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+      return parsed.href;
+    }
+  } catch {
+    return '';
+  }
+  return '';
+};
+
 const readMovies = (): any[] => {
   const data = readJsonFile<any[]>(MOVIES_FILE, []);
   return Array.isArray(data) ? data : [];
@@ -2638,12 +2679,20 @@ app.get('/api/stream/resolve', (req: Request, res: Response) => {
   const movies = readMovies();
   const nonYtCandidates: Array<{ label: string; url: string; format: string }> = [];
 
+  const detectFormat = (urlStr: string, explicitFmt?: string): string => {
+    if (explicitFmt) return explicitFmt;
+    const lower = urlStr.toLowerCase();
+    if (lower.includes('.m3u8')) return 'hls';
+    if (/\/(embed|videoembed|preview)\b/.test(lower)) return 'embed';
+    return 'mp4';
+  };
+
   const collectSources = (sources: any[], fallbackUrl?: string) => {
     if (fallbackUrl && !extractServerYouTubeId(fallbackUrl)) {
       nonYtCandidates.push({
         label: 'مشغل GR',
         url: fallbackUrl,
-        format: fallbackUrl.toLowerCase().includes('.m3u8') ? 'hls' : 'mp4',
+        format: detectFormat(fallbackUrl),
       });
     }
     if (Array.isArray(sources)) {
@@ -2652,7 +2701,7 @@ app.get('/api/stream/resolve', (req: Request, res: Response) => {
           nonYtCandidates.push({
             label: s.label || 'مشغل GR',
             url: s.url,
-            format: s.format || (s.url.toLowerCase().includes('.m3u8') ? 'hls' : 'mp4'),
+            format: detectFormat(s.url, s.format),
           });
         }
       }
@@ -3288,9 +3337,28 @@ app.post('/api/admin/movies', requireAdmin, requireAnyPermission('canUpload', 'c
   } = req.body;
 
   const mediaType = type === 'series' || type === 'anime' ? type : 'movie';
-  const normalizedSeasons = Array.isArray(seasons) ? seasons : [];
+  const normalizedSeasons = Array.isArray(seasons)
+    ? seasons.map((sn: any) => ({
+        ...sn,
+        episodes: Array.isArray(sn?.episodes)
+          ? sn.episodes.map((ep: any) => ({
+              ...ep,
+              videoUrl: sanitizeVideoUrlInput(ep?.videoUrl),
+            }))
+          : [],
+      }))
+    : [];
+  const normalizedSources = Array.isArray(sources)
+    ? sources
+        .map((s: any) => ({
+          ...s,
+          url: sanitizeVideoUrlInput(s?.url),
+        }))
+        .filter((s: any) => Boolean(s.url))
+    : [];
   const firstEpisodeUrl = normalizedSeasons[0]?.episodes?.[0]?.videoUrl || '';
-  const effectiveVideoUrl = (videoUrl || firstEpisodeUrl || '').toString().trim();
+  const sanitizedMainUrl = sanitizeVideoUrlInput(videoUrl);
+  const effectiveVideoUrl = sanitizedMainUrl || firstEpisodeUrl || '';
   const comingSoonFlag = Boolean(isComingSoon) && !effectiveVideoUrl;
 
   if (!titleAr || (mediaType === 'movie' && !effectiveVideoUrl && !comingSoonFlag)) {
@@ -3309,6 +3377,7 @@ app.post('/api/admin/movies', requireAdmin, requireAnyPermission('canUpload', 'c
     posterUrl: posterUrl || '',
     bannerUrl: bannerUrl || posterUrl || '',
     videoUrl: effectiveVideoUrl,
+    trailerUrl: sanitizeVideoUrlInput(req.body?.trailerUrl) || undefined,
     videoQuality: videoQuality || '1080p Full HD',
     ageRating: ageRating || '+16',
     duration: duration || (mediaType === 'series' ? 'مسلسل' : '120 دقيقة'),
@@ -3325,7 +3394,7 @@ app.post('/api/admin/movies', requireAdmin, requireAnyPermission('canUpload', 'c
     director: director || '',
     cast: Array.isArray(cast) ? cast : [],
     seasons: normalizedSeasons,
-    sources: Array.isArray(sources) ? sources : [],
+    sources: normalizedSources,
     introStart: typeof introStart === 'number' ? introStart : undefined,
     introEnd: typeof introEnd === 'number' ? introEnd : undefined,
     subtitleUrl: subtitleUrl || undefined,
@@ -3364,16 +3433,55 @@ app.put('/api/admin/movies/:id', requireAdmin, requirePermission('canEditMedia')
   }
 
   const current = movies[index];
+  const patch: Record<string, any> = { ...req.body };
+
+  if (patch.videoUrl !== undefined) {
+    patch.videoUrl = sanitizeVideoUrlInput(patch.videoUrl);
+  }
+  if (patch.trailerUrl !== undefined) {
+    patch.trailerUrl = sanitizeVideoUrlInput(patch.trailerUrl) || undefined;
+  }
+  if (Array.isArray(patch.sources)) {
+    patch.sources = patch.sources
+      .map((s: any) => ({
+        ...s,
+        url: sanitizeVideoUrlInput(s?.url),
+      }))
+      .filter((s: any) => Boolean(s.url));
+  }
+  if (Array.isArray(patch.seasons)) {
+    patch.seasons = patch.seasons.map((sn: any) => ({
+      ...sn,
+      episodes: Array.isArray(sn?.episodes)
+        ? sn.episodes.map((ep: any) => ({
+            ...ep,
+            videoUrl: sanitizeVideoUrlInput(ep?.videoUrl),
+          }))
+        : [],
+    }));
+  }
+
   const updated = {
     ...current,
-    ...req.body,
+    ...patch,
     id: current.id,
     updatedAt: Date.now(),
   };
 
-  // Auto-sync main videoUrl if series has episodes and main videoUrl was empty
+  // Auto-sync main videoUrl if series has episodes and main videoUrl was not set
   if (!updated.videoUrl && Array.isArray(updated.seasons) && updated.seasons[0]?.episodes?.[0]?.videoUrl) {
     updated.videoUrl = updated.seasons[0].episodes[0].videoUrl;
+  }
+
+  // Keep coming-soon flag accurate whenever videoUrl changes
+  if (patch.videoUrl !== undefined || patch.sources !== undefined || patch.seasons !== undefined) {
+    const hasEpVideo =
+      Array.isArray(updated.seasons) &&
+      updated.seasons.some((sn: any) =>
+        (sn?.episodes || []).some((ep: any) => Boolean(ep?.videoUrl))
+      );
+    const hasCustomSource = Array.isArray(updated.sources) && updated.sources.some((s: any) => Boolean(s?.url));
+    updated.isComingSoon = !updated.videoUrl && !hasEpVideo && !hasCustomSource;
   }
 
   movies[index] = updated;
@@ -3523,6 +3631,66 @@ app.post('/api/media/:id/comments', (req: Request, res: Response) => {
   comments.unshift(newComment);
   writeJsonFile(COMMENTS_FILE, comments);
   return res.status(201).json({ success: true, comment: newComment });
+});
+
+// TMDB Server Proxy & 24h Auto-Sync Routes (API key remains strictly server-side in process.env.TMDB_API_KEY)
+app.get('/api/tmdb/sync-status', (_req: Request, res: Response) => {
+  return res.json(getTmdbSyncStatus());
+});
+
+app.post('/api/admin/tmdb/sync', requireAdmin, requireAnyPermission('canUpload', 'canEditMedia'), async (_req: Request, res: Response) => {
+  try {
+    const items = await syncTmdbCatalog(true);
+    return res.json({
+      success: true,
+      itemsCount: items.length,
+      status: getTmdbSyncStatus(),
+    });
+  } catch {
+    return res.status(502).json({ error: 'تعذر تنفيذ المزامنة الفورية مع TMDB حالياً' });
+  }
+});
+
+app.get('/api/tmdb/catalog', async (_req: Request, res: Response) => {
+  try {
+    const items = await syncTmdbCatalog(false);
+    return res.json({
+      items,
+      status: getTmdbSyncStatus(),
+    });
+  } catch {
+    return res.status(502).json({ error: 'تعذر تحديث قائمة TMDB حالياً' });
+  }
+});
+
+app.get('/api/tmdb/search', async (req: Request, res: Response) => {
+  try {
+    const rawQ = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+    if (!rawQ) {
+      return res.json({ items: [] });
+    }
+    const items = await searchTmdbMulti(rawQ);
+    return res.json({ items });
+  } catch {
+    return res.status(502).json({ error: 'تعذر البحث في TMDB حالياً' });
+  }
+});
+
+app.get('/api/tmdb/details/:mediaType/:tmdbId', async (req: Request, res: Response) => {
+  try {
+    const rawType = String(req.params.mediaType || '').trim();
+    const rawId = String(req.params.tmdbId || '').trim();
+    if ((rawType !== 'movie' && rawType !== 'tv') || !/^\d{1,12}$/.test(rawId)) {
+      return res.status(400).json({ error: 'معرف العمل غير صالح' });
+    }
+    const item = await fetchTmdbDetails(rawType, rawId);
+    if (!item) {
+      return res.status(404).json({ error: 'تفاصيل العمل غير متوفرة' });
+    }
+    return res.json({ item });
+  } catch {
+    return res.status(502).json({ error: 'تعذر جلب التفاصيل من TMDB' });
+  }
 });
 
 app.get('/api/categories', (_req: Request, res: Response) => {
@@ -4576,6 +4744,14 @@ async function startServer() {
 
   const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`MASHHAD server running on http://0.0.0.0:${PORT}`);
+    configureTmdbPersistence({
+      dataDir: DATA_DIR,
+      readMovies,
+      writeMovies,
+      readDeletedIds: readDeletedMovieIds,
+      appendAuditLog,
+    });
+    startTmdbPeriodicSync();
   });
   server.requestTimeout = 0;
   server.keepAliveTimeout = 65000;

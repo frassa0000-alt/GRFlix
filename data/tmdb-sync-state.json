@@ -1,0 +1,18 @@
+{
+  "configured": true,
+  "intervalMs": 86400000,
+  "isSyncing": false,
+  "lastSyncAt": 1795310268843,
+  "nextSyncAt": 1795396668843,
+  "totalInDatabase": 182,
+  "moviesCount": 66,
+  "seriesCount": 116,
+  "episodesCount": 311,
+  "lastAddedCount": 0,
+  "lastAddedMoviesCount": 0,
+  "lastAddedSeriesCount": 0,
+  "lastUpdatedCount": 31,
+  "lastSkippedDuplicatesCount": 182,
+  "lastSkippedDeletedCount": 0,
+  "lastError": null
+}

@@ -19,7 +19,7 @@ export interface VideoSourceOption {
   id?: string;
   label: string;
   url: string;
-  format?: 'mp4' | 'hls' | 'webm' | 'youtube' | string;
+  format?: 'mp4' | 'hls' | 'webm' | 'embed' | 'youtube' | string;
   quality?: string;
   isDefault?: boolean;
 }
@@ -60,6 +60,7 @@ export interface MediaItem {
   description: string;
   genres: (GenreType | string)[];
   videoUrl: string;
+  trailerUrl?: string;
   videoQuality?: string;
   ageRating?: string;
   isPublished: boolean;
@@ -74,6 +75,13 @@ export interface MediaItem {
   viewsCount?: number;
   director?: string;
   cast?: string[];
+  castDetails?: Array<{
+    name: string;
+    character?: string;
+    profileUrl?: string;
+  }>;
+  tmdbId?: number;
+  tmdbMediaType?: 'movie' | 'tv';
   createdAt: number;
   updatedAt?: number;
   seasons?: Season[];

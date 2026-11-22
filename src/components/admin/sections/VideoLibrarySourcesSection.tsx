@@ -146,13 +146,11 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
       ...serverResult.updatedMovies.map((m) => m.id),
     ]);
 
-    // Sync any server-deleted IDs across Firestore / tombstones / user history & favorites
     for (const delId of serverResult.deletedMovieIds) {
       const match = mediaItems.find((m) => m.id === delId) || ({ id: delId, titleAr: delId } as MediaItem);
       await deleteMovieFromDatabases(match, token).catch(() => {});
     }
 
-    // Also inspect client mediaItems (including Firestore-only docs) that referenced any deleted video URL
     for (const m of mediaItems) {
       if (handledIds.has(m.id)) continue;
       const usesUrl =
@@ -321,7 +319,7 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
-              <FolderOpen className="w-5 h-5 text-amber-400" />
+              <FolderOpen className="w-5 h-5 text-[#ff45a2]" />
               <span>
                 {libraryScope === 'all_files'
                   ? `جميع ملفات الموقع والمخفية (${activeFilesCount})`
@@ -333,13 +331,13 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
             </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            <div className="inline-flex items-center p-1 rounded-xl bg-zinc-950 border border-white/10 text-xs font-bold">
+            <div className="inline-flex items-center p-1 rounded-full bg-[#121215] border border-white/[0.08] text-xs font-bold">
               <button
                 type="button"
                 onClick={() => setLibraryScope('videos')}
-                className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
+                className={`px-3.5 py-1.5 rounded-full transition-colors cursor-pointer ${
                   libraryScope === 'videos'
-                    ? 'bg-amber-400 text-black font-black'
+                    ? 'bg-[#ff2e93] text-white font-black'
                     : 'text-zinc-400 hover:text-white'
                 }`}
               >
@@ -348,9 +346,9 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
               <button
                 type="button"
                 onClick={() => setLibraryScope('all_files')}
-                className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
+                className={`px-3.5 py-1.5 rounded-full transition-colors cursor-pointer ${
                   libraryScope === 'all_files'
-                    ? 'bg-amber-400 text-black font-black'
+                    ? 'bg-[#ff2e93] text-white font-black'
                     : 'text-zinc-400 hover:text-white'
                 }`}
               >
@@ -360,9 +358,9 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
             <button
               type="button"
               onClick={loadFiles}
-              className="px-3 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-xs font-bold text-zinc-200 border border-white/10 flex items-center gap-1.5 cursor-pointer"
+              className="px-3.5 py-2 rounded-full bg-[#16161a] hover:bg-[#202026] text-xs font-bold text-zinc-200 border border-white/[0.08] flex items-center gap-1.5 cursor-pointer"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${isLoadingFiles ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${isLoadingFiles ? 'animate-spin text-[#ff45a2]' : ''}`} />
               <span>تحديث</span>
             </button>
           </div>
@@ -370,7 +368,7 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
 
         {feedback && (
           <div
-            className={`p-3 rounded-xl border text-xs flex items-center justify-between ${
+            className={`p-3 rounded-2xl border text-xs flex items-center justify-between ${
               feedback.type === 'success'
                 ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
                 : 'bg-rose-500/15 border-rose-500/30 text-rose-300'
@@ -392,7 +390,7 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
               <button
                 type="button"
                 onClick={() => setSelectedFileNames([])}
-                className="px-3 py-1.5 rounded-xl bg-zinc-900 text-zinc-300 hover:text-white font-bold cursor-pointer"
+                className="px-3 py-1.5 rounded-full bg-[#1a1a20] text-zinc-300 hover:text-white font-bold cursor-pointer"
               >
                 إلغاء التحديد
               </button>
@@ -400,14 +398,14 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
                 type="button"
                 disabled={isBulkDeletingFiles}
                 onClick={handleBulkDeleteFilesImmediate}
-                className="px-3.5 py-1.5 rounded-xl bg-rose-500 hover:bg-rose-400 text-white font-black flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+                className="px-4 py-1.5 rounded-full bg-rose-500 hover:bg-rose-400 text-white font-black flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
               >
                 {isBulkDeletingFiles ? (
                   <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                 ) : (
                   <Trash2 className="w-3.5 h-3.5" />
                 )}
-                <span>حذف المحدد نهائياً من الخادم والموقع</span>
+                <span>حذف المحدد نهائياً</span>
               </button>
             </div>
           </div>
@@ -416,20 +414,20 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
         {libraryScope === 'all_files' ? (
           isLoadingFiles ? (
             <div className="py-16 text-center text-zinc-400">
-              <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-amber-400" />
+              <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-[#ff45a2]" />
               <p className="text-xs">جارٍ فحص جميع ملفات الموقع والمخفية...</p>
             </div>
           ) : allSiteFiles.length === 0 ? (
-            <div className="py-14 text-center rounded-2xl bg-[#111116] border border-white/[0.08] text-zinc-500">
+            <div className="py-14 text-center rounded-2xl bg-[#121215] border border-white/[0.07] text-zinc-500">
               <HardDrive className="w-9 h-9 mx-auto mb-2 text-zinc-600" />
               <p className="text-sm font-bold text-zinc-300">لا توجد ملفات مخزنة على الخادم حالياً</p>
             </div>
           ) : (
-            <div className="rounded-2xl bg-[#111116] border border-white/[0.08] overflow-hidden">
+            <div className="rounded-2xl bg-[#121215] border border-white/[0.07] overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full text-right border-collapse text-xs">
                   <thead>
-                    <tr className="border-b border-white/[0.08] bg-zinc-950/60 text-[11px] font-black text-zinc-400">
+                    <tr className="border-b border-white/[0.07] bg-[#0b0b0e] text-[11px] font-black text-zinc-400">
                       <th className="py-3 px-3">المسار / اسم الملف</th>
                       <th className="py-3 px-3">المجلد</th>
                       <th className="py-3 px-3">الحالة</th>
@@ -447,17 +445,15 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
                         <td className="py-3 px-3 font-mono text-zinc-400">{sf.folder}</td>
                         <td className="py-3 px-3">
                           {sf.isHiddenFile ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-400/15 border border-amber-400/40 text-amber-300 text-[10px] font-black">
+                            <span className="inline-flex items-center gap-1 text-[#ff5ec4] text-[11px] font-bold">
                               <EyeOff className="w-3 h-3" />
-                              <span>ملف مخفي / غير مرتبط</span>
+                              <span>غير مرتبط</span>
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 text-[10px] font-bold">
-                              ظاهر ومنشور
-                            </span>
+                            <span className="text-emerald-400 text-[11px] font-bold">ظاهر ومنشور</span>
                           )}
                         </td>
-                        <td className="py-3 px-3 font-mono tabular-nums text-amber-400 font-bold whitespace-nowrap">
+                        <td className="py-3 px-3 font-mono tabular-nums text-[#ff5ec4] font-bold whitespace-nowrap">
                           {formatFileSize(sf.sizeBytes)}
                         </td>
                         <td className="py-3 px-3">
@@ -471,7 +467,7 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
                           <button
                             type="button"
                             onClick={() => setPreviewSrc(sf.url)}
-                            className="px-2.5 py-1.5 rounded-lg bg-amber-400/15 hover:bg-amber-400 text-amber-300 hover:text-black font-bold text-[11px] flex items-center gap-1 cursor-pointer transition-colors"
+                            className="px-3 py-1.5 rounded-full bg-[#ff2e93]/15 hover:bg-[#ff2e93] text-[#ff5ec4] hover:text-white font-bold text-[11px] flex items-center gap-1 cursor-pointer transition-colors"
                           >
                             <Play className="w-3 h-3 fill-current" />
                             <span>فتح</span>
@@ -486,20 +482,20 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
           )
         ) : isLoadingFiles ? (
           <div className="py-16 text-center text-zinc-400">
-            <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-amber-400" />
+            <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-[#ff45a2]" />
             <p className="text-xs">جارٍ فحص مساحة التخزين...</p>
           </div>
         ) : files.length === 0 ? (
-          <div className="py-14 text-center rounded-2xl bg-[#111116] border border-white/[0.08] text-zinc-500">
+          <div className="py-14 text-center rounded-2xl bg-[#121215] border border-white/[0.07] text-zinc-500">
             <HardDrive className="w-9 h-9 mx-auto mb-2 text-zinc-600" />
             <p className="text-sm font-bold text-zinc-300">لا توجد ملفات فيديو مرفوعة محلياً بعد</p>
           </div>
         ) : (
-          <div className="rounded-2xl bg-[#111116] border border-white/[0.08] overflow-hidden">
+          <div className="rounded-2xl bg-[#121215] border border-white/[0.07] overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-right border-collapse text-xs">
                 <thead>
-                  <tr className="border-b border-white/[0.08] bg-zinc-950/60 text-[11px] font-black text-zinc-400">
+                  <tr className="border-b border-white/[0.07] bg-[#0b0b0e] text-[11px] font-black text-zinc-400">
                     <th className="py-3 px-3 w-9">
                       <input
                         type="checkbox"
@@ -514,7 +510,7 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
                             setSelectedFileNames(files.map((f) => f.fileName));
                           }
                         }}
-                        className="accent-amber-400 cursor-pointer"
+                        className="accent-[#ff2e93] cursor-pointer"
                         title="تحديد الكل"
                       />
                     </th>
@@ -542,73 +538,66 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
                     );
 
                     return (
-                    <tr key={file.fileName} className="hover:bg-white/[0.02]">
-                      <td className="py-3 px-3 w-9">
-                        <input
-                          type="checkbox"
-                          checked={selectedFileNames.includes(file.fileName)}
-                          onChange={() =>
-                            setSelectedFileNames((prev) =>
-                              prev.includes(file.fileName)
-                                ? prev.filter((x) => x !== file.fileName)
-                                : [...prev, file.fileName]
-                            )
-                          }
-                          className="accent-amber-400 cursor-pointer"
-                        />
-                      </td>
-                      <td className="py-3 px-3 font-mono text-zinc-200 max-w-xs truncate">
-                        {file.fileName}
-                      </td>
-                      <td className="py-3 px-3 font-mono tabular-nums text-amber-400 font-bold whitespace-nowrap">
-                        {formatFileSize(file.sizeBytes)}
-                      </td>
-                      <td className="py-3 px-3">
-                        {combinedTitles.length > 0 ? (
-                          <div className="flex flex-wrap gap-1">
-                            {combinedTitles.map((t, i) => (
-                              <span
-                                key={i}
-                                className="px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 text-[10px] font-bold"
-                              >
-                                {t}
-                              </span>
-                            ))}
+                      <tr key={file.fileName} className="hover:bg-white/[0.02]">
+                        <td className="py-3 px-3 w-9">
+                          <input
+                            type="checkbox"
+                            checked={selectedFileNames.includes(file.fileName)}
+                            onChange={() =>
+                              setSelectedFileNames((prev) =>
+                                prev.includes(file.fileName)
+                                  ? prev.filter((x) => x !== file.fileName)
+                                  : [...prev, file.fileName]
+                              )
+                            }
+                            className="accent-[#ff2e93] cursor-pointer"
+                          />
+                        </td>
+                        <td className="py-3 px-3 font-mono text-zinc-200 max-w-xs truncate">
+                          {file.fileName}
+                        </td>
+                        <td className="py-3 px-3 font-mono tabular-nums text-[#ff5ec4] font-bold whitespace-nowrap">
+                          {formatFileSize(file.sizeBytes)}
+                        </td>
+                        <td className="py-3 px-3">
+                          {combinedTitles.length > 0 ? (
+                            <span className="text-emerald-400 text-[11px] font-bold">
+                              {combinedTitles.join(' · ')}
+                            </span>
+                          ) : (
+                            <span className="text-[11px] text-zinc-500">غير مرتبط بأي عمل</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-3 font-mono text-[11px] text-zinc-400 whitespace-nowrap">
+                          {new Date(file.createdAt).toLocaleDateString('ar-EG')}
+                        </td>
+                        <td className="py-3 px-3 whitespace-nowrap">
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setPreviewSrc(file.videoUrl)}
+                              className="px-3 py-1.5 rounded-full bg-[#ff2e93]/15 hover:bg-[#ff2e93] text-[#ff5ec4] hover:text-white font-bold text-[11px] flex items-center gap-1 cursor-pointer transition-colors"
+                            >
+                              <Play className="w-3 h-3 fill-current" />
+                              <span>معاينة</span>
+                            </button>
+                            <button
+                              type="button"
+                              disabled={deletingFileNames.includes(file.fileName)}
+                              onClick={() => handleDeleteFileImmediate(file)}
+                              className="w-7 h-7 rounded-full bg-rose-500/15 hover:bg-rose-500/30 text-rose-400 flex items-center justify-center cursor-pointer disabled:opacity-50"
+                              title="حذف الفيديو من الخادم والموقع فوراً"
+                            >
+                              {deletingFileNames.includes(file.fileName) ? (
+                                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <Trash2 className="w-3.5 h-3.5" />
+                              )}
+                            </button>
                           </div>
-                        ) : (
-                          <span className="text-[11px] text-zinc-500">غير مرتبط بأي عمل</span>
-                        )}
-                      </td>
-                      <td className="py-3 px-3 font-mono text-[11px] text-zinc-400 whitespace-nowrap">
-                        {new Date(file.createdAt).toLocaleDateString('ar-EG')}
-                      </td>
-                      <td className="py-3 px-3 whitespace-nowrap">
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => setPreviewSrc(file.videoUrl)}
-                            className="px-2.5 py-1.5 rounded-lg bg-amber-400/15 hover:bg-amber-400 text-amber-300 hover:text-black font-bold text-[11px] flex items-center gap-1 cursor-pointer transition-colors"
-                          >
-                            <Play className="w-3 h-3 fill-current" />
-                            <span>معاينة</span>
-                          </button>
-                          <button
-                            type="button"
-                            disabled={deletingFileNames.includes(file.fileName)}
-                            onClick={() => handleDeleteFileImmediate(file)}
-                            className="w-7 h-7 rounded-lg bg-rose-500/15 hover:bg-rose-500/30 text-rose-400 flex items-center justify-center cursor-pointer disabled:opacity-50"
-                            title="حذف الفيديو من الخادم والموقع فوراً"
-                          >
-                            {deletingFileNames.includes(file.fileName) ? (
-                              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                            ) : (
-                              <Trash2 className="w-3.5 h-3.5" />
-                            )}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
+                        </td>
+                      </tr>
+                    );
                   })}
                 </tbody>
               </table>
@@ -617,14 +606,14 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
         )}
 
         {previewSrc && (
-          <div className="fixed inset-0 z-[130] bg-black/90 flex items-center justify-center p-4">
-            <div className="bg-[#111116] border border-white/15 rounded-2xl w-full max-w-3xl overflow-hidden">
-              <div className="px-4 py-2.5 border-b border-white/10 flex items-center justify-between">
+          <div className="fixed inset-0 z-[130] bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
+            <div className="bg-[#161619] border border-white/[0.1] rounded-3xl w-full max-w-3xl overflow-hidden shadow-2xl">
+              <div className="px-4 py-3 border-b border-white/[0.08] flex items-center justify-between">
                 <span className="text-xs font-mono text-zinc-300 truncate">{previewSrc}</span>
                 <button
                   type="button"
                   onClick={() => setPreviewSrc(null)}
-                  className="w-7 h-7 rounded-lg bg-zinc-900 text-zinc-400 hover:text-white flex items-center justify-center cursor-pointer"
+                  className="w-8 h-8 rounded-full bg-[#222227] text-zinc-400 hover:text-white flex items-center justify-center cursor-pointer"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -656,7 +645,7 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
     <div className="space-y-4">
       <div>
         <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
-          <Link2 className="w-5 h-5 text-amber-400" />
+          <Link2 className="w-5 h-5 text-[#ff45a2]" />
           <span>إدارة روابط ومصادر التشغيل</span>
         </h2>
         <p className="text-xs text-zinc-400 mt-0.5">
@@ -666,7 +655,7 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
 
       {feedback && (
         <div
-          className={`p-3 rounded-xl border text-xs flex items-center justify-between ${
+          className={`p-3 rounded-2xl border text-xs flex items-center justify-between ${
             feedback.type === 'success'
               ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
               : 'bg-rose-500/15 border-rose-500/30 text-rose-300'
@@ -680,18 +669,18 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
       )}
 
       {/* Select Media */}
-      <div className="p-4 rounded-2xl bg-[#111116] border border-white/[0.08]">
+      <div className="p-4 rounded-2xl bg-[#121215] border border-white/[0.07]">
         <label className="block text-xs font-bold text-zinc-300 mb-1.5">
           اختر الفيلم أو المسلسل لإدارة مصادره:
         </label>
         <select
           value={selectedMedia?.id || ''}
           onChange={(e) => setSelectedMediaId(e.target.value)}
-          className="w-full bg-zinc-950 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white font-bold"
+          className="w-full bg-[#08080a] border border-white/[0.09] rounded-xl px-3 py-2.5 text-xs text-white font-bold"
         >
           {mediaItems.map((m) => (
             <option key={m.id} value={m.id}>
-              {m.titleAr} ({m.type === 'series' ? 'مسلسل' : 'فيلم'} • {m.year})
+              {m.titleAr} ({m.type === 'series' ? 'مسلسل' : 'فيلم'} · {m.year})
             </option>
           ))}
         </select>
@@ -702,22 +691,22 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
           {/* Add Source Form */}
           <form
             onSubmit={handleAddSource}
-            className="p-4 rounded-2xl bg-[#111116] border border-white/[0.08] space-y-3 text-xs"
+            className="p-4 rounded-2xl bg-[#121215] border border-white/[0.07] space-y-3 text-xs"
           >
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="font-black text-amber-400">إضافة مصدر تشغيل جديد</h3>
+              <h3 className="font-black text-[#ff5ec4]">إضافة مصدر تشغيل جديد</h3>
               <div className="flex items-center gap-1.5">
                 <button
                   type="button"
                   onClick={() => setNewLabel('مشغل GR')}
-                  className="px-2.5 py-1 rounded-lg bg-amber-400/15 hover:bg-amber-400/25 text-amber-300 font-bold text-[11px] cursor-pointer"
+                  className="px-3 py-1 rounded-full bg-[#ff2e93]/15 hover:bg-[#ff2e93]/25 text-[#ff5ec4] font-bold text-[11px] cursor-pointer"
                 >
                   مشغل GR
                 </button>
                 <button
                   type="button"
                   onClick={() => setNewLabel('مشغل G')}
-                  className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/15 text-zinc-200 font-bold text-[11px] cursor-pointer"
+                  className="px-3 py-1 rounded-full bg-[#1a1a20] hover:bg-[#25252d] text-zinc-200 font-bold text-[11px] cursor-pointer"
                 >
                   مشغل G
                 </button>
@@ -729,7 +718,7 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
                 value={newLabel}
                 onChange={(e) => setNewLabel(e.target.value)}
                 placeholder="اسم المصدر (مثال: مشغل GR أو مشغل G)"
-                className="sm:col-span-3 bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white"
+                className="sm:col-span-3 bg-[#08080a] border border-white/[0.09] rounded-xl px-3 py-2 text-white"
               />
               <input
                 type="text"
@@ -738,18 +727,20 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
                 value={newUrl}
                 onChange={(e) => {
                   const val = e.target.value;
-                  setNewUrl(val);
-                  if (val.trim()) {
-                    setNewFormat(resolveMediaFormat(val));
+                  const clean = normalizeExternalHttpUrl(val);
+                  const nextVal = /<(?:iframe|embed)\b/i.test(val) && clean ? clean : val;
+                  setNewUrl(nextVal);
+                  if (nextVal.trim()) {
+                    setNewFormat(resolveMediaFormat(nextVal));
                   }
                 }}
-                placeholder="رابط فيلم من أي موقع في العالم أو https://... أو /uploads/videos/..."
-                className="sm:col-span-5 bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white font-mono"
+                placeholder="رابط الفيديو أو الموقع (MP4 / M3U8 / YouTube / Embed / <iframe>)"
+                className="sm:col-span-5 bg-[#08080a] border border-white/[0.09] rounded-xl px-3 py-2 text-white font-mono"
               />
               <select
                 value={newFormat}
                 onChange={(e) => setNewFormat(e.target.value as any)}
-                className="sm:col-span-2 bg-zinc-950 border border-white/10 rounded-xl px-2.5 py-2 text-white"
+                className="sm:col-span-2 bg-[#08080a] border border-white/[0.09] rounded-xl px-2.5 py-2 text-white"
               >
                 <option value="mp4">MP4</option>
                 <option value="hls">HLS (.m3u8)</option>
@@ -762,7 +753,7 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
                 value={newQuality}
                 onChange={(e) => setNewQuality(e.target.value)}
                 placeholder="1080p"
-                className="sm:col-span-2 bg-zinc-950 border border-white/10 rounded-xl px-3 py-2 text-white"
+                className="sm:col-span-2 bg-[#08080a] border border-white/[0.09] rounded-xl px-3 py-2 text-white"
               />
             </div>
 
@@ -770,7 +761,7 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
               <button
                 type="submit"
                 disabled={isSavingLinks}
-                className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black font-black flex items-center gap-1.5 cursor-pointer"
+                className="px-4 py-2 rounded-full bg-[#ff2e93] hover:bg-[#ff47a1] text-white font-black flex items-center gap-1.5 cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 <span>إضافة وحفظ المصدر</span>
@@ -780,7 +771,7 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
                   <button
                     type="button"
                     onClick={() => handleRunTestUrl('draft', newUrl.trim())}
-                    className="px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-sky-300 font-bold border border-white/10 flex items-center gap-1.5 cursor-pointer"
+                    className="px-4 py-2 rounded-full bg-[#1a1a20] hover:bg-[#25252d] text-sky-300 font-bold border border-white/[0.08] flex items-center gap-1.5 cursor-pointer"
                   >
                     <Wifi className="w-3.5 h-3.5" />
                     <span>اختبار واستخراج الرابط</span>
@@ -788,7 +779,7 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
                   <button
                     type="button"
                     onClick={() => setPreviewSrc(normalizeExternalHttpUrl(newUrl))}
-                    className="px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-amber-300 font-bold border border-white/10 flex items-center gap-1.5 cursor-pointer"
+                    className="px-4 py-2 rounded-full bg-[#1a1a20] hover:bg-[#25252d] text-[#ff5ec4] font-bold border border-white/[0.08] flex items-center gap-1.5 cursor-pointer"
                   >
                     <Play className="w-3.5 h-3.5 fill-current" />
                     <span>تشغيل معاينة</span>
@@ -806,9 +797,9 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
                 }`}
               >
                 {testResults['draft'].ok
-                  ? `الرابط يعمل (HTTP ${testResults['draft'].status}) • الصيغة: ${testResults['draft'].format} • دعم التقديم Range: ${testResults['draft'].supportsRange ? 'نعم' : 'لا'}${
+                  ? `الرابط يعمل (HTTP ${testResults['draft'].status}) · الصيغة: ${testResults['draft'].format} · Range: ${testResults['draft'].supportsRange ? 'نعم' : 'لا'}${
                       testResults['draft'].extractedStreams?.length
-                        ? ` • بثوث مستخرجة: ${testResults['draft'].extractedStreams.length}`
+                        ? ` · بثوث مستخرجة: ${testResults['draft'].extractedStreams.length}`
                         : ''
                     }`
                   : testResults['draft'].error}
@@ -817,7 +808,7 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
           </form>
 
           {/* Existing Sources List */}
-          <div className="p-4 rounded-2xl bg-[#111116] border border-white/[0.08] space-y-2.5">
+          <div className="p-4 rounded-2xl bg-[#121215] border border-white/[0.07] space-y-2.5">
             <h3 className="text-xs font-black text-white">
               مصادر التشغيل الحالية ({sources.length})
             </h3>
@@ -832,23 +823,23 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
                 return (
                   <div
                     key={key}
-                    className="p-3 rounded-xl bg-zinc-950/90 border border-white/[0.06] space-y-2"
+                    className="p-3 rounded-xl bg-[#0b0b0e] border border-white/[0.05] space-y-2"
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-xs font-black text-white">{src.label}</span>
-                          <span className="text-[10px] px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 font-mono uppercase">
-                            {src.format || 'mp4'}
+                        <div className="flex items-center gap-2 flex-wrap text-xs">
+                          <span className="font-black text-white">{src.label}</span>
+                          <span className="text-[11px] font-mono text-zinc-400 uppercase">
+                            · {src.format || 'mp4'}
                           </span>
                           {src.quality && (
-                            <span className="text-[10px] px-2 py-0.5 rounded bg-sky-500/15 text-sky-300 font-mono">
-                              {src.quality}
+                            <span className="text-[11px] font-mono text-sky-400">
+                              · {src.quality}
                             </span>
                           )}
                           {src.isDefault && (
-                            <span className="text-[10px] px-2 py-0.5 rounded bg-amber-400/20 text-amber-300 font-bold">
-                              المصدر الافتراضي
+                            <span className="text-[11px] text-[#ff5ec4] font-bold">
+                              · المصدر الافتراضي
                             </span>
                           )}
                         </div>
@@ -862,7 +853,7 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
                           type="button"
                           disabled={testingUrlKey === key}
                           onClick={() => handleRunTestUrl(key, src.url)}
-                          className="px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sky-300 text-[11px] font-bold border border-white/10 flex items-center gap-1 cursor-pointer"
+                          className="px-3 py-1.5 rounded-full bg-[#1a1a20] hover:bg-[#25252d] text-sky-300 text-[11px] font-bold border border-white/[0.08] flex items-center gap-1 cursor-pointer"
                         >
                           {testingUrlKey === key ? (
                             <RefreshCw className="w-3 h-3 animate-spin" />
@@ -882,7 +873,7 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
                               }));
                               saveSourcesList(next, 'تم تعيين المصدر كرابط افتراضي');
                             }}
-                            className="px-2.5 py-1.5 rounded-lg bg-amber-400/15 hover:bg-amber-400/25 text-amber-300 text-[11px] font-bold flex items-center gap-1 cursor-pointer"
+                            className="px-3 py-1.5 rounded-full bg-[#ff2e93]/15 hover:bg-[#ff2e93]/25 text-[#ff5ec4] text-[11px] font-bold flex items-center gap-1 cursor-pointer"
                           >
                             <Star className="w-3 h-3" />
                             <span>افتراضي</span>
@@ -895,7 +886,7 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
                             const next = sources.filter((_, i) => i !== idx);
                             saveSourcesList(next, 'تم حذف مصدر التشغيل');
                           }}
-                          className="w-7 h-7 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 flex items-center justify-center cursor-pointer"
+                          className="w-7 h-7 rounded-full bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 flex items-center justify-center cursor-pointer"
                           title="حذف الرابط"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -918,7 +909,7 @@ export const VideoLibrarySourcesSection: React.FC<VideoLibrarySourcesSectionProp
                         )}
                         <span>
                           {result.ok
-                            ? `صالح (HTTP ${result.status}) • ${result.format} • Range: ${result.supportsRange ? 'مدعوم' : 'غير مدعوم'}`
+                            ? `صالح (HTTP ${result.status}) · ${result.format} · Range: ${result.supportsRange ? 'مدعوم' : 'غير مدعوم'}`
                             : result.error}
                         </span>
                       </div>

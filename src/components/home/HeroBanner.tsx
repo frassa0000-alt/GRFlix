@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { Play, ChevronLeft, ChevronRight } from 'lucide-react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
+import { Play, ChevronLeft, ChevronRight, Star } from 'lucide-react';
 import { MediaItem } from '../../types';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { getEffectiveMediaRating } from '../../utils/rating';
 import { GoldenOrbitalG } from '../layout/TopHeader';
+import { isPlainExternalWebUrl, normalizeExternalHttpUrl } from '../../utils/videoEngines';
 
 export interface HeroSlideItem {
   id: string;
@@ -21,6 +23,8 @@ interface HeroBannerProps {
   siteName?: string;
 }
 
+const positiveMod = (n: number, m: number) => ((n % m) + m) % m;
+
 export const HeroBanner: React.FC<HeroBannerProps> = ({
   slides,
   onPlayMedia,
@@ -28,11 +32,19 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
   siteName = 'MASHHAD',
 }) => {
   const { dir, t, getMediaTitle } = useLanguage();
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const prefersReducedMotion = useReducedMotion();
+  const [virtualStep, setVirtualStep] = useState(0);
   const [welcomeIndex, setWelcomeIndex] = useState(0);
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
   const [isPaused, setIsPaused] = useState(false);
+  const [stageWidth, setStageWidth] = useState<number>(1024);
+  const stageContainerRef = useRef<HTMLDivElement | null>(null);
   const touchStartXRef = useRef<number | null>(null);
+  const hasMountedRef = useRef(false);
+
+  useEffect(() => {
+    hasMountedRef.current = true;
+  }, []);
 
   const rawBrand = (siteName || '').trim();
   const brandLabel =
@@ -40,20 +52,32 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
       ? 'MASHHAD'
       : rawBrand;
 
-  useEffect(() => {
-    if (currentIndex >= slides.length && slides.length > 0) {
-      setCurrentIndex(0);
-    }
-  }, [slides.length, currentIndex]);
+  const totalSlides = slides?.length || 0;
+  const currentIndex = totalSlides > 0 ? positiveMod(virtualStep, totalSlides) : 0;
 
   useEffect(() => {
-    if (slides.length <= 1 || isPaused) return;
-    const interval = setInterval(() => {
+    const el = stageContainerRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') {
+      if (typeof window !== 'undefined') setStageWidth(window.innerWidth);
+      return;
+    }
+    setStageWidth(el.clientWidth || window.innerWidth);
+    const observer = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect?.width;
+      if (w && w > 0) setStageWidth(w);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [totalSlides]);
+
+  useEffect(() => {
+    if (totalSlides <= 1 || isPaused) return;
+    const interval = window.setInterval(() => {
       if (typeof document !== 'undefined' && document.hidden) return;
-      setCurrentIndex((prev) => (prev + 1) % slides.length);
-    }, 6000);
-    return () => clearInterval(interval);
-  }, [slides.length, isPaused]);
+      setVirtualStep((prev) => prev + 1);
+    }, 2800);
+    return () => window.clearInterval(interval);
+  }, [totalSlides, isPaused]);
 
   const welcomeSlides = [
     {
@@ -74,10 +98,10 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
 
   useEffect(() => {
     if (slides && slides.length > 0) return;
-    const timer = setInterval(() => {
+    const timer = window.setInterval(() => {
       setWelcomeIndex((prev) => (prev + 1) % welcomeSlides.length);
     }, 5500);
-    return () => clearInterval(timer);
+    return () => window.clearInterval(timer);
   }, [slides?.length, welcomeSlides.length]);
 
   if (!slides || slides.length === 0) {
@@ -129,10 +153,8 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
     );
   }
 
-  const totalSlides = slides.length;
-
-  const goPrev = () => setCurrentIndex((prev) => (prev - 1 + totalSlides) % totalSlides);
-  const goNext = () => setCurrentIndex((prev) => (prev + 1) % totalSlides);
+  const goPrev = () => setVirtualStep((prev) => prev - 1);
+  const goNext = () => setVirtualStep((prev) => prev + 1);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     setIsPaused(true);
@@ -145,21 +167,55 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
     const endX = e.changedTouches[0]?.clientX ?? touchStartXRef.current;
     const diff = endX - touchStartXRef.current;
     touchStartXRef.current = null;
-    if (Math.abs(diff) < 35) return;
+    if (Math.abs(diff) < 30) return;
     if (diff < 0) goNext();
     else goPrev();
   };
 
-  const getCircularOffset = (index: number) => {
-    let offset = index - currentIndex;
-    if (totalSlides > 2) {
-      const half = totalSlides / 2;
-      if (offset > half) offset -= totalSlides;
-      if (offset < -half) offset += totalSlides;
-    } else if (totalSlides === 2) {
-      if (offset < 0) offset = 1;
+  const isMobile = stageWidth < 540;
+  const isTablet = stageWidth >= 540 && stageWidth < 920;
+
+  const cardWidth = isMobile ? 176 : isTablet ? 214 : 244;
+  const cardHeight = isMobile ? 258 : isTablet ? 314 : 358;
+  const stageHeight = isMobile ? 286 : isTablet ? 344 : 392;
+
+  const step1X = isMobile ? 128 : isTablet ? 172 : 204;
+  const step2X = isMobile ? 228 : isTablet ? 312 : 374;
+  const step3X = isMobile ? 320 : isTablet ? 430 : 520;
+
+  const slotRange =
+    totalSlides === 1 ? [0] : totalSlides === 2 ? [-1, 0, 1] : [-3, -2, -1, 0, 1, 2, 3];
+
+  const getSlotGeometry = (offset: number) => {
+    const abs = Math.abs(offset);
+    if (abs === 0) {
+      return { x: 0, scale: 1, opacity: 1, zIndex: 40, brightness: 1 };
     }
-    return offset;
+    if (abs === 1) {
+      return {
+        x: Math.sign(offset) * step1X,
+        scale: 0.81,
+        opacity: 0.84,
+        zIndex: 30,
+        brightness: 0.78,
+      };
+    }
+    if (abs === 2) {
+      return {
+        x: Math.sign(offset) * step2X,
+        scale: 0.65,
+        opacity: 0.48,
+        zIndex: 20,
+        brightness: 0.58,
+      };
+    }
+    return {
+      x: Math.sign(offset) * step3X,
+      scale: 0.5,
+      opacity: 0,
+      zIndex: 10,
+      brightness: 0.4,
+    };
   };
 
   return (
@@ -167,21 +223,43 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
       aria-label={t('العروض الرئيسية', 'Featured Banners')}
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
-      className="relative w-full select-none pt-1 pb-1"
+      className="relative w-full select-none py-1 group/deck"
     >
-      {/* Side-Peeking Wide Landscape Banner Carousel Matching Screen 1 */}
       <div
+        ref={stageContainerRef}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
-        className="relative w-full h-[185px] sm:h-[235px] md:h-[275px] flex items-center justify-center overflow-hidden"
+        style={{ height: `${stageHeight}px` }}
+        className="relative w-full flex items-center justify-center overflow-hidden"
       >
+        {/* Ambient Crimson Spotlight Behind Center Card */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] sm:w-[540px] md:w-[680px] h-[250px] sm:h-[340px] rounded-full blur-2xl"
+          style={{
+            background:
+              'radial-gradient(ellipse at center, rgba(234,29,36,0.34) 0%, rgba(160,14,24,0.16) 46%, transparent 74%)',
+          }}
+        />
+
+        {/* Soft Side Edge Vignettes Merging Outer Cards Into Dark Canvas */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-y-0 left-0 w-10 sm:w-20 md:w-28 bg-gradient-to-r from-[#0f0c14] via-[#0f0c14]/65 to-transparent z-[45]"
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-y-0 right-0 w-10 sm:w-20 md:w-28 bg-gradient-to-l from-[#0f0c14] via-[#0f0c14]/65 to-transparent z-[45]"
+        />
+
+        {/* Quiet Hover Navigation Controls */}
         {totalSlides > 1 && (
           <>
             <button
               type="button"
               onClick={goPrev}
               aria-label={t('العرض السابق', 'Previous slide')}
-              className="hidden sm:flex absolute left-2 md:left-4 top-1/2 -translate-y-1/2 z-40 w-9 h-9 rounded-full bg-black/75 hover:bg-[#ea1d24] text-white border border-white/15 items-center justify-center transition-colors cursor-pointer active:scale-90"
+              className="hidden sm:flex opacity-0 group-hover/deck:opacity-100 absolute left-2 md:left-4 top-1/2 -translate-y-1/2 z-50 w-10 h-10 rounded-full bg-black/70 hover:bg-[#ea1d24] text-white border border-white/15 items-center justify-center transition-all duration-200 cursor-pointer active:scale-90"
             >
               <ChevronLeft className="w-5 h-5" />
             </button>
@@ -189,122 +267,219 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
               type="button"
               onClick={goNext}
               aria-label={t('العرض التالي', 'Next slide')}
-              className="hidden sm:flex absolute right-2 md:right-4 top-1/2 -translate-y-1/2 z-40 w-9 h-9 rounded-full bg-black/75 hover:bg-[#ea1d24] text-white border border-white/15 items-center justify-center transition-colors cursor-pointer active:scale-90"
+              className="hidden sm:flex opacity-0 group-hover/deck:opacity-100 absolute right-2 md:right-4 top-1/2 -translate-y-1/2 z-50 w-10 h-10 rounded-full bg-black/70 hover:bg-[#ea1d24] text-white border border-white/15 items-center justify-center transition-all duration-200 cursor-pointer active:scale-90"
             >
               <ChevronRight className="w-5 h-5" />
             </button>
           </>
         )}
 
-        <div className="relative w-full h-full flex items-center justify-center">
-          {slides.map((slide, idx) => {
-            const offset = getCircularOffset(idx);
-            const absOffset = Math.abs(offset);
-            if (absOffset > 1) return null;
+        {/* Stepped 5-Card Vertical Coverflow Track */}
+        <div className="relative w-full h-full">
+          {slotRange.map((offset) => {
+            const vIndex = virtualStep + offset;
+            const slideIdx = positiveMod(vIndex, totalSlides);
+            const slide = slides[slideIdx];
+            if (!slide) return null;
 
             const isCenter = offset === 0;
+            const isBuffer = Math.abs(offset) >= 3;
+            const geom = getSlotGeometry(offset);
             const slideMedia = slide.media;
-            const bannerSrc =
-              slideMedia?.bannerUrl || slide.imageUrl || slideMedia?.posterUrl || '';
+            const posterSrc =
+              slideMedia?.posterUrl || slide.imageUrl || slideMedia?.bannerUrl || '';
             const slideTitle = slideMedia
               ? getMediaTitle(slideMedia) || slide.title
               : slide.title;
-            const hasImageError = !bannerSrc || Boolean(failedImages[slide.id]);
+            const hasImageError = !posterSrc || Boolean(failedImages[slide.id]);
 
-            const translatePct =
-              offset === 0 ? '0%' : offset === 1 ? '88%' : '-88%';
-            const scaleVal = isCenter ? 1 : 0.9;
-            const opacityVal = isCenter ? 1 : 0.45;
-            const zIndexVal = isCenter ? 30 : 15;
+            const numericRating = slideMedia ? getEffectiveMediaRating(slideMedia) : 8.6;
+            const seasonsCount = slideMedia?.seasons?.length || 0;
+            const metaLineParts: string[] = [];
+            if (slideMedia?.year) metaLineParts.push(String(slideMedia.year));
+            if (slideMedia?.type === 'series' && seasonsCount > 0) {
+              metaLineParts.push(
+                `${seasonsCount} ${t(
+                  seasonsCount === 1 ? 'موسم' : 'مواسم',
+                  seasonsCount === 1 ? 'Season' : 'Seasons'
+                )}`
+              );
+            } else if (slideMedia?.duration) {
+              metaLineParts.push(slideMedia.duration);
+            }
 
             return (
               <motion.div
-                key={slide.id}
-                initial={false}
+                key={`deck-${vIndex}-${slide.id}`}
+                initial={
+                  hasMountedRef.current
+                    ? {
+                        x: offset >= 0 ? step3X : -step3X,
+                        scale: 0.5,
+                        opacity: 0,
+                      }
+                    : false
+                }
                 animate={{
-                  x: translatePct,
-                  scale: scaleVal,
-                  opacity: opacityVal,
+                  x: geom.x,
+                  scale: geom.scale,
+                  opacity: geom.opacity,
                 }}
-                transition={{
-                  type: 'spring',
-                  stiffness: 300,
-                  damping: 30,
+                transition={
+                  prefersReducedMotion
+                    ? { duration: 0.01 }
+                    : {
+                        duration: 0.85,
+                        ease: [0.22, 1, 0.36, 1],
+                      }
+                }
+                style={{
+                  width: `${cardWidth}px`,
+                  height: `${cardHeight}px`,
+                  left: '50%',
+                  top: '50%',
+                  marginLeft: `${-cardWidth / 2}px`,
+                  marginTop: `${-cardHeight / 2}px`,
+                  zIndex: geom.zIndex,
+                  filter: `brightness(${geom.brightness})`,
+                  pointerEvents: isBuffer ? 'none' : 'auto',
                 }}
-                style={{ zIndex: zIndexVal }}
                 onClick={() => {
                   if (isCenter) {
                     if (slideMedia) onSelectMedia(slideMedia);
-                  } else {
-                    setCurrentIndex(idx);
+                  } else if (!isBuffer) {
+                    setVirtualStep((prev) => prev + offset);
                   }
                 }}
-                className={`absolute will-change-transform w-[78%] sm:w-[68%] md:w-[58%] h-full rounded-2xl overflow-hidden bg-[#16121e] cursor-pointer group ${
+                className={`absolute will-change-transform rounded-2xl sm:rounded-[22px] overflow-hidden bg-[#16121e] cursor-pointer group ${
                   isCenter
-                    ? 'shadow-[0_14px_34px_rgba(0,0,0,0.8)] ring-1 ring-white/15'
-                    : 'shadow-[0_8px_22px_rgba(0,0,0,0.65)] ring-1 ring-white/10'
+                    ? 'shadow-[0_24px_56px_rgba(0,0,0,0.92),0_0_38px_rgba(234,29,36,0.22)] ring-1 ring-white/20'
+                    : 'shadow-[0_14px_32px_rgba(0,0,0,0.75)] ring-1 ring-white/10'
                 }`}
               >
                 {!hasImageError ? (
                   <img
-                    src={bannerSrc}
+                    src={posterSrc}
                     alt={slideTitle}
-                    loading={isCenter ? 'eager' : 'lazy'}
+                    loading={Math.abs(offset) <= 1 ? 'eager' : 'lazy'}
                     decoding="async"
                     referrerPolicy="no-referrer"
                     onError={() =>
                       setFailedImages((prev) => ({ ...prev, [slide.id]: true }))
                     }
-                    className="w-full h-full object-cover object-center transition-transform duration-300 group-hover:scale-[1.03]"
+                    className="w-full h-full object-cover object-center transition-transform duration-500 group-hover:scale-[1.03]"
                   />
                 ) : (
                   <div className="w-full h-full bg-gradient-to-br from-zinc-900 via-[#191422] to-black flex flex-col items-center justify-center p-4 text-center">
-                    <Play className="w-10 h-10 text-[#ea1d24]/70 mb-2" />
+                    <Play className="w-10 h-10 text-[#ea1d24]/75 mb-2" />
                     <span className="text-xs font-bold text-zinc-200 line-clamp-2">
                       {slideTitle}
                     </span>
                   </div>
                 )}
 
-                <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent pointer-events-none" />
+                {/* Top & Bottom Contrast Scrims */}
+                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/95 via-black/25 to-black/35" />
 
-                {isCenter && (
-                  <div className="absolute bottom-3 inset-x-4 flex items-end justify-between gap-2 z-10">
-                    <h2 className="text-base sm:text-xl md:text-2xl font-black text-white tracking-tight truncate drop-shadow">
-                      {slideTitle}
-                    </h2>
+                {/* Top Overlay Row: Crimson Play Icon Left + Bold Rating Right */}
+                <div
+                  dir="ltr"
+                  className="absolute top-3 inset-x-3 flex items-start justify-between gap-2 z-10"
+                >
+                  {isCenter && slideMedia ? (
+                    (() => {
+                      const directHeroUrl = normalizeExternalHttpUrl(
+                        slideMedia.videoUrl ||
+                          slideMedia.sources?.[0]?.url ||
+                          slideMedia.seasons?.[0]?.episodes?.[0]?.videoUrl ||
+                          ''
+                      );
+                      if (isPlainExternalWebUrl(directHeroUrl, slideMedia.storageType)) {
+                        return (
+                          <a
+                            href={directHeroUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            aria-label={t(`فتح ${slideTitle}`, `Open ${slideTitle}`)}
+                            className="-m-1.5 p-1.5 flex items-center justify-center cursor-pointer shrink-0 group/play"
+                          >
+                            <span className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-[#ea1d24] group-hover/play:bg-[#ff2c34] text-white flex items-center justify-center shadow-[0_4px_14px_rgba(234,29,36,0.55)] transition-transform group-hover/play:scale-110 group-active/play:scale-95">
+                              <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
+                            </span>
+                          </a>
+                        );
+                      }
+                      return (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onPlayMedia(slideMedia);
+                          }}
+                          aria-label={t(`تشغيل ${slideTitle}`, `Play ${slideTitle}`)}
+                          className="-m-1.5 p-1.5 flex items-center justify-center cursor-pointer shrink-0 group/play"
+                        >
+                          <span className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-[#ea1d24] group-hover/play:bg-[#ff2c34] text-white flex items-center justify-center shadow-[0_4px_14px_rgba(234,29,36,0.55)] transition-transform group-hover/play:scale-110 group-active/play:scale-95">
+                            <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
+                          </span>
+                        </button>
+                      );
+                    })()
+                  ) : (
+                    <span className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-black/55 backdrop-blur-sm border border-white/15 text-white flex items-center justify-center shrink-0">
+                      <Play className="w-3 h-3 fill-current ml-0.5 text-[#ea1d24]" />
+                    </span>
+                  )}
 
-                    {slideMedia && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onPlayMedia(slideMedia);
-                        }}
-                        aria-label={t(`تشغيل ${slideTitle}`, `Play ${slideTitle}`)}
-                        className="w-9 h-9 rounded-full bg-[#ea1d24] hover:bg-[#ff2c34] text-white flex items-center justify-center shadow-lg transition-transform hover:scale-105 active:scale-95 cursor-pointer shrink-0"
-                      >
-                        <Play className="w-4 h-4 fill-current ml-0.5" />
-                      </button>
-                    )}
+                  <div className="flex items-start gap-0.5 text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)] select-none">
+                    <span className="text-base sm:text-xl font-black tracking-tight leading-none tabular-nums">
+                      {numericRating.toFixed(1)}
+                    </span>
+                    <Star className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-white text-white mt-0.5 shrink-0" />
                   </div>
-                )}
+                </div>
+
+                {/* Bottom Centered Title + Quiet Unboxed Metadata */}
+                <div className="absolute bottom-3.5 sm:bottom-4 inset-x-3.5 z-10 text-center space-y-1 pointer-events-none">
+                  <h2
+                    className={`font-black text-white tracking-tight leading-tight line-clamp-2 drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)] ${
+                      isCenter ? 'text-sm sm:text-lg md:text-xl' : 'text-xs sm:text-sm'
+                    }`}
+                  >
+                    {slideTitle}
+                  </h2>
+
+                  {metaLineParts.length > 0 && (
+                    <p className="text-[10.5px] sm:text-xs font-semibold text-zinc-300/90 tabular-nums truncate">
+                      {metaLineParts.join(' · ')}
+                    </p>
+                  )}
+                </div>
               </motion.div>
             );
           })}
         </div>
       </div>
 
-      {/* Centered Pagination Dots with Wide White Pill Active Indicator Matching Screen 1 */}
+      {/* Centered Pagination Dots */}
       {totalSlides > 1 && (
-        <div className="mt-3 flex items-center justify-center gap-1.5">
+        <div className="mt-2 flex items-center justify-center gap-1.5">
           {slides.map((slide, idx) => {
             const active = idx === currentIndex;
             return (
               <button
                 key={slide.id}
                 type="button"
-                onClick={() => setCurrentIndex(idx)}
+                onClick={() => {
+                  let diff = idx - currentIndex;
+                  if (totalSlides > 2) {
+                    const half = totalSlides / 2;
+                    if (diff > half) diff -= totalSlides;
+                    if (diff < -half) diff += totalSlides;
+                  }
+                  setVirtualStep((prev) => prev + diff);
+                }}
                 aria-label={t(`عرض الشريحة ${idx + 1}`, `View slide ${idx + 1}`)}
                 className={`h-1.5 rounded-full transition-all duration-300 cursor-pointer ${
                   active
@@ -319,3 +494,4 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
     </section>
   );
 };
+
