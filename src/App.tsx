@@ -58,7 +58,13 @@ import {
   markReleaseNotificationRead,
   markAllReleaseNotificationsRead,
   hasPlayableMediaVideo,
+  pushMishmishWelcomeNotification,
 } from './services/releaseAlertService';
+import {
+  ensureMishmishFirstSeen,
+  hasMissedLoginForOneDay,
+  markMishmishLoginTimestamp,
+} from './utils/mishmishActivity';
 import {
   isPlainExternalWebUrl,
   normalizeExternalHttpUrl,
@@ -161,6 +167,26 @@ export default function App() {
     message: string;
   } | null>(null);
 
+  useEffect(() => {
+    ensureMishmishFirstSeen();
+  }, []);
+
+  const triggerPostLoginMishmishExperience = useCallback(
+    (user: AppUserProfile) => {
+      const wasAbsentOneDay = hasMissedLoginForOneDay();
+      markMishmishLoginTimestamp();
+      const displayName =
+        user.displayName || user.name || (lang === 'en' ? 'Friend' : 'صديقي');
+      const { allNotifications } = pushMishmishWelcomeNotification({
+        userName: displayName,
+        lang,
+        wasAbsentOneDay,
+      });
+      setReleaseNotifications(allNotifications);
+    },
+    [lang]
+  );
+
   const handleOpenLogin = useCallback(() => {
     setAuthModalInitialTab('login');
     setIsAuthModalOpen(true);
@@ -196,6 +222,7 @@ export default function App() {
           setStoredVerifiedUser(redirectUser);
           setAuthUser(redirectUser);
           setIsAuthModalOpen(false);
+          triggerPostLoginMishmishExperience(redirectUser);
           setAuthLinkNotice({
             type: 'success',
             message: t('تم تسجيل الدخول بحساب Google بنجاح!', 'Signed in with Google successfully!'),
@@ -229,7 +256,7 @@ export default function App() {
       unsubscribe();
       window.removeEventListener('focus', handleFocusRefresh);
     };
-  }, [lang, t]);
+  }, [lang, t, triggerPostLoginMishmishExperience]);
 
   // Automatically verify and log in when user clicks an email link (?auth_token=, Supabase #access_token=, or Firebase Action Link)
   useEffect(() => {
@@ -284,6 +311,7 @@ export default function App() {
             setStoredVerifiedUser(fbLinkUser);
             setAuthUser(fbLinkUser);
             setIsAuthModalOpen(false);
+            triggerPostLoginMishmishExperience(fbLinkUser);
             setAuthLinkNotice({
               type: 'success',
               message: t('تم تسجيل دخولك عبر رابط البريد بنجاح!', 'Signed in via email link!'),
@@ -318,6 +346,7 @@ export default function App() {
           setStoredVerifiedUser(res.user);
           setAuthUser(res.user);
           setIsAuthModalOpen(false);
+          triggerPostLoginMishmishExperience(res.user);
           if (typeof BroadcastChannel !== 'undefined') {
             const channel = new BroadcastChannel('goldenflix_auth_channel');
             channel.postMessage({ type: 'AUTH_VERIFIED', user: res.user });
@@ -344,7 +373,7 @@ export default function App() {
     };
 
     completeLinkSignIn();
-  }, [t]);
+  }, [t, triggerPostLoginMishmishExperience]);
 
   useEffect(() => {
     if (!authLinkNotice || authLinkNotice.type === 'loading') return;
@@ -711,6 +740,10 @@ export default function App() {
         setReleaseNotifications(updated);
       } catch {
         // local already updated
+      }
+      if (notif.kind === 'mishmish_welcome' || notif.mediaId === 'mishmish-welcome') {
+        setReleaseToast(null);
+        return;
       }
       const found = mediaItems.find((m) => m.id === notif.mediaId);
       if (found) {
@@ -1833,6 +1866,9 @@ export default function App() {
         onOpenProfileModal={() => setIsUserProfileOpen(true)}
         hasAdminAccess={hasAdminAccess}
         siteName={siteSettings?.siteName}
+        releaseNotifications={releaseNotifications}
+        onSelectReleaseNotification={handleSelectReleaseNotification}
+        onOpenInfoPage={handleOpenInfoPage}
       />
 
       {/* Real Email Verification Authentication Modal */}
@@ -1846,7 +1882,7 @@ export default function App() {
         onSuccess={(user) => {
           setStoredVerifiedUser(user);
           setAuthUser(user);
-          setIsUserProfileOpen(true);
+          triggerPostLoginMishmishExperience(user);
         }}
         onOpenDeveloperAccount={handleOpenDeveloperSuite}
         onOpenEmailSettings={handleOpenEmailSettings}

@@ -27,6 +27,8 @@ import { useLanguage } from '../../contexts/LanguageContext';
 import { validateUsername } from '../../utils/username';
 import { MashhadLogo } from '../common/MashhadLogo';
 import { AnimatedBrandSearchBar } from './AnimatedBrandSearchBar';
+import { LoginRobotBuddy } from './LoginRobotBuddy';
+import { hasMissedLoginForOneDay } from '../../utils/mishmishActivity';
 
 export interface AuthModalProps {
   isOpen: boolean;
@@ -69,6 +71,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [isAbsentOneDay, setIsAbsentOneDay] = useState<boolean>(() =>
+    hasMissedLoginForOneDay()
+  );
 
   const isDeveloperEmail =
     email.trim().toLowerCase() === 'frassa.wwindows@gmail.com' ||
@@ -81,6 +86,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setAcceptedTerms(false);
       setErrorMessage(null);
       setSuccessMessage(null);
+      setIsAbsentOneDay(hasMissedLoginForOneDay());
     }
   }, [isOpen, initialTab]);
 
@@ -466,10 +472,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         </div>
 
         {/* PANEL 2: Pure Pitch-Black Form Panel */}
-        <div className="md:col-span-6 p-6 sm:p-9 bg-[#050507] flex flex-col justify-center">
-          <div className="w-full max-w-[360px] mx-auto space-y-5">
-            {/* Heading + Subtitle */}
+        <div className="md:col-span-6 p-6 sm:p-8 bg-[#050507] flex flex-col justify-center">
+          <div className="w-full max-w-[360px] mx-auto space-y-4">
+            {/* Compact Interactive Robot Character + Heading */}
             <div className="text-center space-y-1.5">
+              <div className="flex justify-center pb-0.5">
+                <LoginRobotBuddy
+                  isLoading={isLoading}
+                  initialAbsentCry={isAbsentOneDay}
+                />
+              </div>
               <h1 className="text-xl sm:text-[22px] font-black text-white tracking-tight">
                 {activeTab === 'login' && t('تسجيل الدخول', 'Sign In Account')}
                 {activeTab === 'register' && t('إنشاء حساب جديد', 'Sign Up Account')}

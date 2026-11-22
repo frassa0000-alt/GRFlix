@@ -317,7 +317,7 @@ export interface UserReleaseNotification {
   posterUrl?: string;
   title: string;
   message: string;
-  kind: 'new_episode' | 'movie_added' | 'media_updated';
+  kind: 'new_episode' | 'movie_added' | 'media_updated' | 'mishmish_welcome';
   read: boolean;
   episodeNumber?: number;
   seasonNumber?: number;

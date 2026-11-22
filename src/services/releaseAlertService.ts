@@ -482,16 +482,71 @@ export const evaluateMediaReleaseAlerts = async (
   return { newNotifications: newlyTriggered, allNotifications, alerts: updatedAlerts };
 };
 
+const isCloudWelcomeExcluded = (n?: UserReleaseNotification | null): boolean =>
+  Boolean(!n || n.kind === 'mishmish_welcome' || n.mediaId === 'mishmish-welcome');
+
+export const pushMishmishWelcomeNotification = ({
+  userName,
+  lang = 'ar',
+  wasAbsentOneDay = false,
+}: {
+  userName: string;
+  lang?: 'ar' | 'en';
+  wasAbsentOneDay?: boolean;
+}): {
+  notification: UserReleaseNotification;
+  allNotifications: UserReleaseNotification[];
+} => {
+  const existing = getStoredReleaseNotifications();
+  const now = Date.now();
+  const recentWelcome = existing.find(
+    (n) => n.kind === 'mishmish_welcome' && now - (n.createdAt || 0) < 10_000
+  );
+  if (recentWelcome) {
+    return { notification: recentWelcome, allNotifications: existing };
+  }
+
+  const firstName =
+    clampStr(userName, 60).split(/\s+/)[0] || (lang === 'en' ? 'friend' : 'صديقي');
+
+  const welcomeNotif: UserReleaseNotification = {
+    id: `mishmish-welcome-${now}`,
+    mediaId: 'mishmish-welcome',
+    mediaTitle: lang === 'en' ? 'Mishmish · Welcome' : 'مشمش · ترحيب خاص',
+    title: wasAbsentOneDay
+      ? lang === 'en'
+        ? `Mishmish missed you, ${firstName}!`
+        : `مشمش افتقدك، أهلاً بعودتك يا ${firstName}!`
+      : lang === 'en'
+      ? `Welcome to MASHHAD, ${firstName}!`
+      : `مشمش يرحب بك يا ${firstName} في MASHHAD!`,
+    message: wasAbsentOneDay
+      ? lang === 'en'
+        ? 'Mishmish is so happy you logged back in! Enjoy the newest movies & series tonight.'
+        : 'مشمش سعيد جداً بعودتك وتسجيل دخولك اليوم.. استمتع بأحدث الأفلام والمسلسلات!'
+      : lang === 'en'
+      ? 'Mishmish is happy you signed in! Have a great time watching.'
+      : 'مشمش فرحان جداً بتسجيل دخولك.. نتمنى لك مشاهدة ممتعة!',
+    kind: 'mishmish_welcome',
+    read: false,
+    createdAt: now,
+  };
+
+  const allNotifications = [welcomeNotif, ...existing].slice(0, 60);
+  saveStoredReleaseNotifications(allNotifications);
+  return { notification: welcomeNotif, allNotifications };
+};
+
 export const markReleaseNotificationRead = async (
   notifId: string,
   uid?: string
 ): Promise<UserReleaseNotification[]> => {
-  const updated = getStoredReleaseNotifications().map((n) =>
-    n.id === notifId ? { ...n, read: true } : n
-  );
+  const current = getStoredReleaseNotifications();
+  const target = current.find((n) => n.id === notifId);
+  const updated = current.map((n) => (n.id === notifId ? { ...n, read: true } : n));
   saveStoredReleaseNotifications(updated);
 
-  if (canUseCloudForUser(uid) && isSafeId(notifId)) {
+  if (!isCloudWelcomeExcluded(target) && canUseCloudForUser(uid) && isSafeId(notifId)) {
     const path = `users/${uid}/notifications/${notifId}`;
     try {
       await updateDoc(doc(db, 'users', uid, 'notifications', notifId), { read: true });
@@ -506,7 +561,7 @@ export const markAllReleaseNotificationsRead = async (
   uid?: string
 ): Promise<UserReleaseNotification[]> => {
   const current = getStoredReleaseNotifications();
-  const unread = current.filter((n) => !n.read);
+  const unread = current.filter((n) => !n.read && !isCloudWelcomeExcluded(n));
   const updated = current.map((n) => ({ ...n, read: true }));
   saveStoredReleaseNotifications(updated);
 
@@ -528,10 +583,12 @@ export const clearReleaseNotification = async (
   notifId: string,
   uid?: string
 ): Promise<UserReleaseNotification[]> => {
-  const updated = getStoredReleaseNotifications().filter((n) => n.id !== notifId);
+  const current = getStoredReleaseNotifications();
+  const target = current.find((n) => n.id === notifId);
+  const updated = current.filter((n) => n.id !== notifId);
   saveStoredReleaseNotifications(updated);
 
-  if (canUseCloudForUser(uid) && isSafeId(notifId)) {
+  if (!isCloudWelcomeExcluded(target) && canUseCloudForUser(uid) && isSafeId(notifId)) {
     const path = `users/${uid}/notifications/${notifId}`;
     try {
       await deleteDoc(doc(db, 'users', uid, 'notifications', notifId));

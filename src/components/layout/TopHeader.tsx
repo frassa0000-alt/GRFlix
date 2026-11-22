@@ -9,7 +9,6 @@ import {
   CheckCheck,
   Trash2,
   Clock,
-  Menu,
 } from 'lucide-react';
 import {
   ActiveTab,
@@ -25,7 +24,7 @@ import { MashhadLogo } from '../common/MashhadLogo';
 interface TopHeaderProps {
   searchQuery: string;
   onSearchChange: (query: string) => void;
-  onOpenSideMenu: () => void;
+  onOpenSideMenu?: () => void;
   onOpenGoogleLogin: () => void;
   googleUser: GoogleUserProfile | null;
   activeTab: ActiveTab;
@@ -62,7 +61,6 @@ const TOP_UNDERLINE_TABS: {
 export const TopHeader: React.FC<TopHeaderProps> = ({
   searchQuery,
   onSearchChange,
-  onOpenSideMenu,
   onOpenGoogleLogin,
   googleUser,
   activeTab,
@@ -221,15 +219,6 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                 ) : (
                   <User className="w-4 h-4 text-zinc-200" />
                 )}
-              </button>
-
-              <button
-                onClick={onOpenSideMenu}
-                type="button"
-                aria-label={t('القائمة والإعدادات', 'Menu & Settings')}
-                className="w-9 h-9 rounded-full bg-white/[0.08] hover:bg-white/[0.14] border border-white/[0.08] flex items-center justify-center text-zinc-200 transition-transform duration-150 hover:scale-105 active:scale-92 cursor-pointer shrink-0"
-              >
-                <Menu className="w-4 h-4 stroke-[2.2]" />
               </button>
             </div>
           </div>
@@ -476,46 +465,91 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                 </div>
               ) : (
                 <div className="space-y-2.5 max-h-[55vh] overflow-y-auto overscroll-contain no-scrollbar">
-                  {releaseNotifications.map((rn) => (
-                    <button
-                      key={rn.id}
-                      type="button"
-                      onClick={() => {
-                        setShowNotifications(false);
-                        onSelectReleaseNotification?.(rn);
-                      }}
-                      className={`w-full text-start p-2.5 rounded-xl border transition-colors flex items-start gap-2.5 cursor-pointer ${
-                        rn.read
-                          ? 'bg-white/[0.04] border-white/[0.06]'
-                          : 'bg-[#ea1d24]/10 border-[#ea1d24]/45'
-                      }`}
-                    >
-                      {rn.posterUrl ? (
-                        <img
-                          src={rn.posterUrl}
-                          alt={rn.mediaTitle || rn.title}
-                          className="w-10 h-14 rounded-lg object-cover shrink-0 bg-zinc-800"
-                        />
-                      ) : (
-                        <div className="w-10 h-14 rounded-lg bg-[#ea1d24]/15 flex items-center justify-center shrink-0">
-                          <BellRing className="w-4 h-4 text-[#ea1d24]" />
+                  {releaseNotifications.map((rn) => {
+                    const isMishmishWelcome =
+                      rn.kind === 'mishmish_welcome' || rn.mediaId === 'mishmish-welcome';
+                    return (
+                      <button
+                        key={rn.id}
+                        type="button"
+                        onClick={() => {
+                          setShowNotifications(false);
+                          onSelectReleaseNotification?.(rn);
+                        }}
+                        className={`w-full text-start p-2.5 rounded-xl border transition-colors flex items-start gap-2.5 cursor-pointer ${
+                          rn.read
+                            ? 'bg-white/[0.04] border-white/[0.06]'
+                            : isMishmishWelcome
+                            ? 'bg-purple-500/12 border-cyan-400/45'
+                            : 'bg-[#ea1d24]/10 border-[#ea1d24]/45'
+                        }`}
+                      >
+                        {isMishmishWelcome ? (
+                          <div className="w-10 h-14 rounded-lg bg-gradient-to-br from-purple-500/20 to-cyan-500/15 border border-cyan-300/30 flex items-center justify-center shrink-0">
+                            <svg viewBox="0 0 100 92" className="w-8 h-8 drop-shadow-[0_0_6px_rgba(103,232,249,0.45)]" aria-hidden="true">
+                              <defs>
+                                <radialGradient id={`hdr-mishmish-${rn.id}`} cx="45%" cy="40%" r="58%">
+                                  <stop offset="0%" stopColor="#9333ea" />
+                                  <stop offset="72%" stopColor="#6d28d9" />
+                                  <stop offset="100%" stopColor="#67e8f9" />
+                                </radialGradient>
+                              </defs>
+                              <path
+                                d="M 50,12 C 67,11 81,20 84,37 C 87,55 77,73 59,78 C 43,82 23,77 17,60 C 11,42 19,21 35,14 C 41,12 45,12 50,12 Z"
+                                fill={`url(#hdr-mishmish-${rn.id})`}
+                                stroke="#67e8f9"
+                                strokeWidth="2.4"
+                              />
+                              <path
+                                d="M 35,43 Q 40.5,36 46,43"
+                                fill="none"
+                                stroke="#ffffff"
+                                strokeWidth="4"
+                                strokeLinecap="round"
+                              />
+                              <path
+                                d="M 54,43 Q 59.5,36 65,43"
+                                fill="none"
+                                stroke="#ffffff"
+                                strokeWidth="4"
+                                strokeLinecap="round"
+                              />
+                              <path
+                                d="M 42,54 Q 50,60 58,54"
+                                fill="none"
+                                stroke="#ffffff"
+                                strokeWidth="3.2"
+                                strokeLinecap="round"
+                              />
+                            </svg>
+                          </div>
+                        ) : rn.posterUrl ? (
+                          <img
+                            src={rn.posterUrl}
+                            alt={rn.mediaTitle || rn.title}
+                            className="w-10 h-14 rounded-lg object-cover shrink-0 bg-zinc-800"
+                          />
+                        ) : (
+                          <div className="w-10 h-14 rounded-lg bg-[#ea1d24]/15 flex items-center justify-center shrink-0">
+                            <BellRing className="w-4 h-4 text-[#ea1d24]" />
+                          </div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-start justify-between gap-2">
+                            <h4 className="text-xs font-black text-white leading-snug truncate">
+                              {rn.title}
+                            </h4>
+                            <span className="text-[10px] text-zinc-400 shrink-0 tabular-nums">
+                              {formatTimeAgo(rn.createdAt)}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-zinc-300 mt-1 leading-relaxed break-words">
+                            {rn.message}
+                          </p>
                         </div>
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-start justify-between gap-2">
-                          <h4 className="text-xs font-black text-white leading-snug truncate">
-                            {rn.title}
-                          </h4>
-                          <span className="text-[10px] text-zinc-400 shrink-0 tabular-nums">
-                            {formatTimeAgo(rn.createdAt)}
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-zinc-300 mt-1 leading-relaxed break-words">
-                          {rn.message}
-                        </p>
-                      </div>
-                    </button>
-                  ))}
+                      </button>
+                    );
+                  })}
 
                   {activeNotifications.map((n) => (
                     <div
